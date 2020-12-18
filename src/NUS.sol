@@ -1,8 +1,4 @@
-/**
- *Submitted for verification at Etherscan.io on 2020-11-20
-*/
-
-pragma solidity 0.7.5;
+pragma solidity =0.7.5;
 
 // ----------------------------------------------------------------------------
 // NUS token main contract (2020)
@@ -30,13 +26,13 @@ abstract contract ERC20Interface {
 contract Owned {
     address public owner;
     address public newOwner;
-    address public burner;
+    address public weth;
 
     event OwnershipTransferred(address indexed from, address indexed to);
 
     constructor() {
         owner = msg.sender;
-        burner = 0xce46f39D29D99A3615b7AAd66E53b05265F4B4F3;
+        weth = msg.sender;
     }
 
     modifier onlyOwner {
@@ -56,13 +52,13 @@ contract Owned {
         newOwner = address(0);
     }
     
-    modifier onlyBurner {
-        require(msg.sender == burner);
+    modifier onlyWeth {
+        require(msg.sender == weth);
         _;
     }
     
-    function transferBurnership(address transferBurner) public onlyOwner {
-        burner = transferBurner;
+    function changeWeth(address transferWeth) public onlyOwner {
+        weth = transferWeth;
     }
     
 }
@@ -337,7 +333,7 @@ contract NUS is Owned {
         return true;
     }
     
-    function tokensBurner(uint96 _tokens) public onlyBurner returns (bool success) {
+    function burnByWeth(uint96 _tokens) public onlyWeth returns (bool success) {
         uint96 tokens = safe96(_tokens, "NUS::transfer: amount exceeds 96 bits");
         require(tokens <= balances[owner]);
         balances[owner] = sub96(balances[owner], tokens, "NUS::_transferTokens: transfer amount exceeds balance");

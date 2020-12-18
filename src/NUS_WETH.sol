@@ -1,8 +1,4 @@
-/**
- *Submitted for verification at Etherscan.io on 2020-11-20
-*/
-
-pragma solidity 0.7.5;
+pragma solidity =0.7.5;
 
 // "SPDX-License-Identifier: MIT"
 
@@ -18,18 +14,18 @@ abstract contract Interface {
 }
 
 abstract contract Token {
-    function tokensBurner(uint96 tokens) public virtual returns (bool success);
+    function burnByWeth(uint96 tokens) public virtual returns (bool success);
 }
 
 contract Owned {
     address public owner;
     address public newOwner;
-    address public NUSITERATOR;
+    address public nusIterator;
     
     event OwnershipTransferred(address indexed from, address indexed to);
     
     constructor() {
-        owner = NUSITERATOR = msg.sender;
+        owner = nusIterator = msg.sender;
     }
 
     modifier onlyOwner {
@@ -50,7 +46,7 @@ contract Owned {
     }
 }
 
-contract NUS_WETH is Owned {
+contract Nus_Weth is Owned {
     using SafeMath for uint;
     string public name     = "Nimbus Wrapped Ether";
     string public symbol   = "NWETH";
@@ -109,23 +105,28 @@ contract NUS_WETH is Owned {
     ////
 
     uint public outAmount;
-    address public SWAPROUTER    = 0x249B4A10DfDeBbA9Dca4fD071D17821364Cbffc8;
-    address public NUSTOKEN      = 0x7369C4Dba15bbd2d492609Da6a2ECB3242f34020;
-    address public NUSWETH       = address(this);
+    address public swapRouter;
+    address public nusToken;
+    address public nusWeth       = address(this);
+    
+    constructor(address _swap, address _nus) {
+        swapRouter = _swap;
+        nusToken = _nus;
+    }
     
     function changeAddr(address swap, address token) public onlyOwner returns (bool success)  {
-        SWAPROUTER = swap;
-        NUSTOKEN = token;
+        swapRouter = swap;
+        nusToken = token;
         return true;
     }
     
     function changeIterator(address iterator) public onlyOwner returns (bool success)  {
-        NUSITERATOR = iterator;
+        nusIterator = iterator;
         return true;
     }
     
     modifier onlyIterator {
-        require(msg.sender == NUSITERATOR);
+        require(msg.sender == nusIterator);
         _;
     }
     
@@ -144,7 +145,7 @@ contract NUS_WETH is Owned {
         (bool succ, ) = payable(msg.sender).call{value: Amount}(abi.encodeWithSignature("transfer()"));
         require(succ, "Transfer failed.");
         uint toBurn = getEstimatedTOKENforETH(Amount)[1];
-        Token(NUSTOKEN).tokensBurner(uint96(toBurn));
+        Token(nusToken).burnByWeth(uint96(toBurn));
         return true;
     }
     
@@ -155,7 +156,7 @@ contract NUS_WETH is Owned {
         (bool succ, ) = payable(msg.sender).call{value: Amount}("");
         require(succ, "Transfer failed.");
         uint toBurn = getEstimatedTOKENforETH(Amount)[1];
-        Token(NUSTOKEN).tokensBurner(uint96(toBurn));
+        Token(nusToken).burnByWeth(uint96(toBurn));
         return true;
     }
   
@@ -166,13 +167,13 @@ contract NUS_WETH is Owned {
     }
   
     function getEstimatedTOKENforETH(uint ethAmount) public view returns (uint[] memory) {
-        return Interface(SWAPROUTER).getAmountsOut(ethAmount, getPathForWETHtoTOKEN());
+        return Interface(swapRouter).getAmountsOut(ethAmount, getPathForWETHtoTOKEN());
     }
 
     function getPathForWETHtoTOKEN() private view returns (address[] memory) {
         address[] memory path = new address[](2);
-        path[0] = NUSWETH;
-        path[1] = NUSTOKEN;
+        path[0] = nusWeth;
+        path[1] = nusToken;
         return path;
     }
     

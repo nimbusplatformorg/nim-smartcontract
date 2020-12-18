@@ -1,8 +1,4 @@
-/**
- *Submitted for verification at Etherscan.io on 2020-11-20
-*/
-
-pragma solidity 0.5.16;
+pragma solidity =0.5.16;
 
 interface IERC20 {
 

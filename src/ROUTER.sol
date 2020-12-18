@@ -1,8 +1,4 @@
-/**
- *Submitted for verification at Etherscan.io on 2020-11-21
-*/
-
-pragma solidity =0.6.6;
+pragma solidity =0.6.12;
 
 interface INimbusFactory {
     event PairCreated(address indexed token0, address indexed token1, address pair, uint);
