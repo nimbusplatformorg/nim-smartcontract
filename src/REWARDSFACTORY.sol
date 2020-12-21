@@ -222,12 +222,14 @@ interface IStakingRewards {
     // Mutative
 
     function stake(uint256 amount) external;
+    
+    function stakeFor(uint256 amount, address user) external;
 
     function withdraw(uint256 amount) external;
+    
+    function withdrawAndGetReward(uint256 amount) external;
 
     function getReward() external;
-
-    function exit() external;
 }
 
 contract RewardsDistributionRecipient {
@@ -255,6 +257,10 @@ contract StakingRewards is IStakingRewards, RewardsDistributionRecipient, Reentr
 
     mapping(address => uint256) public userRewardPerTokenPaid;
     mapping(address => uint256) public rewards;
+    
+    mapping(address => mapping(uint256 => uint256)) public stakeLocks;
+    mapping(address => mapping(uint256 => uint256)) public stakeAmounts;
+    mapping(address => uint256) public stakeNonces;
 
     uint256 private _totalSupply;
     mapping(address => uint256) private _balances;
@@ -316,14 +322,31 @@ contract StakingRewards is IStakingRewards, RewardsDistributionRecipient, Reentr
         _totalSupply = _totalSupply.add(amount);
         _balances[msg.sender] = _balances[msg.sender].add(amount);
         stakingToken.safeTransferFrom(msg.sender, address(this), amount);
+        uint stakeNonce = stakeNonces[msg.sender]++;
+        stakeLocks[msg.sender][stakeNonce] = block.timestamp + rewardsDuration;
+        stakeAmounts[msg.sender][stakeNonce] = amount;
         emit Staked(msg.sender, amount);
     }
 
-    function withdraw(uint256 amount) public nonReentrant updateReward(msg.sender) {
-        require(amount > 0, "Cannot withdraw 0");
+    function stakeFor(uint256 amount, address user) external nonReentrant updateReward(user) {
+        require(amount > 0, "Cannot stake 0");
+        _totalSupply = _totalSupply.add(amount);
+        _balances[user] = _balances[user].add(amount);
+        stakingToken.safeTransferFrom(msg.sender, address(this), amount);
+        uint stakeNonce = stakeNonces[user]++;
+        stakeLocks[user][stakeNonce] = block.timestamp + rewardsDuration;
+        stakeAmounts[user][stakeNonce] = amount;
+        emit Staked(user, amount);
+    }
+
+    function withdraw(uint256 nonce) public nonReentrant updateReward(msg.sender) {
+        uint amount = stakeAmounts[msg.sender][nonce];
+        require(stakeAmounts[msg.sender][nonce] > 0, "Cannot withdraw 0");
+        require(stakeLocks[msg.sender][nonce] < block.timestamp, "Locked");
         _totalSupply = _totalSupply.sub(amount);
         _balances[msg.sender] = _balances[msg.sender].sub(amount);
         stakingToken.safeTransfer(msg.sender, amount);
+        stakeAmounts[msg.sender][nonce] = 0;
         emit Withdrawn(msg.sender, amount);
     }
 
@@ -336,8 +359,8 @@ contract StakingRewards is IStakingRewards, RewardsDistributionRecipient, Reentr
         }
     }
 
-    function exit() external {
-        withdraw(_balances[msg.sender]);
+    function withdrawAndGetReward(uint256 nonce) public nonReentrant updateReward(msg.sender) {
+        withdraw(nonce);
         getReward();
     }
 

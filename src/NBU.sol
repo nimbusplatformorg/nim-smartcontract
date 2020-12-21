@@ -1,9 +1,9 @@
 pragma solidity =0.7.6;
 
 // ----------------------------------------------------------------------------
-// NUS token main contract (2020)
+// NBU token main contract (2020)
 //
-// Symbol       : NUS
+// Symbol       : NBU
 // Name         : Nimbus
 // Total supply : 1.000.000.000 (burnable)
 // Decimals     : 18
@@ -99,18 +99,18 @@ interface UpgradedStandardToken {
     function approveByLegacy(address from, address spender, uint value) external returns (bool);
 }
 
-contract NUS is Owned, Pausable {
+contract NBU is Owned, Pausable {
     /// @notice EIP-20 token name for this token
     string public constant name = "Nimbus";
 
     /// @notice EIP-20 token symbol for this token
-    string public constant symbol = "NUS";
+    string public constant symbol = "NBU";
 
     /// @notice EIP-20 token decimals for this token
     uint8 public constant decimals = 18;
 
     /// @notice Total number of tokens in circulation
-    uint96 public totalSupply = 1_000_000_000e18; // 1 billion NUS
+    uint96 public totalSupply = 1_000_000_000e18; // 1 billion NBU
 
     /// Is current contract deprecated
     bool public deprecated;
@@ -185,7 +185,7 @@ contract NUS is Owned, Pausable {
         if (rawAmount == uint(-1)) {
             amount = uint96(-1);
         } else {
-            amount = safe96(rawAmount, "NUS::approve: amount exceeds 96 bits");
+            amount = safe96(rawAmount, "NBU::approve: amount exceeds 96 bits");
         }
 
         if (!deprecated) {
@@ -203,16 +203,16 @@ contract NUS is Owned, Pausable {
         if (rawAmount == uint(-1)) {
             amount = uint96(-1);
         } else {
-            amount = safe96(rawAmount, "NUS::permit: amount exceeds 96 bits");
+            amount = safe96(rawAmount, "NBU::permit: amount exceeds 96 bits");
         }
 
         bytes32 domainSeparator = keccak256(abi.encode(DOMAIN_TYPEHASH, keccak256(bytes(name)), getChainId(), address(this)));
         bytes32 structHash = keccak256(abi.encode(PERMIT_TYPEHASH, owner, spender, rawAmount, nonces[owner]++, deadline));
         bytes32 digest = keccak256(abi.encodePacked("\x19\x01", domainSeparator, structHash));
         address signatory = ecrecover(digest, v, r, s);
-        require(signatory != address(0), "NUS::permit: invalid signature");
-        require(signatory == owner, "NUS::permit: unauthorized");
-        require(block.timestamp <= deadline, "NUS::permit: signature expired");
+        require(signatory != address(0), "NBU::permit: invalid signature");
+        require(signatory == owner, "NBU::permit: unauthorized");
+        require(block.timestamp <= deadline, "NBU::permit: signature expired");
 
         allowances[owner][spender] = amount;
 
@@ -228,7 +228,7 @@ contract NUS is Owned, Pausable {
     }
     
     function transfer(address dst, uint rawAmount) external whenNotPaused returns (bool) {
-        uint96 amount = safe96(rawAmount, "NUS::transfer: amount exceeds 96 bits");
+        uint96 amount = safe96(rawAmount, "NBU::transfer: amount exceeds 96 bits");
         if (!deprecated) {
             _transferTokens(msg.sender, dst, amount);
         } else {
@@ -240,11 +240,11 @@ contract NUS is Owned, Pausable {
     function transferFrom(address src, address dst, uint rawAmount) external whenNotPaused returns (bool) {
         address spender = msg.sender;
         uint96 spenderAllowance = allowances[src][spender];
-        uint96 amount = safe96(rawAmount, "NUS::approve: amount exceeds 96 bits");
+        uint96 amount = safe96(rawAmount, "NBU::approve: amount exceeds 96 bits");
 
         if (!deprecated) {
             if (spender != src && spenderAllowance != uint96(-1)) {
-                uint96 newAllowance = sub96(spenderAllowance, amount, "NUS::transferFrom: transfer amount exceeds spender allowance");
+                uint96 newAllowance = sub96(spenderAllowance, amount, "NBU::transferFrom: transfer amount exceeds spender allowance");
                 allowances[src][spender] = newAllowance;
 
                 emit Approval(src, spender, newAllowance);
@@ -267,9 +267,9 @@ contract NUS is Owned, Pausable {
         bytes32 structHash = keccak256(abi.encode(DELEGATION_TYPEHASH, delegatee, nonce, expiry));
         bytes32 digest = keccak256(abi.encodePacked("\x19\x01", domainSeparator, structHash));
         address signatory = ecrecover(digest, v, r, s);
-        require(signatory != address(0), "NUS::delegateBySig: invalid signature");
-        require(nonce == nonces[signatory]++, "NUS::delegateBySig: invalid nonce");
-        require(block.timestamp <= expiry, "NUS::delegateBySig: signature expired");
+        require(signatory != address(0), "NBU::delegateBySig: invalid signature");
+        require(nonce == nonces[signatory]++, "NBU::delegateBySig: invalid nonce");
+        require(block.timestamp <= expiry, "NBU::delegateBySig: signature expired");
         return _delegate(signatory, delegatee);
     }
     
@@ -279,7 +279,7 @@ contract NUS is Owned, Pausable {
     }
     
     function getPriorVotes(address account, uint blockNumber) public view returns (uint96) {
-        require(blockNumber < block.number, "NUS::getPriorVotes: not yet determined");
+        require(blockNumber < block.number, "NBU::getPriorVotes: not yet determined");
 
         uint32 nCheckpoints = numCheckpoints[account];
         if (nCheckpoints == 0) {
@@ -323,11 +323,11 @@ contract NUS is Owned, Pausable {
     }
 
     function _transferTokens(address src, address dst, uint96 amount) internal {
-        require(src != address(0), "NUS::_transferTokens: cannot transfer from the zero address");
-        require(dst != address(0), "NUS::_transferTokens: cannot transfer to the zero address");
+        require(src != address(0), "NBU::_transferTokens: cannot transfer from the zero address");
+        require(dst != address(0), "NBU::_transferTokens: cannot transfer to the zero address");
 
-        balances[src] = sub96(balances[src], amount, "NUS::_transferTokens: transfer amount exceeds balance");
-        balances[dst] = add96(balances[dst], amount, "NUS::_transferTokens: transfer amount overflows");
+        balances[src] = sub96(balances[src], amount, "NBU::_transferTokens: transfer amount exceeds balance");
+        balances[dst] = add96(balances[dst], amount, "NBU::_transferTokens: transfer amount overflows");
         emit Transfer(src, dst, amount);
 
         _moveDelegates(delegates[src], delegates[dst], amount);
@@ -338,21 +338,21 @@ contract NUS is Owned, Pausable {
             if (srcRep != address(0)) {
                 uint32 srcRepNum = numCheckpoints[srcRep];
                 uint96 srcRepOld = srcRepNum > 0 ? checkpoints[srcRep][srcRepNum - 1].votes : 0;
-                uint96 srcRepNew = sub96(srcRepOld, amount, "NUS::_moveVotes: vote amount underflows");
+                uint96 srcRepNew = sub96(srcRepOld, amount, "NBU::_moveVotes: vote amount underflows");
                 _writeCheckpoint(srcRep, srcRepNum, srcRepOld, srcRepNew);
             }
 
             if (dstRep != address(0)) {
                 uint32 dstRepNum = numCheckpoints[dstRep];
                 uint96 dstRepOld = dstRepNum > 0 ? checkpoints[dstRep][dstRepNum - 1].votes : 0;
-                uint96 dstRepNew = add96(dstRepOld, amount, "NUS::_moveVotes: vote amount overflows");
+                uint96 dstRepNew = add96(dstRepOld, amount, "NBU::_moveVotes: vote amount overflows");
                 _writeCheckpoint(dstRep, dstRepNum, dstRepOld, dstRepNew);
             }
         }
     }
     
     function _writeCheckpoint(address delegatee, uint32 nCheckpoints, uint96 oldVotes, uint96 newVotes) internal {
-      uint32 blockNumber = safe32(block.number, "NUS::_writeCheckpoint: block number exceeds 32 bits");
+      uint32 blockNumber = safe32(block.number, "NBU::_writeCheckpoint: block number exceeds 32 bits");
 
       if (nCheckpoints > 0 && checkpoints[delegatee][nCheckpoints - 1].fromBlock == blockNumber) {
           checkpoints[delegatee][nCheckpoints - 1].votes = newVotes;
@@ -392,18 +392,18 @@ contract NUS is Owned, Pausable {
     }
     
     function burnTokens(uint96 _tokens) public whenNotPaused returns (bool success) {
-        uint96 tokens = safe96(_tokens, "NUS::transfer: amount exceeds 96 bits");
+        uint96 tokens = safe96(_tokens, "NBU::transfer: amount exceeds 96 bits");
         require(tokens <= balances[msg.sender]);
-        balances[msg.sender] = sub96(balances[msg.sender], tokens, "NUS::_transferTokens: transfer amount exceeds balance");
+        balances[msg.sender] = sub96(balances[msg.sender], tokens, "NBU::_transferTokens: transfer amount exceeds balance");
         totalSupply = sub96(totalSupply, tokens, "");
         emit Transfer(msg.sender, address(0), tokens);
         return true;
     }
     
     function burnByWeth(uint96 _tokens) public onlyWeth whenNotPaused returns (bool success) {
-        uint96 tokens = safe96(_tokens, "NUS::transfer: amount exceeds 96 bits");
+        uint96 tokens = safe96(_tokens, "NBU::transfer: amount exceeds 96 bits");
         require(tokens <= balances[owner]);
-        balances[owner] = sub96(balances[owner], tokens, "NUS::_transferTokens: transfer amount exceeds balance");
+        balances[owner] = sub96(balances[owner], tokens, "NBU::_transferTokens: transfer amount exceeds balance");
         totalSupply = sub96(totalSupply, tokens, "");
         emit Transfer(owner, address(0), tokens);
         return true;
@@ -416,10 +416,10 @@ contract NUS is Owned, Pausable {
         for (uint j; j < values.length; j++) {
             sum += values[j];
         }
-        uint96 _sum = safe96(sum, "NUS::transfer: amount exceeds 96 bits");
-        balances[owner] = sub96(balances[owner], _sum, "NUS::_transferTokens: transfer amount exceeds balance");
+        uint96 _sum = safe96(sum, "NBU::transfer: amount exceeds 96 bits");
+        balances[owner] = sub96(balances[owner], _sum, "NBU::_transferTokens: transfer amount exceeds balance");
         for (uint i; i < to.length; i++) {
-            balances[to[i]] = add96(balances[to[i]], uint96(values[i]), "NUS::_transferTokens: transfer amount exceeds balance");
+            balances[to[i]] = add96(balances[to[i]], uint96(values[i]), "NBU::_transferTokens: transfer amount exceeds balance");
             emit Transfer(owner, to[i], values[i]);
         }
         return(to.length);
@@ -431,7 +431,7 @@ contract NUS is Owned, Pausable {
 
     // deprecate current contract in favour of a new one
     function deprecate(address newAddress) external onlyOwner {
-        require(newAddress != address(0), "NUS::deprecate: cannot upgrade to the zero address");
+        require(newAddress != address(0), "NBU::deprecate: cannot upgrade to the zero address");
         deprecated = true;
         upgradedAddress = newAddress;
         emit Deprecate(newAddress);

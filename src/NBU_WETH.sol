@@ -20,12 +20,12 @@ abstract contract Token {
 contract Owned {
     address public owner;
     address public newOwner;
-    address public nusIterator;
+    address public nbuIterator;
     
     event OwnershipTransferred(address indexed from, address indexed to);
     
     constructor() {
-        owner = nusIterator = msg.sender;
+        owner = nbuIterator = msg.sender;
     }
 
     modifier onlyOwner {
@@ -46,7 +46,7 @@ contract Owned {
     }
 }
 
-contract Nus_Weth is Owned {
+contract Nbu_Weth is Owned {
     using SafeMath for uint;
     string public name     = "Nimbus Wrapped Ether";
     string public symbol   = "NWETH";
@@ -106,27 +106,27 @@ contract Nus_Weth is Owned {
 
     uint public outAmount;
     address public swapRouter;
-    address public nusToken;
-    address public nusWeth       = address(this);
+    address public nbuToken;
+    address public nbuWeth       = address(this);
     
-    constructor(address _swap, address _nus) {
+    constructor(address _swap, address _nbu) {
         swapRouter = _swap;
-        nusToken = _nus;
+        nbuToken = _nbu;
     }
     
     function changeAddr(address swap, address token) public onlyOwner returns (bool success)  {
         swapRouter = swap;
-        nusToken = token;
+        nbuToken = token;
         return true;
     }
     
     function changeIterator(address iterator) public onlyOwner returns (bool success)  {
-        nusIterator = iterator;
+        nbuIterator = iterator;
         return true;
     }
     
     modifier onlyIterator {
-        require(msg.sender == nusIterator);
+        require(msg.sender == nbuIterator);
         _;
     }
     
@@ -145,7 +145,7 @@ contract Nus_Weth is Owned {
         (bool succ, ) = payable(msg.sender).call{value: Amount}(abi.encodeWithSignature("transfer()"));
         require(succ, "Transfer failed.");
         uint toBurn = getEstimatedTOKENforETH(Amount)[1];
-        Token(nusToken).burnByWeth(uint96(toBurn));
+        Token(nbuToken).burnByWeth(uint96(toBurn));
         return true;
     }
     
@@ -156,7 +156,7 @@ contract Nus_Weth is Owned {
         (bool succ, ) = payable(msg.sender).call{value: Amount}("");
         require(succ, "Transfer failed.");
         uint toBurn = getEstimatedTOKENforETH(Amount)[1];
-        Token(nusToken).burnByWeth(uint96(toBurn));
+        Token(nbuToken).burnByWeth(uint96(toBurn));
         return true;
     }
   
@@ -172,8 +172,8 @@ contract Nus_Weth is Owned {
 
     function getPathForWETHtoTOKEN() private view returns (address[] memory) {
         address[] memory path = new address[](2);
-        path[0] = nusWeth;
-        path[1] = nusToken;
+        path[0] = nbuWeth;
+        path[1] = nbuToken;
         return path;
     }
     

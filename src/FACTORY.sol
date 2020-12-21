@@ -5,6 +5,7 @@ interface INimbusFactory {
 
     function feeTo() external view returns (address);
     function feeToSetter() external view returns (address);
+    function nimbusReferralProgram() external view returns (address);
 
     function getPair(address tokenA, address tokenB) external view returns (address pair);
     function allPairs(uint) external view returns (address pair);
@@ -107,7 +108,7 @@ contract NimbusERC20 is INimbusERC20 {
     using SafeMath for uint;
 
     string public constant name = 'Nimbus LP';
-    string public constant symbol = 'NUS_LP';
+    string public constant symbol = 'NBU_LP';
     uint8 public constant decimals = 18;
     uint  public totalSupply;
     mapping(address => uint) public balanceOf;
@@ -245,6 +246,10 @@ interface IERC20 {
 
 interface INimbusCallee {
     function NimbusCall(address sender, uint amount0, uint amount1, bytes calldata data) external;
+}
+
+interface INimbusReferralProgram {
+    function recordFee(address token, address recipient, uint amount) external;
 }
 
 contract NimbusPair is INimbusPair, NimbusERC20 {
@@ -415,9 +420,26 @@ contract NimbusPair is INimbusPair, NimbusERC20 {
         uint amount0In = balance0 > _reserve0 - amount0Out ? balance0 - (_reserve0 - amount0Out) : 0;
         uint amount1In = balance1 > _reserve1 - amount1Out ? balance1 - (_reserve1 - amount1Out) : 0;
         require(amount0In > 0 || amount1In > 0, 'Nimbus: INSUFFICIENT_INPUT_AMOUNT');
+
+        {
+        address referralProgram = INimbusFactory(factory).nimbusReferralProgram();
+        if (amount0In > 0) {
+            address _token0 = token0;
+            uint refFee = amount0In.mul(3)/ 1997;
+            _safeTransfer(_token0, referralProgram, refFee);
+            INimbusReferralProgram(referralProgram).recordFee(_token0, to, refFee);
+        } 
+        if (amount1In > 0) {
+            uint refFee = amount1In.mul(3) / 1997;
+            address _token1 = token1;
+            _safeTransfer(_token1, referralProgram, refFee);
+            INimbusReferralProgram(referralProgram).recordFee(_token1, to, refFee);
+        }
+        
+        }
         { // scope for reserve{0,1}Adjusted, avoids stack too deep errors
-        uint balance0Adjusted = balance0.mul(1000).sub(amount0In.mul(3));
-        uint balance1Adjusted = balance1.mul(1000).sub(amount1In.mul(3));
+        uint balance0Adjusted = balance0.mul(10000).sub(amount0In.mul(15));
+        uint balance1Adjusted = balance1.mul(10000).sub(amount1In.mul(15));
         require(balance0Adjusted.mul(balance1Adjusted) >= uint(_reserve0).mul(_reserve1).mul(1000**2), 'Nimbus: K');
         }
 
@@ -443,6 +465,7 @@ contract NimbusPair is INimbusPair, NimbusERC20 {
 contract NimbusFactory is INimbusFactory {
     address public feeTo;
     address public feeToSetter;
+    address public nimbusReferralProgram;
 
     mapping(address => mapping(address => address)) public getPair;
     address[] public allPairs;
@@ -483,4 +506,18 @@ contract NimbusFactory is INimbusFactory {
         require(msg.sender == feeToSetter, 'Nimbus: FORBIDDEN');
         feeToSetter = _feeToSetter;
     }
+
+    function setNimbusReferralProgram(address _nimbusReferralProgram) external {
+        require(msg.sender == feeToSetter, 'Nimbus: FORBIDDEN');
+        nimbusReferralProgram = _nimbusReferralProgram;
+    }
+
+    /* function getHash() pure external returns (bytes32) { 
+        bytes memory bytecode = type(NimbusPair).creationCode;
+        return keccak256(abi.encodePacked(bytecode));
+    }
+
+    function getHash1() pure external returns (bytes memory) { 
+        return type(NimbusPair).creationCode;
+    } */
 }
