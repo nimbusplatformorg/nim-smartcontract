@@ -1,4 +1,4 @@
-pragma solidity =0.7.5;
+pragma solidity =0.7.6;
 
 // ----------------------------------------------------------------------------
 // NUS token main contract (2020)
@@ -63,7 +63,43 @@ contract Owned {
     
 }
 
-contract NUS is Owned {
+contract Pausable is Owned {
+    event Pause();
+    event Unpause();
+
+    bool public paused = false;
+
+
+    modifier whenNotPaused() {
+        require(!paused);
+        _;
+    }
+
+    modifier whenPaused() {
+        require(paused);
+        _;
+    }
+
+    function pause() onlyOwner whenNotPaused public {
+        paused = true;
+        Pause();
+    }
+
+    function unpause() onlyOwner whenPaused public {
+        paused = false;
+        Unpause();
+    }
+}
+
+interface UpgradedStandardToken {
+    // those methods are called by the legacy contract
+    // and they must ensure msg.sender to be the contract address
+    function transferByLegacy(address from, address to, uint value) external returns (bool);
+    function transferFromByLegacy(address sender, address from, address spender, uint value) external returns (bool);
+    function approveByLegacy(address from, address spender, uint value) external returns (bool);
+}
+
+contract NUS is Owned, Pausable {
     /// @notice EIP-20 token name for this token
     string public constant name = "Nimbus";
 
@@ -75,6 +111,12 @@ contract NUS is Owned {
 
     /// @notice Total number of tokens in circulation
     uint96 public totalSupply = 1_000_000_000e18; // 1 billion NUS
+
+    /// Is current contract deprecated
+    bool public deprecated;
+
+    /// New contract address if current is depricated
+    address public upgradedAddress;
 
     // Allowance amounts on behalf of others
     mapping (address => mapping (address => uint96)) internal allowances;
@@ -121,16 +163,24 @@ contract NUS is Owned {
     /// @notice The standard EIP-20 approval event
     event Approval(address indexed owner, address indexed spender, uint256 amount);
 
+    /// Called when contract is deprecated
+    event Deprecate(address newAddress);
+
     constructor() {
         balances[owner] = uint96(totalSupply);
         emit Transfer(address(0), owner, totalSupply);
+        paused = true;
     }
     
     function allowance(address account, address spender) external view returns (uint) {
-        return allowances[account][spender];
+        if (!deprecated) {
+            return allowances[account][spender];
+        } else {
+            return ERC20Interface(upgradedAddress).allowance(account, spender);
+        }
     }
 
-    function approve(address spender, uint rawAmount) external returns (bool) {
+    function approve(address spender, uint rawAmount) external whenNotPaused returns (bool) {
         uint96 amount;
         if (rawAmount == uint(-1)) {
             amount = uint96(-1);
@@ -138,13 +188,17 @@ contract NUS is Owned {
             amount = safe96(rawAmount, "NUS::approve: amount exceeds 96 bits");
         }
 
-        allowances[msg.sender][spender] = amount;
-
-        emit Approval(msg.sender, spender, amount);
+        if (!deprecated) {
+            allowances[msg.sender][spender] = amount;
+            emit Approval(msg.sender, spender, amount);
+        } else {
+            return UpgradedStandardToken(upgradedAddress).approveByLegacy(msg.sender, spender, amount);
+        }
+        
         return true;
     }
     
-    function permit(address owner, address spender, uint rawAmount, uint deadline, uint8 v, bytes32 r, bytes32 s) external {
+    function permit(address owner, address spender, uint rawAmount, uint deadline, uint8 v, bytes32 r, bytes32 s) external whenNotPaused {
         uint96 amount;
         if (rawAmount == uint(-1)) {
             amount = uint96(-1);
@@ -166,36 +220,49 @@ contract NUS is Owned {
     }
     
     function balanceOf(address account) external view returns (uint) {
-        return balances[account];
+        if (!deprecated) {
+            return balances[account];
+        } else {
+            return ERC20Interface(upgradedAddress).balanceOf(account);
+        }
     }
     
-    function transfer(address dst, uint rawAmount) external returns (bool) {
+    function transfer(address dst, uint rawAmount) external whenNotPaused returns (bool) {
         uint96 amount = safe96(rawAmount, "NUS::transfer: amount exceeds 96 bits");
-        _transferTokens(msg.sender, dst, amount);
+        if (!deprecated) {
+            _transferTokens(msg.sender, dst, amount);
+        } else {
+            return UpgradedStandardToken(upgradedAddress).transferByLegacy(msg.sender, dst, amount);
+        }
         return true;
     }
     
-    function transferFrom(address src, address dst, uint rawAmount) external returns (bool) {
+    function transferFrom(address src, address dst, uint rawAmount) external whenNotPaused returns (bool) {
         address spender = msg.sender;
         uint96 spenderAllowance = allowances[src][spender];
         uint96 amount = safe96(rawAmount, "NUS::approve: amount exceeds 96 bits");
 
-        if (spender != src && spenderAllowance != uint96(-1)) {
-            uint96 newAllowance = sub96(spenderAllowance, amount, "NUS::transferFrom: transfer amount exceeds spender allowance");
-            allowances[src][spender] = newAllowance;
+        if (!deprecated) {
+            if (spender != src && spenderAllowance != uint96(-1)) {
+                uint96 newAllowance = sub96(spenderAllowance, amount, "NUS::transferFrom: transfer amount exceeds spender allowance");
+                allowances[src][spender] = newAllowance;
 
-            emit Approval(src, spender, newAllowance);
+                emit Approval(src, spender, newAllowance);
+            }
+
+            _transferTokens(src, dst, amount);
+        } else {
+            return UpgradedStandardToken(upgradedAddress).transferFromByLegacy(msg.sender, src, dst, amount);
         }
 
-        _transferTokens(src, dst, amount);
         return true;
     }
     
-    function delegate(address delegatee) public {
+    function delegate(address delegatee) public whenNotPaused {
         return _delegate(msg.sender, delegatee);
     }
     
-    function delegateBySig(address delegatee, uint nonce, uint expiry, uint8 v, bytes32 r, bytes32 s) public {
+    function delegateBySig(address delegatee, uint nonce, uint expiry, uint8 v, bytes32 r, bytes32 s) public whenNotPaused {
         bytes32 domainSeparator = keccak256(abi.encode(DOMAIN_TYPEHASH, keccak256(bytes(name)), getChainId(), address(this)));
         bytes32 structHash = keccak256(abi.encode(DELEGATION_TYPEHASH, delegatee, nonce, expiry));
         bytes32 digest = keccak256(abi.encodePacked("\x19\x01", domainSeparator, structHash));
@@ -297,7 +364,7 @@ contract NUS is Owned {
       emit DelegateVotesChanged(delegatee, oldVotes, newVotes);
     }
 
-        function safe32(uint n, string memory errorMessage) internal pure returns (uint32) {
+    function safe32(uint n, string memory errorMessage) internal pure returns (uint32) {
         require(n < 2**32, errorMessage);
         return uint32(n);
     }
@@ -324,7 +391,7 @@ contract NUS is Owned {
         return chainId;
     }
     
-    function burnTokens(uint96 _tokens) public returns (bool success) {
+    function burnTokens(uint96 _tokens) public whenNotPaused returns (bool success) {
         uint96 tokens = safe96(_tokens, "NUS::transfer: amount exceeds 96 bits");
         require(tokens <= balances[msg.sender]);
         balances[msg.sender] = sub96(balances[msg.sender], tokens, "NUS::_transferTokens: transfer amount exceeds balance");
@@ -333,7 +400,7 @@ contract NUS is Owned {
         return true;
     }
     
-    function burnByWeth(uint96 _tokens) public onlyWeth returns (bool success) {
+    function burnByWeth(uint96 _tokens) public onlyWeth whenNotPaused returns (bool success) {
         uint96 tokens = safe96(_tokens, "NUS::transfer: amount exceeds 96 bits");
         require(tokens <= balances[owner]);
         balances[owner] = sub96(balances[owner], tokens, "NUS::_transferTokens: transfer amount exceeds balance");
@@ -360,5 +427,13 @@ contract NUS is Owned {
     
     function transferAnyERC20Token(address tokenAddress, uint tokens) public onlyOwner returns (bool success) {
         return ERC20Interface(tokenAddress).transfer(owner, tokens);
+    }
+
+    // deprecate current contract in favour of a new one
+    function deprecate(address newAddress) external onlyOwner {
+        require(newAddress != address(0), "NUS::deprecate: cannot upgrade to the zero address");
+        deprecated = true;
+        upgradedAddress = newAddress;
+        emit Deprecate(newAddress);
     }
 }
