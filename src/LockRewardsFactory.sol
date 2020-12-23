@@ -205,7 +205,7 @@ contract ReentrancyGuard {
 }
 
 // Inheritance
-interface IStakingRewards {
+interface ILockStakingRewards {
     // Views
     function lastTimeRewardApplicable() external view returns (uint256);
 
@@ -217,17 +217,21 @@ interface IStakingRewards {
 
     function totalSupply() external view returns (uint256);
 
-    function balanceOf(address account) external view returns (uint256);
+    function balanceOf(address account) external view returns (uint256); 
 
     // Mutative
 
     function stake(uint256 amount) external;
+    
+    function stakeFor(uint256 amount, address user) external;
 
     function withdraw(uint256 amount) external;
+    
+    function withdrawAndGetReward(uint256 amount) external;
 
     function getReward() external;
 
-    function exit() external;
+    //function exit() external;
 }
 
 contract RewardsDistributionRecipient {
@@ -241,7 +245,7 @@ contract RewardsDistributionRecipient {
     }
 }
 
-contract StakingRewards is IStakingRewards, RewardsDistributionRecipient, ReentrancyGuard {
+contract LockStakingRewards is ILockStakingRewards, RewardsDistributionRecipient, ReentrancyGuard {
     using SafeMath for uint256;
     using SafeERC20 for IERC20;
 
@@ -249,12 +253,17 @@ contract StakingRewards is IStakingRewards, RewardsDistributionRecipient, Reentr
     IERC20 public stakingToken;
     uint256 public periodFinish = 0;
     uint256 public rewardRate = 0;
-    uint256 public rewardsDuration = 60 days;
+    uint256 public rewardsDuration = 90 days; 
+    uint256 public lockDuration = 60 days; 
     uint256 public lastUpdateTime;
     uint256 public rewardPerTokenStored;
 
     mapping(address => uint256) public userRewardPerTokenPaid;
     mapping(address => uint256) public rewards;
+    
+    mapping(address => mapping(uint256 => uint256)) public stakeLocks;
+    mapping(address => mapping(uint256 => uint256)) public stakeAmounts;
+    mapping(address => uint256) public stakeNonces;
 
     uint256 private _totalSupply;
     mapping(address => uint256) private _balances;
@@ -316,14 +325,31 @@ contract StakingRewards is IStakingRewards, RewardsDistributionRecipient, Reentr
         _totalSupply = _totalSupply.add(amount);
         _balances[msg.sender] = _balances[msg.sender].add(amount);
         stakingToken.safeTransferFrom(msg.sender, address(this), amount);
+        uint stakeNonce = stakeNonces[msg.sender]++;
+        stakeLocks[msg.sender][stakeNonce] = block.timestamp + lockDuration;
+        stakeAmounts[msg.sender][stakeNonce] = amount;
         emit Staked(msg.sender, amount);
     }
 
-    function withdraw(uint256 amount) public nonReentrant updateReward(msg.sender) {
-        require(amount > 0, "Cannot withdraw 0");
+    function stakeFor(uint256 amount, address user) external nonReentrant updateReward(user) {
+        require(amount > 0, "Cannot stake 0");
+        _totalSupply = _totalSupply.add(amount);
+        _balances[user] = _balances[user].add(amount);
+        stakingToken.safeTransferFrom(msg.sender, address(this), amount);
+        uint stakeNonce = stakeNonces[user]++;
+        stakeLocks[user][stakeNonce] = block.timestamp + lockDuration;
+        stakeAmounts[user][stakeNonce] = amount;
+        emit Staked(user, amount);
+    }
+
+    function withdraw(uint256 nonce) public nonReentrant updateReward(msg.sender) {
+        uint amount = stakeAmounts[msg.sender][nonce];
+        require(stakeAmounts[msg.sender][nonce] > 0, "Cannot withdraw 0");
+        require(stakeLocks[msg.sender][nonce] < block.timestamp, "Locked");
         _totalSupply = _totalSupply.sub(amount);
         _balances[msg.sender] = _balances[msg.sender].sub(amount);
         stakingToken.safeTransfer(msg.sender, amount);
+        stakeAmounts[msg.sender][nonce] = 0;
         emit Withdrawn(msg.sender, amount);
     }
 
@@ -336,8 +362,8 @@ contract StakingRewards is IStakingRewards, RewardsDistributionRecipient, Reentr
         }
     }
 
-    function exit() external {
-        withdraw(_balances[msg.sender]);
+    function withdrawAndGetReward(uint256 nonce) public nonReentrant updateReward(msg.sender) {
+        withdraw(nonce);
         getReward();
     }
 
@@ -382,31 +408,31 @@ interface IUniswapV2ERC20 {
     function permit(address owner, address spender, uint value, uint deadline, uint8 v, bytes32 r, bytes32 s) external;
 }
 
-contract StakingRewardsFactory is Ownable {
+contract LockStakingRewardsFactory is Ownable {
     // immutables
     address public rewardsToken;
-    uint public stakingRewardsGenesis;
+    uint public lockStakingRewardsGenesis;
 
     // the staking tokens for which the rewards contract has been deployed
     address[] public stakingTokens;
 
     // info about rewards for a particular staking token
-    struct StakingRewardsInfo {
-        address stakingRewards;
+    struct LockStakingRewardsInfo {
+        address lockStakingRewards;
         uint rewardAmount;
     }
 
     // rewards info by staking token
-    mapping(address => StakingRewardsInfo) public stakingRewardsInfoByStakingToken;
+    mapping(address => LockStakingRewardsInfo) public lockStakingRewardsInfoByStakingToken;
 
     constructor(
         address _rewardsToken,
-        uint _stakingRewardsGenesis
+        uint _lockStakingRewardsGenesis
     ) Ownable() public {
-        require(_stakingRewardsGenesis >= block.timestamp, 'StakingRewardsFactory::constructor: genesis too soon');
+        require(_lockStakingRewardsGenesis >= block.timestamp, 'LockStakingRewardsFactory::constructor: genesis too soon');
 
         rewardsToken = _rewardsToken;
-        stakingRewardsGenesis = _stakingRewardsGenesis;
+        lockStakingRewardsGenesis = _lockStakingRewardsGenesis;
     }
 
     ///// permissioned functions
@@ -414,10 +440,10 @@ contract StakingRewardsFactory is Ownable {
     // deploy a staking reward contract for the staking token, and store the reward amount
     // the reward will be distributed to the staking reward contract no sooner than the genesis
     function deploy(address stakingToken, uint rewardAmount) public onlyOwner {
-        StakingRewardsInfo storage info = stakingRewardsInfoByStakingToken[stakingToken];
-        require(info.stakingRewards == address(0), 'StakingRewardsFactory::deploy: already deployed');
+        LockStakingRewardsInfo storage info = lockStakingRewardsInfoByStakingToken[stakingToken];
+        require(info.lockStakingRewards == address(0), 'LockStakingRewardsFactory::deploy: already deployed');
 
-        info.stakingRewards = address(new StakingRewards(/*_rewardsDistribution=*/ address(this), rewardsToken, stakingToken));
+        info.lockStakingRewards = address(new LockStakingRewards(/*_rewardsDistribution=*/ address(this), rewardsToken, stakingToken));
         info.rewardAmount = rewardAmount;
         stakingTokens.push(stakingToken);
     }
@@ -426,7 +452,7 @@ contract StakingRewardsFactory is Ownable {
 
     // call notifyRewardAmount for all staking tokens.
     function notifyRewardAmounts() public {
-        require(stakingTokens.length > 0, 'StakingRewardsFactory::notifyRewardAmounts: called before any deploys');
+        require(stakingTokens.length > 0, 'LockStakingRewardsFactory::notifyRewardAmounts: called before any deploys');
         for (uint i = 0; i < stakingTokens.length; i++) {
             notifyRewardAmount(stakingTokens[i]);
         }
@@ -435,20 +461,20 @@ contract StakingRewardsFactory is Ownable {
     // notify reward amount for an individual staking token.
     // this is a fallback in case the notifyRewardAmounts costs too much gas to call for all contracts
     function notifyRewardAmount(address stakingToken) public {
-        require(block.timestamp >= stakingRewardsGenesis, 'StakingRewardsFactory::notifyRewardAmount: not ready');
+        require(block.timestamp >= lockStakingRewardsGenesis, 'LockStakingRewardsFactory::notifyRewardAmount: not ready');
 
-        StakingRewardsInfo storage info = stakingRewardsInfoByStakingToken[stakingToken];
-        require(info.stakingRewards != address(0), 'StakingRewardsFactory::notifyRewardAmount: not deployed');
+        LockStakingRewardsInfo storage info = lockStakingRewardsInfoByStakingToken[stakingToken];
+        require(info.lockStakingRewards != address(0), 'LockStakingRewardsFactory::notifyRewardAmount: not deployed');
 
         if (info.rewardAmount > 0) {
             uint rewardAmount = info.rewardAmount;
             info.rewardAmount = 0;
 
             require(
-                IERC20(rewardsToken).transfer(info.stakingRewards, rewardAmount),
-                'StakingRewardsFactory::notifyRewardAmount: transfer failed'
+                IERC20(rewardsToken).transfer(info.lockStakingRewards, rewardAmount),
+                'LockStakingRewardsFactory::notifyRewardAmount: transfer failed'
             );
-            StakingRewards(info.stakingRewards).notifyRewardAmount(rewardAmount);
+            LockStakingRewards(info.lockStakingRewards).notifyRewardAmount(rewardAmount);
         }
     }
 }

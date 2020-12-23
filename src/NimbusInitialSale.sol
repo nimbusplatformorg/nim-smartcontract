@@ -126,7 +126,7 @@ interface INimbusReferralProgram {
     function userAddressById(uint id) external view returns (address);
 }
 
-interface INimbusStaking {
+interface INimbusStakingPool {
     function stakeFor(uint amount, address user) external;
     function balanceOf(address account) external view returns (uint256);
 }
@@ -137,23 +137,18 @@ interface INBU_WETH {
     function withdraw(uint) external;
 }
 
-interface INimbusRouter {
-    function getAmountsOut(uint amountIn, address[] calldata path) external view returns (uint[] memory amounts);
-}
-
 contract NimbusInitialSale is Ownable, Pausable {
     using SafeMath for uint;
 
     INBU public immutable NBU;
     address public immutable NBU_WETH;
     INimbusReferralProgram public referralProgram;
-    INimbusStaking public nimbusStaking;
+    INimbusStakingPool[] public stakingPools;
     address public recipient;                      
    
     uint public ethNbuExchangeRate;
     mapping(address => uint) public tokenNbuExchangeRates;
 
-    INimbusRouter public swapRouter;                
     address public swapToken;                       
     uint public swapTokenAmountForBonusThreshold;  
     
@@ -162,7 +157,7 @@ contract NimbusInitialSale is Ownable, Pausable {
 
     event BuyNbuForToken(address token, uint tokenAmount, uint nbuAmount, address nbuRecipient);
     event BuyNbuForEth(uint ethAmount, uint nbuAmount, address nbuRecipient);
-    event ProcessSponsorBonus(address sponsor, address user, uint bonbuAmount);
+    event ProcessSponsorBonus(address sponsor, address user, uint bonusAmount);
     event AddUnclaimedSponsorBonus(address user, uint nbuAmount);
 
     event UpdateTokenNbuExchangeRate(address token, uint newRate);
@@ -170,12 +165,9 @@ contract NimbusInitialSale is Ownable, Pausable {
     event Rescue(address to, uint amount);
     event RescueToken(address token, address to, uint amount); 
 
-    constructor (address nbu, address nbuReferralProgram, address nbuWeth, address nimbusStakingAddress, address nbuRouter, address ownerAddress) Ownable(ownerAddress) {
-        referralProgram = INimbusReferralProgram(nbuReferralProgram);
+    constructor (address nbu, address nbuWeth, address ownerAddress) Ownable(ownerAddress) {
         NBU = INBU(nbu);
         NBU_WETH = nbuWeth;
-        nimbusStaking = INimbusStaking(nimbusStakingAddress);
-        swapRouter = INimbusRouter(nbuRouter);
         sponsorBonus = 10;
         recipient = address(this);
     }
@@ -200,32 +192,18 @@ contract NimbusInitialSale is Ownable, Pausable {
         return nbuAmount.mul(1000000000000000000) / ethNbuExchangeRate;
     }
 
+    function currentBalance(address token) public view returns (uint) { 
+        return INBU(token).balanceOf(address(this));
+    }
 
+
+    
 
 
     function _buyNbu(address token, uint tokenAmount, uint nbuAmount, address nbuRecipient) private {
-        NBU.approve(address(nimbusStaking), nbuAmount);
-        nimbusStaking.stakeFor(nbuAmount, nbuRecipient);                       
+        NBU.transfer(nbuRecipient, nbuAmount);
         emit BuyNbuForToken(token, tokenAmount, nbuAmount, nbuRecipient);
-        
-        address sponsorAddress = referralProgram.userAddressById(referralProgram.userSponsorByAddress(msg.sender));
-        if (sponsorAddress != address(0)) {
-            uint bonusBase = _bonusBase(nbuAmount);
-            if (bonusBase > 0) {
-                uint sponsorBonbuAmount = bonusBase.mul(sponsorBonus) / 100;
-                NBU.give(sponsorAddress, sponsorBonbuAmount);
-                unclaimedBonusBases[msg.sender] = 0;
-                emit ProcessSponsorBonus(sponsorAddress, msg.sender, sponsorBonbuAmount);
-            } else {
-                unclaimedBonusBases[msg.sender] = unclaimedBonusBases[msg.sender].add(nbuAmount);
-                emit AddUnclaimedSponsorBonus(msg.sender, nbuAmount);
-            }
-        } else {
-            unclaimedBonusBases[msg.sender] = unclaimedBonusBases[msg.sender].add(nbuAmount);
-            emit AddUnclaimedSponsorBonus(msg.sender, nbuAmount);
-        }
-        
-        
+        _processSponsor(nbuAmount);
     }
 
     function _buyNbuWithPermit(
@@ -239,18 +217,32 @@ contract NimbusInitialSale is Ownable, Pausable {
         uint value = approveMax ? uint(2**256 - 1) : tokenAmount;
         IERC20WithPermit(token).permit(msg.sender, address(this), value, deadline, v, r, s); //check deadline in permit
         TransferHelper.safeTransferFrom(token, msg.sender, recipient, tokenAmount);
-        NBU.approve(address(nimbusStaking), nbuAmount);
-        nimbusStaking.stakeFor(nbuAmount, nbuRecipient);
+        NBU.transfer(nbuRecipient, nbuAmount);
         emit BuyNbuForToken(token, tokenAmount, nbuAmount, nbuRecipient);
-        
-        address sponsorAddress = referralProgram.userAddressById(referralProgram.userSponsorByAddress(msg.sender));
-        if (sponsorAddress != address(0)) { 
-            uint bonusBase = _bonusBase(nbuAmount);
-            if (sponsorAddress != address(0) && bonusBase > 0) {
-                uint sponsorBonusAmount = bonusBase.mul(sponsorBonus) / 100;
-                NBU.give(sponsorAddress, sponsorBonusAmount);
-                unclaimedBonusBases[msg.sender] = 0;
-                emit ProcessSponsorBonus(sponsorAddress, msg.sender, sponsorBonusAmount);
+        _processSponsor(nbuAmount);
+    }
+
+    function _processSponsor(uint nbuAmount) private {
+        address sponsorAddress = _getUserSponsorAddress();
+        if (sponsorAddress != address(0) && tokenNbuExchangeRates[swapToken] > 0) { 
+            uint minNbuAmountForBonus = getNbuAmountForToken(swapToken, swapTokenAmountForBonusThreshold);
+            if (nbuAmount > minNbuAmountForBonus) {
+                uint sponsorAmount = NBU.balanceOf(sponsorAddress);
+                for (uint i; i < stakingPools.length; i++) {
+                    if (sponsorAmount > minNbuAmountForBonus) break;
+                    sponsorAmount = sponsorAmount.add(stakingPools[i].balanceOf(sponsorAddress));
+                }
+                
+                if (sponsorAmount > minNbuAmountForBonus) {
+                    uint bonusBase = nbuAmount.add(unclaimedBonusBases[msg.sender]);
+                    uint sponsorBonusAmount = bonusBase.mul(sponsorBonus) / 100;
+                    NBU.give(sponsorAddress, sponsorBonusAmount);
+                    unclaimedBonusBases[msg.sender] = 0;
+                    emit ProcessSponsorBonus(sponsorAddress, msg.sender, sponsorBonusAmount);
+                } else {
+                    unclaimedBonusBases[msg.sender] = unclaimedBonusBases[msg.sender].add(nbuAmount);
+                    emit AddUnclaimedSponsorBonus(msg.sender, nbuAmount);
+                }
             } else {
                 unclaimedBonusBases[msg.sender] = unclaimedBonusBases[msg.sender].add(nbuAmount);
                 emit AddUnclaimedSponsorBonus(msg.sender, nbuAmount);
@@ -259,43 +251,39 @@ contract NimbusInitialSale is Ownable, Pausable {
             unclaimedBonusBases[msg.sender] = unclaimedBonusBases[msg.sender].add(nbuAmount);
             emit AddUnclaimedSponsorBonus(msg.sender, nbuAmount);
         }
-        
     }
 
-    function _bonusBase(uint nbuAmount) private view returns (uint) {
-        uint amount = nbuAmount.add(unclaimedBonusBases[msg.sender]);
-        
-        address[] memory path = new address[](2);
-        path[0] = address(NBU);
-        path[1] = swapToken;
-        uint tokenAmount = swapRouter.getAmountsOut(amount, path)[1];
-        if (tokenAmount >= swapTokenAmountForBonusThreshold) {
-            return amount;
+    function _getUserSponsorAddress() private view returns (address) {
+        if (address(referralProgram) == address(0)) {
+            return address(0);
         } else {
-            return 0;
-        }
+            return referralProgram.userAddressById(referralProgram.userSponsorByAddress(msg.sender));
+        } 
     }
-
     
     function buyExactNbuForTokens(address token, uint nbuAmount, address nbuRecipient) external whenNotPaused {
+        require(tokenNbuExchangeRates[token] > 0, "Not initialized token");
         uint tokenAmount = getTokenAmountForNbu(token, nbuAmount);
         TransferHelper.safeTransferFrom(token, msg.sender, recipient, tokenAmount);
         _buyNbu(token, tokenAmount, nbuAmount, nbuRecipient);
     }
 
     function buyNbuForExactTokens(address token, uint tokenAmount, address nbuRecipient) external whenNotPaused {
+        require(tokenNbuExchangeRates[token] > 0, "Not initialized token");
         uint nbuAmount = getNbuAmountForToken(token, tokenAmount);
         TransferHelper.safeTransferFrom(token, msg.sender, recipient, tokenAmount);
         _buyNbu(token, tokenAmount, nbuAmount, nbuRecipient);
     }
 
     function buyNbuForExactEth(address nbuRecipient) payable external whenNotPaused {
+        require(ethNbuExchangeRate > 0, "Not initialized ETH rate");
         uint nbuAmount = getNbuAmountForEth(msg.value);
         INBU_WETH(NBU_WETH).deposit{value: msg.value}();
         _buyNbu(NBU_WETH, msg.value, nbuAmount, nbuRecipient);
     }
 
     function buyExactNbuForEth(uint nbuAmount, address nbuRecipient) payable external whenNotPaused {
+        require(ethNbuExchangeRate > 0, "Not initialized ETH rate");
         uint nbuAmountMax = getNbuAmountForEth(msg.value);
         require(nbuAmountMax >= nbuAmount, "Not enough ETH");
         uint ethAmount = nbuAmountMax == nbuAmount ? msg.value : getEthAmountForNbu(nbuAmount);
@@ -331,14 +319,19 @@ contract NimbusInitialSale is Ownable, Pausable {
     function claimSponsorBonuses(address user) external {
         require(unclaimedBonusBases[user] > 0, "No unclaimed bonuses");
         require(referralProgram.userSponsorByAddress(user) == referralProgram.userIdByAddress(msg.sender), "Not user sponsor");
+        require(tokenNbuExchangeRates[swapToken] > 0, "Not specified exchange rate");
+        
+        uint minNbuAmountForBonus = getNbuAmountForToken(swapToken, swapTokenAmountForBonusThreshold);
         uint bonusBase = unclaimedBonusBases[user];
+        require (bonusBase >= minNbuAmountForBonus, "Bonus threshold not met");
+
+        uint sponsorAmount = NBU.balanceOf(msg.sender);
+        for (uint i; i < stakingPools.length; i++) {
+            if (sponsorAmount > minNbuAmountForBonus) break;
+            sponsorAmount = sponsorAmount.add(stakingPools[i].balanceOf(msg.sender));
+        }
         
-        address[] memory path = new address[](2);
-        path[0] = address(NBU);
-        path[1] = swapToken;
-        uint tokenAmount = swapRouter.getAmountsOut(bonusBase, path)[1];
-        require (tokenAmount >= swapTokenAmountForBonusThreshold, "Bonus threshold not met");
-        
+        require (sponsorAmount > minNbuAmountForBonus, "Sponsor balance threshold for bonus not met");
         uint sponsorBonusAmount = bonusBase.mul(sponsorBonus) / 100;
         NBU.give(msg.sender, sponsorBonusAmount);
         unclaimedBonusBases[msg.sender] = 0;
@@ -386,14 +379,13 @@ contract NimbusInitialSale is Ownable, Pausable {
         referralProgram = INimbusReferralProgram(newReferralProgramContract);
     }
 
-    function updateNimbusStakingContract(address newStakingContract) external onlyOwner {
-        require(newStakingContract != address(0), "Address is zero");
-        nimbusStaking = INimbusStaking(newStakingContract);
+    function updateStakingPoolAdd(address newStakingPool) external onlyOwner {
+        stakingPools.push(INimbusStakingPool(newStakingPool));
     }
 
-    function updateSwapRouter(address newSwapRouter) external onlyOwner {
-        require(newSwapRouter != address(0), "Address is zero");
-        swapRouter = INimbusRouter(newSwapRouter);
+    function updateStakingPoolRemove(uint poolIndex) external onlyOwner {
+        stakingPools[poolIndex] = stakingPools[stakingPools.length - 1];
+        stakingPools.pop();
     }
 
     function updateSwapToken(address newSwapToken) external onlyOwner {

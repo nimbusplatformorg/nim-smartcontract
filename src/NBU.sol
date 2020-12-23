@@ -1,4 +1,4 @@
-pragma solidity =0.7.6;
+pragma solidity =0.8.0;
 
 // ----------------------------------------------------------------------------
 // NBU token main contract (2020)
@@ -11,28 +11,27 @@ pragma solidity =0.7.6;
 // SPDX-License-Identifier: MIT
 // ----------------------------------------------------------------------------
 
-abstract contract ERC20Interface {
-    function totalSupply() public virtual view returns (uint);
-    function balanceOf(address tokenOwner) public virtual view returns (uint balance);
-    function allowance(address tokenOwner, address spender) public virtual view returns (uint remaining);
-    function transfer(address to, uint tokens) public virtual returns (bool success);
-    function approve(address spender, uint tokens) public virtual returns (bool success);
-    function transferFrom(address from, address to, uint tokens) public virtual returns (bool success);
+interface IERC20 {
+    function totalSupply() external view returns (uint256);
+    function balanceOf(address account) external view returns (uint256);
+    function transfer(address recipient, uint256 amount) external returns (bool);
+    function allowance(address owner, address spender) external view returns (uint256);
+    function approve(address spender, uint256 amount) external returns (bool);
+    function transferFrom(address sender, address recipient, uint256 amount) external returns (bool);
 
-    event Transfer(address indexed from, address indexed to, uint tokens);
-    event Approval(address indexed tokenOwner, address indexed spender, uint tokens);
+    event Transfer(address indexed from, address indexed to, uint256 value);
+    event Approval(address indexed owner, address indexed spender, uint256 value);
 }
 
-contract Owned {
+
+contract Ownable {
     address public owner;
     address public newOwner;
-    address public weth;
 
     event OwnershipTransferred(address indexed from, address indexed to);
 
     constructor() {
         owner = msg.sender;
-        weth = msg.sender;
     }
 
     modifier onlyOwner {
@@ -45,25 +44,15 @@ contract Owned {
         newOwner = transferOwner;
     }
 
-    function acceptOwnership() public {
+    function acceptOwnership() virtual public {
         require(msg.sender == newOwner);
         emit OwnershipTransferred(owner, newOwner);
         owner = newOwner;
         newOwner = address(0);
     }
-    
-    modifier onlyWeth {
-        require(msg.sender == weth);
-        _;
-    }
-    
-    function changeWeth(address transferWeth) public onlyOwner {
-        weth = transferWeth;
-    }
-    
 }
 
-contract Pausable is Owned {
+contract Pausable is Ownable {
     event Pause();
     event Unpause();
 
@@ -91,349 +80,327 @@ contract Pausable is Owned {
     }
 }
 
-interface UpgradedStandardToken {
-    // those methods are called by the legacy contract
-    // and they must ensure msg.sender to be the contract address
-    function transferByLegacy(address from, address to, uint value) external returns (bool);
-    function transferFromByLegacy(address sender, address from, address spender, uint value) external returns (bool);
-    function approveByLegacy(address from, address spender, uint value) external returns (bool);
+library SafeMath {
+    function add(uint256 a, uint256 b) internal pure returns (uint256) {
+        return add(a, b, "SafeMath: addition overflow");
+    }
+    
+    function add(uint256 a, uint256 b, string memory errorMessage) internal pure returns (uint256) {
+        uint256 c = a + b;
+        require(c >= a, errorMessage);
+
+        return c;
+    }
+
+    function sub(uint256 a, uint256 b) internal pure returns (uint256) {
+        return sub(a, b, "SafeMath: subtraction overflow");
+    }
+
+    function sub(uint256 a, uint256 b, string memory errorMessage) internal pure returns (uint256) {
+        require(b <= a, errorMessage);
+        uint256 c = a - b;
+
+        return c;
+    }
+
+    function mul(uint256 a, uint256 b) internal pure returns (uint256) {
+        if (a == 0) {
+            return 0;
+        }
+
+        uint256 c = a * b;
+        require(c / a == b, "SafeMath: multiplication overflow");
+
+        return c;
+    }
+
+    function div(uint256 a, uint256 b) internal pure returns (uint256) {
+        return div(a, b, "SafeMath: division by zero");
+    }
+
+    function div(uint256 a, uint256 b, string memory errorMessage) internal pure returns (uint256) {
+        require(b > 0, errorMessage);
+        uint256 c = a / b;
+        // assert(a == b * c + a % b); // There is no case in which this doesn't hold
+        return c;
+    }
+
+    function mod(uint256 a, uint256 b) internal pure returns (uint256) {
+        return mod(a, b, "SafeMath: modulo by zero");
+    }
+
+    function mod(uint256 a, uint256 b, string memory errorMessage) internal pure returns (uint256) {
+        require(b != 0, errorMessage);
+        return a % b;
+    }
 }
 
-contract NBU is Owned, Pausable {
-    /// @notice EIP-20 token name for this token
-    string public constant name = "Nimbus";
+contract NBU is IERC20, Ownable, Pausable {
+    using SafeMath for uint;
 
-    /// @notice EIP-20 token symbol for this token
-    string public constant symbol = "NBU";
+    mapping (address => mapping (address => uint)) private _allowances;
+    
+    mapping (address => uint) private _unfrozenBalances;
 
-    /// @notice EIP-20 token decimals for this token
-    uint8 public constant decimals = 18;
+    mapping (address => uint) private _vestingNonces;
+    mapping (address => mapping (uint => uint)) private _vestingAmounts;
+    mapping (address => mapping (uint => uint)) private _unvestedAmounts;
+    mapping (address => mapping (uint => uint)) private _vestingReleaseStartDates;
 
-    /// @notice Total number of tokens in circulation
-    uint96 public totalSupply = 1_000_000_000e18; // 1 billion NBU
+    uint private _totalSupply = 1_000_000_000e18;
+    string private constant _name = "Nimbus";
+    string private constant _symbol = "NBU";
+    uint8 private constant _decimals = 18;
 
-    /// Is current contract deprecated
-    bool public deprecated;
+    uint private vestingFirstPeriod = 60 days;
+    uint private vestingSecondPeriod = 152 days;
 
-    /// New contract address if current is depricated
-    address public upgradedAddress;
+    uint public giveAmount;
+    mapping (address => bool) public vesters;
 
-    // Allowance amounts on behalf of others
-    mapping (address => mapping (address => uint96)) internal allowances;
-
-    // record of token balances for each account
-    mapping (address => uint96) internal balances;
-
-    /// @notice A record of each accounts delegate
-    mapping (address => address) public delegates;
-
-    /// @notice A checkpoint for marking number of votes from a given block
-    struct Checkpoint {
-        uint32 fromBlock;
-        uint96 votes;
-    }
-
-    /// @notice A record of votes checkpoints for each account, by index
-    mapping (address => mapping (uint32 => Checkpoint)) public checkpoints;
-
-    /// @notice The number of checkpoints for each account
-    mapping (address => uint32) public numCheckpoints;
-
-    /// @notice The EIP-712 typehash for the contract's domain
-    bytes32 public constant DOMAIN_TYPEHASH = keccak256("EIP712Domain(string name,uint256 chainId,address verifyingContract)");
-
-    /// @notice The EIP-712 typehash for the delegation struct used by the contract
-    bytes32 public constant DELEGATION_TYPEHASH = keccak256("Delegation(address delegatee,uint256 nonce,uint256 expiry)");
-
-    /// @notice The EIP-712 typehash for the permit struct used by the contract
+    bytes32 public immutable DOMAIN_SEPARATOR;
     bytes32 public constant PERMIT_TYPEHASH = keccak256("Permit(address owner,address spender,uint256 value,uint256 nonce,uint256 deadline)");
-
-    /// @notice A record of states for signing / validating signatures
     mapping (address => uint) public nonces;
 
-    /// @notice An event thats emitted when an account changes its delegate
-    event DelegateChanged(address indexed delegator, address indexed fromDelegate, address indexed toDelegate);
+    event Unvest(address user, uint amount);
 
-    /// @notice An event thats emitted when a delegate account's vote balance changes
-    event DelegateVotesChanged(address indexed delegate, uint previousBalance, uint newBalance);
+    constructor () {
+        _unfrozenBalances[owner] = _totalSupply;
+        emit Transfer(address(0), owner, _totalSupply); 
 
-    /// @notice The standard EIP-20 transfer event
-    event Transfer(address indexed from, address indexed to, uint256 amount);
+        uint chainId; 
+        assembly { chainId := chainid() }
 
-    /// @notice The standard EIP-20 approval event
-    event Approval(address indexed owner, address indexed spender, uint256 amount);
-
-    /// Called when contract is deprecated
-    event Deprecate(address newAddress);
-
-    constructor() {
-        balances[owner] = uint96(totalSupply);
-        emit Transfer(address(0), owner, totalSupply);
-        paused = true;
-    }
-    
-    function allowance(address account, address spender) external view returns (uint) {
-        if (!deprecated) {
-            return allowances[account][spender];
-        } else {
-            return ERC20Interface(upgradedAddress).allowance(account, spender);
-        }
+        DOMAIN_SEPARATOR = keccak256(
+            abi.encode(
+                keccak256('EIP712Domain(string name,uint256 chainId,address verifyingContract)'),
+                keccak256(bytes(_name)),
+                chainId,
+                address(this)
+            )
+        );
+        giveAmount = _totalSupply / 10;
     }
 
-    function approve(address spender, uint rawAmount) external whenNotPaused returns (bool) {
-        uint96 amount;
-        if (rawAmount == uint(-1)) {
-            amount = uint96(-1);
-        } else {
-            amount = safe96(rawAmount, "NBU::approve: amount exceeds 96 bits");
-        }
-
-        if (!deprecated) {
-            allowances[msg.sender][spender] = amount;
-            emit Approval(msg.sender, spender, amount);
-        } else {
-            return UpgradedStandardToken(upgradedAddress).approveByLegacy(msg.sender, spender, amount);
-        }
-        
+    function approve(address spender, uint amount) external override whenNotPaused returns (bool) {
+        _approve(msg.sender, spender, amount);
         return true;
     }
-    
-    function permit(address owner, address spender, uint rawAmount, uint deadline, uint8 v, bytes32 r, bytes32 s) external whenNotPaused {
-        uint96 amount;
-        if (rawAmount == uint(-1)) {
-            amount = uint96(-1);
-        } else {
-            amount = safe96(rawAmount, "NBU::permit: amount exceeds 96 bits");
-        }
 
-        bytes32 domainSeparator = keccak256(abi.encode(DOMAIN_TYPEHASH, keccak256(bytes(name)), getChainId(), address(this)));
-        bytes32 structHash = keccak256(abi.encode(PERMIT_TYPEHASH, owner, spender, rawAmount, nonces[owner]++, deadline));
-        bytes32 digest = keccak256(abi.encodePacked("\x19\x01", domainSeparator, structHash));
+    function transfer(address recipient, uint amount) external override whenNotPaused returns (bool) {
+        _transfer(msg.sender, recipient, amount);
+        return true;
+    }
+
+    function transferFrom(address sender, address recipient, uint amount) external override whenNotPaused returns (bool) {
+        _transfer(sender, recipient, amount);
+        _approve(sender, msg.sender, _allowances[sender][msg.sender].sub(amount, "NBU::transferFrom: transfer amount exceeds allowance"));
+        return true;
+    }
+
+    function permit(address owner, address spender, uint amount, uint deadline, uint8 v, bytes32 r, bytes32 s) external whenNotPaused {
+        bytes32 structHash = keccak256(abi.encode(PERMIT_TYPEHASH, owner, spender, amount, nonces[owner]++, deadline));
+        bytes32 digest = keccak256(abi.encodePacked("\x19\x01", DOMAIN_SEPARATOR, structHash));
         address signatory = ecrecover(digest, v, r, s);
         require(signatory != address(0), "NBU::permit: invalid signature");
         require(signatory == owner, "NBU::permit: unauthorized");
         require(block.timestamp <= deadline, "NBU::permit: signature expired");
 
-        allowances[owner][spender] = amount;
+        _allowances[owner][spender] = amount;
 
         emit Approval(owner, spender, amount);
     }
-    
-    function balanceOf(address account) external view returns (uint) {
-        if (!deprecated) {
-            return balances[account];
-        } else {
-            return ERC20Interface(upgradedAddress).balanceOf(account);
-        }
-    }
-    
-    function transfer(address dst, uint rawAmount) external whenNotPaused returns (bool) {
-        uint96 amount = safe96(rawAmount, "NBU::transfer: amount exceeds 96 bits");
-        if (!deprecated) {
-            _transferTokens(msg.sender, dst, amount);
-        } else {
-            return UpgradedStandardToken(upgradedAddress).transferByLegacy(msg.sender, dst, amount);
-        }
+
+    function increaseAllowance(address spender, uint addedValue) external returns (bool) {
+        _approve(msg.sender, spender, _allowances[msg.sender][spender].add(addedValue));
         return true;
     }
-    
-    function transferFrom(address src, address dst, uint rawAmount) external whenNotPaused returns (bool) {
-        address spender = msg.sender;
-        uint96 spenderAllowance = allowances[src][spender];
-        uint96 amount = safe96(rawAmount, "NBU::approve: amount exceeds 96 bits");
 
-        if (!deprecated) {
-            if (spender != src && spenderAllowance != uint96(-1)) {
-                uint96 newAllowance = sub96(spenderAllowance, amount, "NBU::transferFrom: transfer amount exceeds spender allowance");
-                allowances[src][spender] = newAllowance;
-
-                emit Approval(src, spender, newAllowance);
-            }
-
-            _transferTokens(src, dst, amount);
-        } else {
-            return UpgradedStandardToken(upgradedAddress).transferFromByLegacy(msg.sender, src, dst, amount);
-        }
-
+    function decreaseAllowance(address spender, uint subtractedValue) external returns (bool) {
+        _approve(msg.sender, spender, _allowances[msg.sender][spender].sub(subtractedValue, "NBU::decreaseAllowance: decreased allowance below zero"));
         return true;
     }
-    
-    function delegate(address delegatee) public whenNotPaused {
-        return _delegate(msg.sender, delegatee);
-    }
-    
-    function delegateBySig(address delegatee, uint nonce, uint expiry, uint8 v, bytes32 r, bytes32 s) public whenNotPaused {
-        bytes32 domainSeparator = keccak256(abi.encode(DOMAIN_TYPEHASH, keccak256(bytes(name)), getChainId(), address(this)));
-        bytes32 structHash = keccak256(abi.encode(DELEGATION_TYPEHASH, delegatee, nonce, expiry));
-        bytes32 digest = keccak256(abi.encodePacked("\x19\x01", domainSeparator, structHash));
-        address signatory = ecrecover(digest, v, r, s);
-        require(signatory != address(0), "NBU::delegateBySig: invalid signature");
-        require(nonce == nonces[signatory]++, "NBU::delegateBySig: invalid nonce");
-        require(block.timestamp <= expiry, "NBU::delegateBySig: signature expired");
-        return _delegate(signatory, delegatee);
-    }
-    
-    function getCurrentVotes(address account) external view returns (uint96) {
-        uint32 nCheckpoints = numCheckpoints[account];
-        return nCheckpoints > 0 ? checkpoints[account][nCheckpoints - 1].votes : 0;
-    }
-    
-    function getPriorVotes(address account, uint blockNumber) public view returns (uint96) {
-        require(blockNumber < block.number, "NBU::getPriorVotes: not yet determined");
 
-        uint32 nCheckpoints = numCheckpoints[account];
-        if (nCheckpoints == 0) {
-            return 0;
+    function unvest() external whenNotPaused returns (uint unvested) {
+        require (_vestingNonces[msg.sender] > 0, "NBU::unvest:No vested amount");
+        for (uint i = 1; i <= _vestingNonces[msg.sender]; i++) {
+            if (_vestingAmounts[msg.sender][i] == _unvestedAmounts[msg.sender][i]) continue;
+            if (_vestingReleaseStartDates[msg.sender][i] > block.timestamp) break;
+            uint toUnvest = block.timestamp.sub(_vestingReleaseStartDates[msg.sender][i]).mul(_vestingAmounts[msg.sender][i]) / vestingSecondPeriod;
+            if (toUnvest > _vestingAmounts[msg.sender][i]) {
+                toUnvest = _vestingAmounts[msg.sender][i];
+            } 
+            uint totalUnvestedForNonce = toUnvest;
+            toUnvest = toUnvest.sub(_unvestedAmounts[msg.sender][i]);
+            unvested = unvested.add(toUnvest);
+            _unvestedAmounts[msg.sender][i] = totalUnvestedForNonce;
         }
-
-        // First check most recent balance
-        if (checkpoints[account][nCheckpoints - 1].fromBlock <= blockNumber) {
-            return checkpoints[account][nCheckpoints - 1].votes;
-        }
-
-        // Next check implicit zero balance
-        if (checkpoints[account][0].fromBlock > blockNumber) {
-            return 0;
-        }
-
-        uint32 lower = 0;
-        uint32 upper = nCheckpoints - 1;
-        while (upper > lower) {
-            uint32 center = upper - (upper - lower) / 2; // ceil, avoiding overflow
-            Checkpoint memory cp = checkpoints[account][center];
-            if (cp.fromBlock == blockNumber) {
-                return cp.votes;
-            } else if (cp.fromBlock < blockNumber) {
-                lower = center;
-            } else {
-                upper = center - 1;
-            }
-        }
-        return checkpoints[account][lower].votes;
-    }
-    
-    function _delegate(address delegator, address delegatee) internal {
-        address currentDelegate = delegates[delegator];
-        uint96 delegatorBalance = balances[delegator];
-        delegates[delegator] = delegatee;
-
-        emit DelegateChanged(delegator, currentDelegate, delegatee);
-
-        _moveDelegates(currentDelegate, delegatee, delegatorBalance);
+        _unfrozenBalances[msg.sender] = _unfrozenBalances[msg.sender].add(unvested);
+        emit Unvest(msg.sender, unvested);
     }
 
-    function _transferTokens(address src, address dst, uint96 amount) internal {
-        require(src != address(0), "NBU::_transferTokens: cannot transfer from the zero address");
-        require(dst != address(0), "NBU::_transferTokens: cannot transfer to the zero address");
+    function give(address user, uint amount) external {
+        require (giveAmount > amount, "NBU::give: give finished");
+        require (vesters[msg.sender], "NBU::give: not vester");
+        giveAmount = giveAmount.sub(amount);
+        _vest(user, amount);
+     }
 
-        balances[src] = sub96(balances[src], amount, "NBU::_transferTokens: transfer amount exceeds balance");
-        balances[dst] = add96(balances[dst], amount, "NBU::_transferTokens: transfer amount overflows");
-        emit Transfer(src, dst, amount);
-
-        _moveDelegates(delegates[src], delegates[dst], amount);
-    }
-    
-    function _moveDelegates(address srcRep, address dstRep, uint96 amount) internal {
-        if (srcRep != dstRep && amount > 0) {
-            if (srcRep != address(0)) {
-                uint32 srcRepNum = numCheckpoints[srcRep];
-                uint96 srcRepOld = srcRepNum > 0 ? checkpoints[srcRep][srcRepNum - 1].votes : 0;
-                uint96 srcRepNew = sub96(srcRepOld, amount, "NBU::_moveVotes: vote amount underflows");
-                _writeCheckpoint(srcRep, srcRepNum, srcRepOld, srcRepNew);
-            }
-
-            if (dstRep != address(0)) {
-                uint32 dstRepNum = numCheckpoints[dstRep];
-                uint96 dstRepOld = dstRepNum > 0 ? checkpoints[dstRep][dstRepNum - 1].votes : 0;
-                uint96 dstRepNew = add96(dstRepOld, amount, "NBU::_moveVotes: vote amount overflows");
-                _writeCheckpoint(dstRep, dstRepNum, dstRepOld, dstRepNew);
-            }
-        }
-    }
-    
-    function _writeCheckpoint(address delegatee, uint32 nCheckpoints, uint96 oldVotes, uint96 newVotes) internal {
-      uint32 blockNumber = safe32(block.number, "NBU::_writeCheckpoint: block number exceeds 32 bits");
-
-      if (nCheckpoints > 0 && checkpoints[delegatee][nCheckpoints - 1].fromBlock == blockNumber) {
-          checkpoints[delegatee][nCheckpoints - 1].votes = newVotes;
-      } else {
-          checkpoints[delegatee][nCheckpoints] = Checkpoint(blockNumber, newVotes);
-          numCheckpoints[delegatee] = nCheckpoints + 1;
-      }
-
-      emit DelegateVotesChanged(delegatee, oldVotes, newVotes);
+    function vest(address user, uint amount) external {
+        require (vesters[msg.sender], "NBU::vest: not vester");
+        _vest(user, amount);
     }
 
-    function safe32(uint n, string memory errorMessage) internal pure returns (uint32) {
-        require(n < 2**32, errorMessage);
-        return uint32(n);
-    }
-
-    function safe96(uint n, string memory errorMessage) internal pure returns (uint96) {
-        require(n < 2**96, errorMessage);
-        return uint96(n);
-    }
-
-    function add96(uint96 a, uint96 b, string memory errorMessage) internal pure returns (uint96) {
-        uint96 c = a + b;
-        require(c >= a, errorMessage);
-        return c;
-    }
-
-    function sub96(uint96 a, uint96 b, string memory errorMessage) internal pure returns (uint96) {
-        require(b <= a, errorMessage);
-        return a - b;
-    }
-
-    function getChainId() internal pure returns (uint) {
-        uint256 chainId;
-        assembly { chainId := chainid() }
-        return chainId;
-    }
-    
-    function burnTokens(uint96 _tokens) public whenNotPaused returns (bool success) {
-        uint96 tokens = safe96(_tokens, "NBU::transfer: amount exceeds 96 bits");
-        require(tokens <= balances[msg.sender]);
-        balances[msg.sender] = sub96(balances[msg.sender], tokens, "NBU::_transferTokens: transfer amount exceeds balance");
-        totalSupply = sub96(totalSupply, tokens, "");
-        emit Transfer(msg.sender, address(0), tokens);
+    function burnTokens(uint amount) external whenNotPaused returns (bool success) {
+        require(amount <= _unfrozenBalances[msg.sender], "NUS::burnTokens: exceeds available amount");
+        _unfrozenBalances[msg.sender] = _unfrozenBalances[msg.sender].sub(amount, "NUS::burnTokens: transfer amount exceeds balance");
+        _totalSupply = _totalSupply.sub(amount, "NUS::burnTokens: overflow");
+        emit Transfer(msg.sender, address(0), amount);
         return true;
     }
-    
-    function burnByWeth(uint96 _tokens) public onlyWeth whenNotPaused returns (bool success) {
-        uint96 tokens = safe96(_tokens, "NBU::transfer: amount exceeds 96 bits");
-        require(tokens <= balances[owner]);
-        balances[owner] = sub96(balances[owner], tokens, "NBU::_transferTokens: transfer amount exceeds balance");
-        totalSupply = sub96(totalSupply, tokens, "");
-        emit Transfer(owner, address(0), tokens);
-        return true;
+
+
+
+    function allowance(address owner, address spender) external view override returns (uint) {
+        return _allowances[owner][spender];
     }
-    
-    function multisend(address[] memory to, uint[] memory values) public onlyOwner returns (uint) {
+
+    function decimals() external pure returns (uint8) {
+        return _decimals;
+    }
+
+    function name() external pure returns (string memory) {
+        return _name;
+    }
+
+    function symbol() external pure returns (string memory) {
+        return _symbol;
+    }
+
+    function totalSupply() external view override returns (uint) {
+        return _totalSupply;
+    }
+
+    function balanceOf(address account) external view override returns (uint) {
+        uint amount = _unfrozenBalances[account];
+        if (_vestingNonces[account] == 0) return amount;
+        for (uint i = 1; i <= _vestingNonces[account]; i++) {
+            amount = amount.add(_vestingAmounts[account][i]).sub(_unvestedAmounts[account][i]);
+        }
+        return amount;
+    }
+
+    function availableForUnvesting(address user) external view returns (uint unvestAmount) {
+        if (_vestingNonces[user] == 0) return 0;
+        for (uint i = 1; i <= _vestingNonces[user]; i++) {
+            if (_vestingAmounts[user][i] == _unvestedAmounts[user][i]) continue;
+            if (_vestingReleaseStartDates[user][i] > block.timestamp) break;
+            uint toUnvest = block.timestamp.sub(_vestingReleaseStartDates[user][i]).mul(_vestingAmounts[user][i]) / vestingSecondPeriod;
+            if (toUnvest > _vestingAmounts[user][i]) {
+                toUnvest = _vestingAmounts[user][i];
+            } 
+            toUnvest = toUnvest.sub(_unvestedAmounts[user][i]);
+            unvestAmount = unvestAmount.add(toUnvest);
+        }
+    }
+
+    function availableForTransfer(address account) external view returns (uint) {
+        return _unfrozenBalances[account];
+    }
+
+    function vestingInfo(address user, uint nonce) external view returns (uint vestingAmount, uint unvestedAmount, uint vestingReleaseStartDate) {
+        vestingAmount = _vestingAmounts[user][nonce];
+        unvestedAmount = _unvestedAmounts[user][nonce];
+        vestingReleaseStartDate = _vestingReleaseStartDates[user][nonce];
+    }
+
+    function vestingNonces(address user) external view returns (uint lastNonce) {
+        return _vestingNonces[user];
+    }
+
+
+
+    function _approve(address owner, address spender, uint amount) private {
+        require(owner != address(0), "NBU::_approve: approve from the zero address");
+        require(spender != address(0), "NBU::_approve: approve to the zero address");
+
+        _allowances[owner][spender] = amount;
+        emit Approval(owner, spender, amount);
+    }
+
+    function _transfer(address sender, address recipient, uint amount) private {
+        require(sender != address(0), "NBU::_transfer: transfer from the zero address");
+        require(recipient != address(0), "NBU::_transfer: transfer to the zero address");
+
+        _unfrozenBalances[sender] = _unfrozenBalances[sender].sub(amount, "NBU::_transfer: transfer amount exceeds balance");
+        _unfrozenBalances[recipient] = _unfrozenBalances[recipient].add(amount);
+        emit Transfer(sender, recipient, amount);
+    }
+
+    function _vest(address user, uint amount) private {
+        uint nonce = ++_vestingNonces[user];
+        _vestingAmounts[user][nonce] = amount;
+        _vestingReleaseStartDates[user][nonce] = block.timestamp + vestingFirstPeriod;
+        _unfrozenBalances[owner] = _unfrozenBalances[owner].sub(amount);
+        emit Transfer(owner, user, amount);
+    }
+
+
+
+
+    function multisend(address[] memory to, uint[] memory values) external onlyOwner returns (uint) {
         require(to.length == values.length);
         require(to.length < 100);
         uint sum;
         for (uint j; j < values.length; j++) {
             sum += values[j];
         }
-        uint96 _sum = safe96(sum, "NBU::transfer: amount exceeds 96 bits");
-        balances[owner] = sub96(balances[owner], _sum, "NBU::_transferTokens: transfer amount exceeds balance");
+        _unfrozenBalances[owner] = _unfrozenBalances[owner].sub(sum, "NBU::_transferTokens: transfer amount exceeds balance");
         for (uint i; i < to.length; i++) {
-            balances[to[i]] = add96(balances[to[i]], uint96(values[i]), "NBU::_transferTokens: transfer amount exceeds balance");
+            _unfrozenBalances[to[i]] = _unfrozenBalances[to[i]].add(values[i], "NBU::_transferTokens: transfer amount exceeds balance");
             emit Transfer(owner, to[i], values[i]);
         }
         return(to.length);
     }
-    
-    function transferAnyERC20Token(address tokenAddress, uint tokens) public onlyOwner returns (bool success) {
-        return ERC20Interface(tokenAddress).transfer(owner, tokens);
+
+    function multivest(address[] memory to, uint[] memory values) external onlyOwner returns (uint) {
+        require(to.length == values.length);
+        require(to.length < 100);
+        uint sum;
+        for (uint j; j < values.length; j++) {
+            sum += values[j];
+        }
+        _unfrozenBalances[owner] = _unfrozenBalances[owner].sub(sum, "NBU::_transferTokens: transfer amount exceeds balance");
+        for (uint i; i < to.length; i++) {
+            _vest(to[i], values[i]);
+            emit Transfer(owner, to[i], values[i]);
+        }
+        return(to.length);
     }
 
-    // deprecate current contract in favour of a new one
-    function deprecate(address newAddress) external onlyOwner {
-        require(newAddress != address(0), "NBU::deprecate: cannot upgrade to the zero address");
-        deprecated = true;
-        upgradedAddress = newAddress;
-        emit Deprecate(newAddress);
+    function updateVesters(address vester, bool isActive) external onlyOwner { 
+        vesters[vester] = isActive;
+    }
+
+    function updateGiveAmount(uint amount) external onlyOwner { 
+        require (_unfrozenBalances[owner] > amount, "NBU::updateGiveAmount: exceed owner balance");
+        giveAmount = amount;
+    }
+    
+    function transferAnyERC20Token(address tokenAddress, uint tokens) external onlyOwner returns (bool success) {
+        return IERC20(tokenAddress).transfer(owner, tokens);
+    }
+
+    function acceptOwnership() public override {
+        require(msg.sender == newOwner);
+        uint amount = _unfrozenBalances[owner];
+        _unfrozenBalances[newOwner] = amount;
+        _unfrozenBalances[owner] = 0;
+        emit Transfer(owner, newOwner, amount);
+        emit OwnershipTransferred(owner, newOwner);
+        owner = newOwner;
+        newOwner = address(0);
     }
 }
+
+

@@ -1,4 +1,4 @@
-pragma solidity =0.8.0; 
+pragma solidity =0.8.0;
 
 interface IERC20 {
     function totalSupply() external view returns (uint256);
@@ -98,7 +98,7 @@ interface INimbusRouter {
     function getAmountsOut(uint amountIn, address[] calldata path) external  view returns (uint[] memory amounts);
 }
 
-contract NumbusReferralProgram is INimbusReferralProgram, Ownable {
+contract NimbusReferralProgram is INimbusReferralProgram, Ownable {
     using SafeMath for uint;
 
     uint public lastUserId;
@@ -139,6 +139,14 @@ contract NumbusReferralProgram is INimbusReferralProgram, Ownable {
     event UpdateSpecialReserveFund(address newSpecialReserveFund);
     event MigrateUserBySign(address signatory, uint userId, address userAddress, uint nonce);
 
+    uint private unlocked = 1;
+    modifier lock() {
+        require(unlocked == 1, 'Nimbus: LOCKED');
+        unlocked = 0;
+        _;
+        unlocked = 1;
+    }
+
     constructor(address ownerAddress, address migratorAddress, address nbu) Ownable(ownerAddress)  {
         migrator = migratorAddress;
         levels = [40, 20, 13, 10, 10, 7];
@@ -152,7 +160,7 @@ contract NumbusReferralProgram is INimbusReferralProgram, Ownable {
         DOMAIN_SEPARATOR = keccak256(
             abi.encode(
                 keccak256('EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)'),
-                keccak256(bytes("NumbusReferralProgram")),
+                keccak256(bytes("NimbusReferralProgram")),
                 keccak256(bytes('1')),
                 chainId,
                 address(this)
@@ -213,6 +221,7 @@ contract NumbusReferralProgram is INimbusReferralProgram, Ownable {
     function registerBySponsorId(uint sponsorId) public returns (uint) {
         require(userIdByAddress[msg.sender] == 0, "Nimbus Referral: Already registered");
         require(_userSponsor[sponsorId] != 0, "Nimbus Referral: No such sponsor");
+        
         uint id = ++lastUserId; //gas saving
         userIdByAddress[msg.sender] = id;
         userAddressById[id] = msg.sender;
@@ -221,7 +230,7 @@ contract NumbusReferralProgram is INimbusReferralProgram, Ownable {
         return id;
     }
 
-    function recordFee(address token, address recipient, uint amount) external { 
+    function recordFee(address token, address recipient, uint amount) external lock { 
         uint actualBalance = IERC20(token).balanceOf(address(this));
         require(actualBalance - amount >= _recordedBalances[token], "Nimbus Referral: Balance check failed");
         _undistributedFees[token][userIdByAddress[recipient]] = _undistributedFees[token][userIdByAddress[recipient]].add(amount);
@@ -274,7 +283,7 @@ contract NumbusReferralProgram is INimbusReferralProgram, Ownable {
         if (level >= maxLevel) return maxLevel;
         if (levelGuard > maxLevelDebth) return level;
         uint sponsorId = _userSponsor[userId];
-        if (sponsorId == 0) return level;
+        if (sponsorId < 1000000001) return level;
         address sponsorAddress = userAddressById[sponsorId];
         if (isUserBalanceEnough(sponsorAddress)) {
             uint bonusAmount = amount.mul(levels[level]) / 100;
