@@ -28,10 +28,11 @@ contract Ownable {
 
     constructor() {
         owner = msg.sender;
+        emit OwnershipTransferred(address(0), owner);
     }
 
     modifier onlyOwner {
-        require(msg.sender == owner);
+        require(msg.sender == owner, "LPReward: Caller is not the owner");
         _;
     }
 

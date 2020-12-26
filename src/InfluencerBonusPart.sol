@@ -1,28 +1,31 @@
 pragma solidity =0.8.0;
 
 contract Ownable {
-    address private _owner;
+    address public owner;
+    address public newOwner;
 
-    event OwnershipTransferred(address indexed previousOwner, address indexed newOwner);
+    event OwnershipTransferred(address indexed from, address indexed to);
 
-    constructor (address ownerAddress) {
-        _owner = ownerAddress;
-        emit OwnershipTransferred(address(0), ownerAddress);
+    constructor() {
+        owner = msg.sender;
+        emit OwnershipTransferred(address(0), owner);
     }
 
-    function owner() public view returns (address) {
-        return _owner;
-    }
-
-    modifier onlyOwner() {
-        require(msg.sender == _owner, "Ownable: caller is not the owner");
+    modifier onlyOwner {
+        require(msg.sender == owner, "LPReward: Caller is not the owner");
         _;
     }
 
-    function transferOwnership(address newOwner) public onlyOwner {
-        require(newOwner != address(0), "Ownable: new owner is the zero address");
-        emit OwnershipTransferred(_owner, newOwner);
-        _owner = newOwner;
+    function transferOwnership(address transferOwner) public onlyOwner {
+        require(transferOwner != newOwner);
+        newOwner = transferOwner;
+    }
+
+    function acceptOwnership() virtual public {
+        require(msg.sender == newOwner);
+        emit OwnershipTransferred(owner, newOwner);
+        owner = newOwner;
+        newOwner = address(0);
     }
 }
 
@@ -111,13 +114,19 @@ contract NBUInfluencerBonusPart is Ownable {
 
     event ProcessInfluencerBonus(address influencer, address user, uint userAmount, uint influencerBonus);
 
-    constructor(address nbu, address router, address owner) Ownable(owner) {
+    constructor(address nbu, address router) {
         NBU = INBU(nbu);
         swapRouter = INimbusRouter(router);
         nbuBonusAmount = 5 * 10 ** 18;
     }
 
-    function claimBonus(address user) external {
+    function claimBonus(address[] memory users) external {
+        for (uint i; i < users.length; i++) {
+            claimBonus(users[i]);
+        }
+    }
+
+    function claimBonus(address user) public {
         require(influencers[msg.sender], "Not influencer");
         require(!processedUsers[msg.sender][user], "Bonus for user already received");
         require(referralProgram.userSponsorByAddress(user) == referralProgram.userIdByAddress(msg.sender), "Not user sponsor");
@@ -156,6 +165,9 @@ contract NBUInfluencerBonusPart is Ownable {
 
 
     function updateStakingPoolAdd(address newStakingPool) external onlyOwner {
+        for (uint i; i < stakingPools.length; i++) {
+            require (address(stakingPools[i]) != newStakingPool, "Pool exists");
+        }
         stakingPools.push(INimbusStakingPool(newStakingPool));
     }
 

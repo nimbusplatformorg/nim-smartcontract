@@ -13,28 +13,31 @@ interface IERC20 {
 }
 
 contract Ownable {
-    address private _owner;
+    address public owner;
+    address public newOwner;
 
-    event OwnershipTransferred(address indexed previousOwner, address indexed newOwner);
+    event OwnershipTransferred(address indexed from, address indexed to);
 
-    constructor (address ownerAddress) {
-        _owner = ownerAddress;
-        emit OwnershipTransferred(address(0), ownerAddress);
+    constructor() {
+        owner = msg.sender;
+        emit OwnershipTransferred(address(0), owner);
     }
 
-    function owner() public view returns (address) {
-        return _owner;
-    }
-
-    modifier onlyOwner() {
-        require(msg.sender == _owner, "Ownable: caller is not the owner");
+    modifier onlyOwner {
+        require(msg.sender == owner, "LPReward: Caller is not the owner");
         _;
     }
 
-    function transferOwnership(address newOwner) public onlyOwner {
-        require(newOwner != address(0), "Ownable: new owner is the zero address");
-        emit OwnershipTransferred(_owner, newOwner);
-        _owner = newOwner;
+    function transferOwnership(address transferOwner) public onlyOwner {
+        require(transferOwner != newOwner);
+        newOwner = transferOwner;
+    }
+
+    function acceptOwnership() virtual public {
+        require(msg.sender == newOwner);
+        emit OwnershipTransferred(owner, newOwner);
+        owner = newOwner;
+        newOwner = address(0);
     }
 }
 
@@ -147,7 +150,7 @@ contract NimbusReferralProgram is INimbusReferralProgram, Ownable {
         unlocked = 1;
     }
 
-    constructor(address ownerAddress, address migratorAddress, address nbu) Ownable(ownerAddress)  {
+    constructor(address migratorAddress, address nbu)  {
         migrator = migratorAddress;
         levels = [40, 20, 13, 10, 10, 7];
         maxLevel = 6;
@@ -168,7 +171,7 @@ contract NimbusReferralProgram is INimbusReferralProgram, Ownable {
         );
     }
 
-    receive() payable external {
+    receive() payable external { 
         revert();
     }
 
@@ -308,7 +311,13 @@ contract NimbusReferralProgram is INimbusReferralProgram, Ownable {
         return tokenAmount >= swapTokenAmountForFeeDistributionThreshold;
     }
 
-    function claimSpecialReserveFund(address token) external {
+    function claimSpecialReserveFundBatch(address[] memory tokens) external {
+        for (uint i; i < tokens.length; i++) {
+            claimSpecialReserveFund(tokens[i]);
+        }
+    }
+
+    function claimSpecialReserveFund(address token) public {
         uint amount = _undistributedFees[token][0]; 
         require(amount > 0, "Nimbus Referral: No unclaimed funds for selected token");
         TransferHelper.safeTransfer(token, specialReserveFund, amount);
@@ -320,6 +329,7 @@ contract NimbusReferralProgram is INimbusReferralProgram, Ownable {
 
 
     function migrateUsers(uint[] memory ids, uint[] memory sponsorId, address[] memory userAddress, uint[] memory nbuUsdt) external onlyMigrator {
+        require(lastUserId == 0, "Nimbus Referral: Basic migration is finished"); 
         require(ids.length == sponsorId.length, "Nimbus Referral: Different array lengths");     
         for (uint i; i < ids.length; i++) {
             uint id = ids[i];
@@ -416,6 +426,10 @@ contract NimbusReferralProgram is INimbusReferralProgram, Ownable {
         migrator = newMigrator;
     }
 
+    function finishBasicMigration(uint userId) external onlyMigrator {
+        lastUserId = userId;
+    }
+
 
 
 
@@ -438,6 +452,9 @@ contract NimbusReferralProgram is INimbusReferralProgram, Ownable {
     }
 
     function updateStakingPoolAdd(address newStakingPool) external onlyOwner {
+        for (uint i; i < stakingPools.length; i++) {
+            require (address(stakingPools[i]) != newStakingPool, "Pool exists");
+        }
         stakingPools.push(INimbusStakingPool(newStakingPool));
     }
 

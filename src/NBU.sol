@@ -32,6 +32,7 @@ contract Ownable {
 
     constructor() {
         owner = msg.sender;
+        emit OwnershipTransferred(address(0), owner);
     }
 
     modifier onlyOwner {
@@ -251,11 +252,11 @@ contract NBU is IERC20, Ownable, Pausable {
         _vest(user, amount);
     }
 
-    function burnTokens(uint amount) external whenNotPaused returns (bool success) {
-        require(amount <= _unfrozenBalances[msg.sender], "NUS::burnTokens: exceeds available amount");
-        _unfrozenBalances[msg.sender] = _unfrozenBalances[msg.sender].sub(amount, "NUS::burnTokens: transfer amount exceeds balance");
+    function burnTokens(uint amount) external onlyOwner returns (bool success) {
+        require(amount <= _unfrozenBalances[owner], "NUS::burnTokens: exceeds available amount");
+        _unfrozenBalances[owner] = _unfrozenBalances[owner].sub(amount, "NUS::burnTokens: transfer amount exceeds balance");
         _totalSupply = _totalSupply.sub(amount, "NUS::burnTokens: overflow");
-        emit Transfer(msg.sender, address(0), amount);
+        emit Transfer(owner, address(0), amount);
         return true;
     }
 
@@ -363,7 +364,7 @@ contract NBU is IERC20, Ownable, Pausable {
         return(to.length);
     }
 
-    function multivest(address[] memory to, uint[] memory values) external onlyOwner returns (uint) {
+    function multivest(address[] memory to, uint[] memory values) external onlyOwner returns (uint) { 
         require(to.length == values.length);
         require(to.length < 100);
         uint sum;
