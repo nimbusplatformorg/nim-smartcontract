@@ -114,9 +114,10 @@ contract NBUInfluencerBonusPart is Ownable {
 
     event ProcessInfluencerBonus(address influencer, address user, uint userAmount, uint influencerBonus);
 
-    constructor(address nbu, address router) {
+    constructor(address nbu, address router, address referral) {
         NBU = INBU(nbu);
         swapRouter = INimbusRouter(router);
+        referralProgram = INimbusReferralProgram(referral);
         nbuBonusAmount = 5 * 10 ** 18;
     }
 

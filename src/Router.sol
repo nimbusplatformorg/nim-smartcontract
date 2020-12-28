@@ -1,4 +1,4 @@
-pragma solidity =0.6.12;
+pragma solidity =0.7.6;
 
 interface INimbusFactory {
     event PairCreated(address indexed token0, address indexed token1, address pair, uint);
@@ -42,8 +42,8 @@ library TransferHelper {
 }
 
 interface INimbusRouter01 {
-    function factory() external pure returns (address);
-    function NUS_WETH() external pure returns (address);
+    function factory() external view returns (address);
+    function NUS_WETH() external view returns (address);
 
     function addLiquidity(
         address tokenA,
@@ -244,7 +244,7 @@ library NimbusLibrary {
                 hex'ff',
                 factory,
                 keccak256(abi.encodePacked(token0, token1)),
-                hex'40ff34be7b31385b2dfbb9938c7c0e4b41b495de95a200217f0adb84dcee82cf' // init code hash
+                hex'aa9206bd881244f98f68446d39f2567a156f7986d80d99c180207cc3dcb3ef8f' // init code hash
             ))));
     }
 
@@ -357,7 +357,7 @@ contract NimbusRouter is INimbusRouter {
         _;
     }
 
-    constructor(address _factory, address _NUS_WETH, address _lpRewards) public {
+    constructor(address _factory, address _NUS_WETH, address _lpRewards) {
         factory = _factory;
         NUS_WETH = _NUS_WETH;
         lpRewards = ILPRewards(_lpRewards);
@@ -449,6 +449,7 @@ contract NimbusRouter is INimbusRouter {
         address to,
         uint deadline
     ) public virtual override ensure(deadline) returns (uint amountA, uint amountB) {
+        {
         address pair = NimbusLibrary.pairFor(factory, tokenA, tokenB);
         INimbusPair(pair).transferFrom(msg.sender, pair, liquidity); // send liquidity to pair
         (uint amount0, uint amount1) = INimbusPair(pair).burn(to);
@@ -456,6 +457,7 @@ contract NimbusRouter is INimbusRouter {
         (amountA, amountB) = tokenA == token0 ? (amount0, amount1) : (amount1, amount0);
         require(amountA >= amountAMin, 'NimbusRouter: INSUFFICIENT_A_AMOUNT');
         require(amountB >= amountBMin, 'NimbusRouter: INSUFFICIENT_B_AMOUNT');
+        }
         lpRewards.recordRemoveLiquidity(to, tokenA, tokenB, amountA, amountB, liquidity);
     }
     function removeLiquidityETH(
@@ -745,7 +747,7 @@ contract NimbusRouter is INimbusRouter {
         return NimbusLibrary.quote(amountA, reserveA, reserveB);
     }
 
-    function pairFor(address tokenA, address tokenB)) external view returns (address) {
+    function pairFor(address tokenA, address tokenB) external view returns (address) {
         return NimbusLibrary.pairFor(factory, tokenA, tokenB);
     }
 

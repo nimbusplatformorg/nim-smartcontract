@@ -103,8 +103,7 @@ contract LPReward is Ownable {
     event RecordRemoveLiquidityGiveNbu(address recipient, address pair, uint nbu, uint amountA, uint amountB, uint liquidity);
     event ClaimLiquidityNbu(address recipient, uint nbu, uint amountA, uint amountB);
 
-    constructor(address nbu, address factory, address router) {
-        swapRouter = router; 
+    constructor(address nbu, address factory) {
         swapFactory = INimbusFactory(factory);
         NBU = nbu;
         startReward = block.timestamp;
@@ -150,7 +149,7 @@ contract LPReward is Ownable {
         if (previousRatio != 0 && ratio < previousRatio) return;
         uint difference = ratio.sub(previousRatio);
         uint previosAmount = lpTokenAmounts[recipient][pair];
-        weightedRatio[recipient][pair] = (previousRatio.mul(previosAmount.sub(liquidity)) / previosAmount).add(ratio.mul(liquidity) / previosAmount);      
+        weightedRatio[recipient][pair] = (previousRatio.mul(previosAmount.sub(liquidity)) / previosAmount).add(ratio.mul(liquidity) / previosAmount);    
         lpTokenAmounts[recipient][pair] = previosAmount.sub(liquidity);
         amount0 = amountA * difference / 1e18;
         amount1 = amountB * difference / 1e18; 

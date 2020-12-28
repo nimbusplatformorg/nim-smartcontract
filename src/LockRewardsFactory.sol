@@ -1,4 +1,4 @@
-pragma solidity =0.5.16;
+pragma solidity =0.8.0;
 
 interface IERC20 {
 
@@ -18,7 +18,7 @@ contract Ownable {
 
     event OwnershipTransferred(address indexed from, address indexed to);
 
-    constructor() public {
+    constructor() {
         owner = msg.sender;
         emit OwnershipTransferred(address(0), owner);
     }
@@ -98,30 +98,6 @@ library Math {
     }
 }
 
-contract ERC20Detailed is IERC20 {
-    string private _name;
-    string private _symbol;
-    uint8 private _decimals;
-
-    constructor (string memory name, string memory symbol, uint8 decimals) public {
-        _name = name;
-        _symbol = symbol;
-        _decimals = decimals;
-    }
-
-    function name() public view returns (string memory) {
-        return _name;
-    }
-
-    function symbol() public view returns (string memory) {
-        return _symbol;
-    }
-
-    function decimals() public view returns (uint8) {
-        return _decimals;
-    }
-}
-
 library Address {
     function isContract(address account) internal view returns (bool) {
         // This method relies in extcodesize, which returns 0 for contracts in
@@ -180,7 +156,7 @@ contract ReentrancyGuard {
     /// @dev counter to allow mutex lock with only one SSTORE operation
     uint256 private _guardCounter;
 
-    constructor () internal {
+    constructor () {
         // The counter starts at one to prevent changing it from zero to a non-zero
         // value, which is a more expensive operation.
         _guardCounter = 1;
@@ -222,10 +198,10 @@ interface ILockStakingRewards {
     function getReward() external;
 }
 
-contract RewardsDistributionRecipient {
+abstract contract RewardsDistributionRecipient {
     address public rewardsDistribution;
 
-    function notifyRewardAmount(uint256 reward) external;
+    function notifyRewardAmount(uint256 reward) external virtual;
 
     modifier onlyRewardsDistribution() {
         require(msg.sender == rewardsDistribution, "Caller is not RewardsDistribution contract");
@@ -241,7 +217,7 @@ contract LockStakingRewards is ILockStakingRewards, RewardsDistributionRecipient
     IERC20 public stakingToken;
     uint256 public periodFinish = 0;
     uint256 public rewardRate = 0;
-    uint256 public rewardsDuration = 90 days; 
+    uint256 public rewardsDuration = 60 days; 
     uint256 public lockDuration = 60 days; 
     uint256 public lastUpdateTime;
     uint256 public rewardPerTokenStored;
@@ -260,25 +236,25 @@ contract LockStakingRewards is ILockStakingRewards, RewardsDistributionRecipient
         address _rewardsDistribution,
         address _rewardsToken,
         address _stakingToken
-    ) public {
+    ) {
         rewardsToken = IERC20(_rewardsToken);
         stakingToken = IERC20(_stakingToken);
         rewardsDistribution = _rewardsDistribution;
     }
 
-    function totalSupply() external view returns (uint256) {
+    function totalSupply() external view override returns (uint256) {
         return _totalSupply;
     }
 
-    function balanceOf(address account) external view returns (uint256) {
+    function balanceOf(address account) external view override returns (uint256) {
         return _balances[account];
     }
 
-    function lastTimeRewardApplicable() public view returns (uint256) {
+    function lastTimeRewardApplicable() public view override returns (uint256) {
         return Math.min(block.timestamp, periodFinish);
     }
 
-    function rewardPerToken() public view returns (uint256) {
+    function rewardPerToken() public view override returns (uint256) {
         if (_totalSupply == 0) {
             return rewardPerTokenStored;
         }
@@ -288,11 +264,11 @@ contract LockStakingRewards is ILockStakingRewards, RewardsDistributionRecipient
             );
     }
 
-    function earned(address account) public view returns (uint256) {
+    function earned(address account) public view override returns (uint256) {
         return _balances[account].mul(rewardPerToken().sub(userRewardPerTokenPaid[account])).div(1e18).add(rewards[account]);
     }
 
-    function getRewardForDuration() external view returns (uint256) {
+    function getRewardForDuration() external view override returns (uint256) {
         return rewardRate.mul(rewardsDuration);
     }
 
@@ -308,7 +284,7 @@ contract LockStakingRewards is ILockStakingRewards, RewardsDistributionRecipient
         emit Staked(msg.sender, amount);
     }
 
-    function stake(uint256 amount) external nonReentrant updateReward(msg.sender) {
+    function stake(uint256 amount) external override nonReentrant updateReward(msg.sender) {
         require(amount > 0, "Cannot stake 0");
         _totalSupply = _totalSupply.add(amount);
         _balances[msg.sender] = _balances[msg.sender].add(amount);
@@ -319,7 +295,7 @@ contract LockStakingRewards is ILockStakingRewards, RewardsDistributionRecipient
         emit Staked(msg.sender, amount);
     }
 
-    function stakeFor(uint256 amount, address user) external nonReentrant updateReward(user) {
+    function stakeFor(uint256 amount, address user) external override nonReentrant updateReward(user) {
         require(amount > 0, "Cannot stake 0");
         _totalSupply = _totalSupply.add(amount);
         _balances[user] = _balances[user].add(amount);
@@ -330,7 +306,7 @@ contract LockStakingRewards is ILockStakingRewards, RewardsDistributionRecipient
         emit Staked(user, amount);
     }
 
-    function withdraw(uint256 nonce) public nonReentrant updateReward(msg.sender) {
+    function withdraw(uint256 nonce) public override nonReentrant updateReward(msg.sender) {
         uint amount = stakeAmounts[msg.sender][nonce];
         require(stakeAmounts[msg.sender][nonce] > 0, "Cannot withdraw 0");
         require(stakeLocks[msg.sender][nonce] < block.timestamp, "Locked");
@@ -341,7 +317,7 @@ contract LockStakingRewards is ILockStakingRewards, RewardsDistributionRecipient
         emit Withdrawn(msg.sender, amount);
     }
 
-    function getReward() public nonReentrant updateReward(msg.sender) {
+    function getReward() public override nonReentrant updateReward(msg.sender) {
         uint256 reward = rewards[msg.sender];
         if (reward > 0) {
             rewards[msg.sender] = 0;
@@ -350,12 +326,12 @@ contract LockStakingRewards is ILockStakingRewards, RewardsDistributionRecipient
         }
     }
 
-    function withdrawAndGetReward(uint256 nonce) public nonReentrant updateReward(msg.sender) {
+    function withdrawAndGetReward(uint256 nonce) public override nonReentrant updateReward(msg.sender) {
         withdraw(nonce);
         getReward();
     }
 
-    function notifyRewardAmount(uint256 reward) external onlyRewardsDistribution updateReward(address(0)) {
+    function notifyRewardAmount(uint256 reward) external override onlyRewardsDistribution updateReward(address(0)) {
         if (block.timestamp >= periodFinish) {
             rewardRate = reward.div(rewardsDuration);
         } else {
@@ -416,7 +392,7 @@ contract LockStakingRewardsFactory is Ownable {
     constructor(
         address _rewardsToken,
         uint _lockStakingRewardsGenesis
-    ) Ownable() public {
+    ) Ownable() {
         require(_lockStakingRewardsGenesis >= block.timestamp, 'LockStakingRewardsFactory::constructor: genesis too soon');
 
         rewardsToken = _rewardsToken;
