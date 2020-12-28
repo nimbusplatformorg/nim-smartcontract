@@ -94,14 +94,13 @@ contract LPReward is Ownable {
     mapping (address => mapping (address => uint)) public lpTokenAmounts;
     mapping (address => mapping (address => uint)) public weightedRatio;
     mapping (address => mapping (address => uint)) public ratioUpdateLast;
-    mapping (address => mapping (address => mapping (uint => uint[]))) public unclaimedAmounts;
-    mapping (address => mapping (address => uint)) public unclaimedNonces;
+    mapping (address => mapping (address => uint[])) public unclaimedAmounts;
     mapping (address => bool) public allowedPairs;
-    mapping (address => address[]) private _pairTokens;
+    mapping (address => address[]) public pairTokens;
 
     event RecordAddLiquidity(uint ratio, uint weightedRatio, uint oldWeighted, uint liquidity);
-    event recordRemoveLiquidityUnclaimed(address recipient, uint amountA, uint amountB, uint liquidity);
-    event recordRemoveLiquidityGiveNbu(address recipient, uint nbu, uint amountA, uint amountB, uint liquidity);
+    event RecordRemoveLiquidityUnclaimed(address recipient, address pair, uint amountA, uint amountB, uint liquidity);
+    event RecordRemoveLiquidityGiveNbu(address recipient, address pair, uint nbu, uint amountA, uint amountB, uint liquidity);
     event ClaimLiquidityNbu(address recipient, uint nbu, uint amountA, uint amountB);
 
     constructor(address nbu, address factory, address router) {
@@ -133,7 +132,7 @@ contract LPReward is Ownable {
         }
         uint previosAmount = lpTokenAmounts[recipient][pair];
         uint newAmount = previosAmount.add(liquidity);
-        uint weighted =  (previousRatio.mul(previosAmount) / newAmount).add(ratio.mul(liquidity) / newAmount);
+        uint weighted =  (previousRatio.mul(previosAmount) / newAmount).add(ratio.mul(liquidity) / newAmount); 
         weightedRatio[recipient][pair] = weighted;
         lpTokenAmounts[recipient][pair] = newAmount;
         ratioUpdateLast[recipient][pair] = block.timestamp;
@@ -151,33 +150,45 @@ contract LPReward is Ownable {
         if (previousRatio != 0 && ratio < previousRatio) return;
         uint difference = ratio.sub(previousRatio);
         uint previosAmount = lpTokenAmounts[recipient][pair];
-        weightedRatio[recipient][pair] = (previousRatio.mul(previosAmount.sub(liquidity)) / previosAmount).add(ratio.mul(liquidity) / previosAmount);
+        weightedRatio[recipient][pair] = (previousRatio.mul(previosAmount.sub(liquidity)) / previosAmount).add(ratio.mul(liquidity) / previosAmount);      
         lpTokenAmounts[recipient][pair] = previosAmount.sub(liquidity);
         amount0 = amountA * difference / 1e18;
         amount1 = amountB * difference / 1e18; 
         }
 
         uint amountNbu;
-        address tokenToNbuPair = swapFactory.getPair(tokenA, NBU);
-        if (tokenToNbuPair != address(0)) {
-            amountNbu = INimbusRouter(swapRouter).getAmountsOut(amount0, getPathForToken(tokenA))[1];
-        }
-
-        tokenToNbuPair = swapFactory.getPair(tokenB, NBU);
-        if (tokenToNbuPair != address(0)) {
-            if (amountNbu != 0) {
-                amountNbu = amountNbu.add(INimbusRouter(swapRouter).getAmountsOut(amount1, getPathForToken(tokenB))[1]);
-            } else  {
-                amountNbu = INimbusRouter(swapRouter).getAmountsOut(amount1, getPathForToken(tokenB))[1].mul(2);
+        if (tokenA != NBU) {
+            address tokenToNbuPair = swapFactory.getPair(tokenA, NBU);
+            if (tokenToNbuPair != address(0)) {
+                amountNbu = INimbusRouter(swapRouter).getAmountsOut(amount0, getPathForToken(tokenA))[1];
             }
         } else {
-            amountNbu = amountNbu.mul(2);
+            amountNbu = amount0;
+        }
+        
+        if (tokenB != NBU) {
+            address tokenToNbuPair = swapFactory.getPair(tokenB, NBU);
+            if (tokenToNbuPair != address(0)) {
+                if (amountNbu != 0) {
+                    amountNbu = amountNbu.add(INimbusRouter(swapRouter).getAmountsOut(amount1, getPathForToken(tokenB))[1]);
+                } else  {
+                    amountNbu = INimbusRouter(swapRouter).getAmountsOut(amount1, getPathForToken(tokenB))[1].mul(2);
+                }
+            } else {
+                amountNbu = amountNbu.mul(2);
+            }
+        } else {
+            if (amountNbu != 0) { 
+                amountNbu = amountNbu.add(amount1);
+            } else {
+                amountNbu = amount1.mul(2);
+            }
         }
 
         if (amountNbu != 0 && amountNbu >= availableReward()) {
             INBU(NBU).give(recipient, amountNbu);
             lpRewardUsed = lpRewardUsed.add(amountNbu);
-            emit recordRemoveLiquidityGiveNbu(recipient, amountNbu, amountA, amountB, liquidity);            
+            emit RecordRemoveLiquidityGiveNbu(recipient, pair, amountNbu, amountA, amountB, liquidity);            
         } else {
             uint amountS0;
             uint amountS1;
@@ -185,10 +196,15 @@ contract LPReward is Ownable {
             (address token0,) = sortTokens(tokenA, tokenB);
             (amountS0, amountS1) = tokenA == token0 ? (amount0, amount1) : (amount1, amount0);
             }
-            uint nonce = ++unclaimedNonces[recipient][pair]; 
-            unclaimedAmounts[recipient][pair][nonce].push(amountS0);
-            unclaimedAmounts[recipient][pair][nonce].push(amountS1);
-            emit recordRemoveLiquidityUnclaimed(recipient, amount0, amount1, liquidity);
+            if (unclaimedAmounts[recipient][pair].length == 0) { 
+                unclaimedAmounts[recipient][pair].push(amountS0);
+                unclaimedAmounts[recipient][pair].push(amountS1);
+            } else {
+                unclaimedAmounts[recipient][pair][0] = unclaimedAmounts[recipient][pair][0].add(amountS0);
+                unclaimedAmounts[recipient][pair][1] = unclaimedAmounts[recipient][pair][1].add(amountS1);
+            }
+            
+            emit RecordRemoveLiquidityUnclaimed(recipient, pair, amount0, amount1, liquidity);
         }
         ratioUpdateLast[recipient][pair] = block.timestamp;
     }
@@ -201,16 +217,13 @@ contract LPReward is Ownable {
     
     function claimBonus(address pair, address recipient) public lock {
         require (allowedPairs[pair], "LPReward: Not allowed pair");
-        uint nonce = unclaimedNonces[msg.sender][pair];
-        require (nonce > 0, "LPReward: No undistributed fee bonuses");
+        require (unclaimedAmounts[recipient][pair].length > 0 && (unclaimedAmounts[recipient][pair][0] > 0 || unclaimedAmounts[recipient][pair][1] > 0), "LPReward: No undistributed fee bonuses");
         uint amountA;
         uint amountB;
-        for (uint i = 1; i <= nonce; i++) {
-            amountA = amountA.add(unclaimedAmounts[msg.sender][pair][i][0]);
-            amountB = amountA.add(unclaimedAmounts[msg.sender][pair][i][1]);
-            unclaimedAmounts[msg.sender][pair][i].pop();
-            unclaimedAmounts[msg.sender][pair][i].pop();
-        }
+        amountA = unclaimedAmounts[msg.sender][pair][0];
+        amountB = unclaimedAmounts[msg.sender][pair][1];
+        unclaimedAmounts[msg.sender][pair][0] = 0;
+        unclaimedAmounts[msg.sender][pair][1] = 0;
 
         uint amountNbu = nbuAmountForPair(pair, amountA, amountB);
         require (amountNbu > 0, "LPReward: No NBU pairs to token A and token B");
@@ -218,19 +231,15 @@ contract LPReward is Ownable {
         
         INBU(NBU).give(recipient, amountNbu);
         lpRewardUsed = lpRewardUsed.add(amountNbu);
-        unclaimedNonces[msg.sender][pair] = 0;
         emit ClaimLiquidityNbu(recipient, amountNbu, amountA, amountB);            
     }
 
     function unclaimedAmountNbu(address recipient, address pair) external view returns (uint) {
-        uint nonce = unclaimedNonces[recipient][pair];
         uint amountA;
         uint amountB;
-        if (nonce != 0) {
-            for (uint i = 1; i <= nonce; i++) {
-                amountA = amountA.add(unclaimedAmounts[recipient][pair][i][0]);
-                amountB = amountB.add(unclaimedAmounts[recipient][pair][i][1]);
-            }
+        if (unclaimedAmounts[recipient][pair].length != 0) {
+            amountA = unclaimedAmounts[recipient][pair][0];
+            amountB = unclaimedAmounts[recipient][pair][1];
         } else  {
             return 0;
         }
@@ -239,12 +248,9 @@ contract LPReward is Ownable {
     }
 
     function unclaimedAmount(address recipient, address pair) external view returns (uint amountA, uint amountB) {
-        uint nonce = unclaimedNonces[recipient][pair];
-        if (nonce != 0) {
-            for (uint i = 1; i <= nonce; i++) {
-                amountA = amountA.add(unclaimedAmounts[recipient][pair][i][0]);
-                amountB = amountB.add(unclaimedAmounts[recipient][pair][i][1]);
-            }
+        if (unclaimedAmounts[recipient][pair].length != 0) {
+            amountA = unclaimedAmounts[recipient][pair][0];
+            amountB = unclaimedAmounts[recipient][pair][1];
         }
     }
 
@@ -255,22 +261,34 @@ contract LPReward is Ownable {
     }
 
     function nbuAmountForPair(address pair, uint amountA, uint amountB) private view returns (uint amountNbu) {
-        address tokenA = _pairTokens[pair][0];
-        address tokenB = _pairTokens[pair][1];
-        address tokenToNbuPair = swapFactory.getPair(tokenA, NBU);
-        if (tokenToNbuPair != address(0)) {
-            amountNbu = INimbusRouter(swapRouter).getAmountsOut(amountA, getPathForToken(tokenA))[1];
-        }
-
-        tokenToNbuPair = swapFactory.getPair(tokenB, NBU);
-        if (tokenToNbuPair != address(0)) {
-            if (amountNbu != 0) {
-                amountNbu = amountNbu.add(INimbusRouter(swapRouter).getAmountsOut(amountB, getPathForToken(tokenB))[1]);
-            } else  {
-                amountNbu = INimbusRouter(swapRouter).getAmountsOut(amountB, getPathForToken(tokenB))[1].mul(2);
+        address tokenA = pairTokens[pair][0];
+        address tokenB = pairTokens[pair][1];
+        if (tokenA != NBU) {
+            address tokenToNbuPair = swapFactory.getPair(tokenA, NBU);
+            if (tokenToNbuPair != address(0)) {
+                amountNbu = INimbusRouter(swapRouter).getAmountsOut(amountA, getPathForToken(tokenA))[1];
             }
         } else {
-            amountNbu = amountNbu.mul(2);
+            amountNbu = amountA;
+        }
+
+        if (tokenB != NBU) {
+            address tokenToNbuPair = swapFactory.getPair(tokenB, NBU);
+            if (tokenToNbuPair != address(0)) {
+                if (amountNbu != 0) {
+                    amountNbu = amountNbu.add(INimbusRouter(swapRouter).getAmountsOut(amountB, getPathForToken(tokenB))[1]);
+                } else  {
+                    amountNbu = INimbusRouter(swapRouter).getAmountsOut(amountB, getPathForToken(tokenB))[1].mul(2);
+                }
+            } else {
+                amountNbu = amountNbu.mul(2);
+            }
+        } else {
+            if (amountNbu != 0) {
+                amountNbu = amountNbu.add(amountB);
+            } else {
+                amountNbu = amountB.mul(2);
+            }
         }
     }
 
@@ -296,10 +314,11 @@ contract LPReward is Ownable {
     function updateAllowedPair(address tokenA, address tokenB, bool isAllowed) external onlyOwner {
         require (tokenA != address(0) && tokenB != address(0) && tokenA != tokenB, "LPReward: Wrong addresses");
         address pair = swapFactory.getPair(tokenA, tokenB);
+        require (pair != address(0), "LPReward: Pair not exists");
         if (!allowedPairs[pair]) {
             (address token0, address token1) = sortTokens(tokenA, tokenB);
-            _pairTokens[pair].push(token0);
-            _pairTokens[pair].push(token1);
+            pairTokens[pair].push(token0);
+            pairTokens[pair].push(token1);
         }
         allowedPairs[pair] = isAllowed;
     }

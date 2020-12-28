@@ -136,6 +136,7 @@ contract NimbusReferralProgram is INimbusReferralProgram, Ownable {
     uint public swapTokenAmountForFeeDistributionThreshold;
 
     event DistributeFees(address token, uint userId, uint amount);
+    event DistributeFeesForUser(address token, uint recipientId, uint amount);
     event ClaimEarnedFunds(address token, uint userId, uint unclaimedAmount);
     event TransferToNimbusSpecialReserveFund(address token, uint fromUserId, uint undistributedAmount);
     event UpdateLevels(uint[] newLevels);
@@ -171,7 +172,7 @@ contract NimbusReferralProgram is INimbusReferralProgram, Ownable {
         );
     }
 
-    receive() payable external { 
+    receive() payable external {
         revert();
     }
 
@@ -292,6 +293,7 @@ contract NimbusReferralProgram is INimbusReferralProgram, Ownable {
             uint bonusAmount = amount.mul(levels[level]) / 100;
             TransferHelper.safeTransfer(token, sponsorAddress, bonusAmount);
             _recordedBalances[token] = _recordedBalances[token].sub(bonusAmount);
+            emit DistributeFeesForUser(token, sponsorId, bonusAmount);
             return transferToSponsor(token, sponsorId, amount, ++level, ++levelGuard);
         } else {
             return transferToSponsor(token, sponsorId, amount, level, ++levelGuard);
@@ -342,8 +344,8 @@ contract NimbusReferralProgram is INimbusReferralProgram, Ownable {
         }
     } 
 
-    function updateUserLegacyBalances(uint currencyId, uint[] memory ids, uint[] memory nbuUsdt, uint[] memory balances) external onlyMigrator {
-        require(ids.length == nbuUsdt.length, "Nimbus Referral: Different array lengths");     
+    function updateUserLegacyBalances(uint currencyId, uint[] memory ids, uint[] memory balances) external onlyMigrator {
+        require(ids.length == balances.length, "Nimbus Referral: Different array lengths");     
         for (uint i; i < ids.length; i++) {
             _legacyBalances[ids[i]][currencyId] = balances[i];
         }
@@ -356,8 +358,17 @@ contract NimbusReferralProgram is INimbusReferralProgram, Ownable {
         }
     }
 
+    function updateUserAddress(uint id, address userAddress) external onlyMigrator {
+        require(userAddress != address(0), "Nimbus Referral: Address is zero");
+        require(_userSponsor[id] < 1000000001, "Nimbus Referral: No such user");
+        require(userIdByAddress[userAddress] == 0, "Nimbus Referral: Address is already in the system");
+        userIdByAddress[userAddress] = id;
+        userAddressById[id] = userAddress;
+    }
+
     function updateUserAddressBySig(uint id, address userAddress, uint deadline, uint8 v, bytes32 r, bytes32 s) external {
         require(block.timestamp <= deadline, "Nimbus Referral: signature expired");
+        require(userIdByAddress[userAddress] == 0, "Nimbus Referral: Address is already in the system");
         uint nonce = nonces[userAddress]++;
         bytes32 digest = keccak256(
             abi.encodePacked(
@@ -447,7 +458,7 @@ contract NimbusReferralProgram is INimbusReferralProgram, Ownable {
         swapTokenAmountForFeeDistributionThreshold = threshold;
     }
 
-    function updateMaxRewardLevel(uint newMaxLevelDebth) external onlyOwner {
+    function updateMaxLevelDebth(uint newMaxLevelDebth) external onlyOwner {
         maxLevelDebth = newMaxLevelDebth;
     }
 

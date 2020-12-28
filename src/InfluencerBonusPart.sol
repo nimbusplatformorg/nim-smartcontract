@@ -164,6 +164,11 @@ contract NBUInfluencerBonusPart is Ownable {
 
 
 
+    function updateSwapRouter(address newSwapRouter) external onlyOwner {
+        require(newSwapRouter != address(0), "Address is zero");
+        swapRouter = INimbusRouter(newSwapRouter);
+    }
+    
     function updateStakingPoolAdd(address newStakingPool) external onlyOwner {
         for (uint i; i < stakingPools.length; i++) {
             require (address(stakingPools[i]) != newStakingPool, "Pool exists");
