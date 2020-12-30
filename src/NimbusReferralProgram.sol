@@ -237,7 +237,9 @@ contract NimbusReferralProgram is INimbusReferralProgram, Ownable {
     function recordFee(address token, address recipient, uint amount) external lock { 
         uint actualBalance = IERC20(token).balanceOf(address(this));
         require(actualBalance - amount >= _recordedBalances[token], "Nimbus Referral: Balance check failed");
-        _undistributedFees[token][userIdByAddress[recipient]] = _undistributedFees[token][userIdByAddress[recipient]].add(amount);
+        uint uiserId = userIdByAddress[recipient];
+        if (_userSponsor[uiserId] == 0) uiserId = 0;
+        _undistributedFees[token][uiserId] = _undistributedFees[token][uiserId].add(amount);
         _recordedBalances[token] = actualBalance;
     }
 
