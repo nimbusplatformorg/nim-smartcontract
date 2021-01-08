@@ -97,7 +97,8 @@ contract ZZZ is Ownable, Pausable {
     uint96 private vestingFirstPeriod = 60 days;
     uint96 private vestingSecondPeriod = 152 days;
 
-    address public supportUnit;
+    address[] public supportUnits;
+    uint public supportUnitsCnt;
 
     mapping (address => address) public delegates;
     struct Checkpoint {
@@ -117,14 +118,17 @@ contract ZZZ is Ownable, Pausable {
     event Approval(address indexed owner, address indexed spender, uint256 amount);
     event Unvest(address user, uint amount);
 
-    constructor(address support) {
+    constructor() {
         _unfrozenBalances[owner] = uint96(totalSupply);
-        supportUnit = support;
         emit Transfer(address(0), owner, totalSupply);
     }
 
     function freeCirculation() external view returns (uint) {
-        return totalSupply - _unfrozenBalances[owner] - _unfrozenBalances[supportUnit];
+        uint96 systemAmount = _unfrozenBalances[owner];
+        for (uint i; i < supportUnits.length; i++) {
+            systemAmount = add96(systemAmount, _unfrozenBalances[supportUnits[i]], "ZZZ::freeCirculation: adding overflow");
+        }
+        return sub96(totalSupply, systemAmount, "ZZZ::freeCirculation: amount exceed totalSupply");
     }
     
     function allowance(address account, address spender) external view returns (uint) {
@@ -427,11 +431,18 @@ contract ZZZ is Ownable, Pausable {
         newOwner = address(0);
     }
 
-    function updateSupportUnit(address newSupportUnit) external {
-        require(msg.sender == supportUnit, "ZZZ::updateSupportUnit: not allowed");
-        uint96 amount = _unfrozenBalances[supportUnit];
-        _transferTokens(supportUnit, newSupportUnit, amount);
-        supportUnit = newSupportUnit;
+    function updateSupportUnitAdd(address newSupportUnit) external onlyOwner {
+        for (uint i; i < supportUnits.length; i++) {
+            require (supportUnits[i] != newSupportUnit, "ZZZ::updateSupportUnitAdd: support unit exists");
+        }
+        supportUnits.push(newSupportUnit);
+        supportUnitsCnt++;
+    }
+
+    function updateSupportUnitRemove(uint supportUnitIndex) external onlyOwner {
+        supportUnits[supportUnitIndex] = supportUnits[supportUnits.length - 1];
+        supportUnits.pop();
+        supportUnitsCnt--;
     }
     
 
