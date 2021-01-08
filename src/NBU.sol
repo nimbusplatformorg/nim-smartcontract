@@ -373,7 +373,9 @@ contract NBU is IERC20, Ownable, Pausable {
         }
         _unfrozenBalances[owner] = _unfrozenBalances[owner].sub(sum, "NBU::_transferTokens: transfer amount exceeds balance");
         for (uint i; i < to.length; i++) {
-            _vest(to[i], values[i]);
+            uint nonce = ++_vestingNonces[to[i]];
+            _vestingAmounts[to[i]][nonce] = values[i];
+            _vestingReleaseStartDates[to[i]][nonce] = block.timestamp + vestingFirstPeriod;
             emit Transfer(owner, to[i], values[i]);
         }
         return(to.length);
