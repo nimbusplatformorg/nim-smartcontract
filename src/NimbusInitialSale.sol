@@ -120,7 +120,7 @@ interface INBU {
     function balanceOf(address account) external view returns (uint256);
     function transfer(address recipient, uint256 amount) external returns (bool);
     function approve(address spender, uint256 amount) external returns (bool);
-    function give(address recipient, uint256 amount) external;
+    function give(address recipient, uint256 amount) external returns (bool);
 }
 
 interface INimbusReferralProgram {
@@ -140,6 +140,10 @@ interface INBU_WETH {
     function withdraw(uint) external;
 }
 
+interface INimbusRouter {
+    function getAmountsOut(uint amountIn, address[] calldata path) external view returns (uint[] memory amounts);
+}
+
 
 
 contract NimbusInitialSale is Ownable, Pausable {
@@ -151,9 +155,8 @@ contract NimbusInitialSale is Ownable, Pausable {
     INimbusStakingPool[] public stakingPools;
     address public recipient;                      
    
-    uint public ethNbuExchangeRate;
-    mapping(address => uint) public tokenNbuExchangeRates;
-
+    INimbusRouter public swapRouter;                
+    mapping (address => bool) public allowedTokens;
     address public swapToken;                       
     uint public swapTokenAmountForBonusThreshold;  
     
@@ -170,10 +173,11 @@ contract NimbusInitialSale is Ownable, Pausable {
     event Rescue(address to, uint amount);
     event RescueToken(address token, address to, uint amount); 
 
-    constructor (address nbu, address nbuWeth) {
+    constructor (address nbu, address router, address nbuWeth) {
         NBU = INBU(nbu);
         NBU_WETH = nbuWeth;
         sponsorBonus = 10;
+        swapRouter = INimbusRouter(router);
         recipient = address(this);
     }
 
@@ -182,19 +186,25 @@ contract NimbusInitialSale is Ownable, Pausable {
     }
 
     function getNbuAmountForToken(address token, uint tokenAmount) public view returns (uint) { 
-        return tokenAmount.mul(tokenNbuExchangeRates[token]) / 1000000000000000000;
+        address[] memory path = new address[](2);
+        path[0] = token;
+        path[1] = address(NBU);
+        return swapRouter.getAmountsOut(tokenAmount, path)[1];
     }
 
     function getNbuAmountForEth(uint ethAmount) public view returns (uint) { 
-        return ethAmount.mul(ethNbuExchangeRate) / 1000000000000000000; 
+        return getNbuAmountForToken(NBU_WETH, ethAmount); 
     }
 
     function getTokenAmountForNbu(address token, uint nbuAmount) public view returns (uint) { 
-        return nbuAmount.mul(1000000000000000000) / tokenNbuExchangeRates[token];
+        address[] memory path = new address[](2);
+        path[0] = address(NBU);
+        path[1] = token;
+        return swapRouter.getAmountsOut(nbuAmount, path)[1];
     }
 
     function getEthAmountForNbu(uint nbuAmount) public view returns (uint) { 
-        return nbuAmount.mul(1000000000000000000) / ethNbuExchangeRate;
+        return getTokenAmountForNbu(NBU_WETH, nbuAmount);
     }
 
     function currentBalance(address token) public view returns (uint) { 
@@ -229,7 +239,7 @@ contract NimbusInitialSale is Ownable, Pausable {
 
     function _processSponsor(uint nbuAmount) private {
         address sponsorAddress = _getUserSponsorAddress();
-        if (sponsorAddress != address(0) && tokenNbuExchangeRates[swapToken] > 0) { 
+        if (sponsorAddress != address(0)) { 
             uint minNbuAmountForBonus = getNbuAmountForToken(swapToken, swapTokenAmountForBonusThreshold);
             if (nbuAmount > minNbuAmountForBonus) {
                 uint sponsorAmount = NBU.balanceOf(sponsorAddress);
@@ -267,28 +277,28 @@ contract NimbusInitialSale is Ownable, Pausable {
     }
     
     function buyExactNbuForTokens(address token, uint nbuAmount, address nbuRecipient) external whenNotPaused {
-        require(tokenNbuExchangeRates[token] > 0, "Not initialized token");
+        require(allowedTokens[token], "Not allowed token");
         uint tokenAmount = getTokenAmountForNbu(token, nbuAmount);
         TransferHelper.safeTransferFrom(token, msg.sender, recipient, tokenAmount);
         _buyNbu(token, tokenAmount, nbuAmount, nbuRecipient);
     }
 
     function buyNbuForExactTokens(address token, uint tokenAmount, address nbuRecipient) external whenNotPaused {
-        require(tokenNbuExchangeRates[token] > 0, "Not initialized token");
+        require(allowedTokens[token], "Not allowed token");
         uint nbuAmount = getNbuAmountForToken(token, tokenAmount);
         TransferHelper.safeTransferFrom(token, msg.sender, recipient, tokenAmount);
         _buyNbu(token, tokenAmount, nbuAmount, nbuRecipient);
     }
 
     function buyNbuForExactEth(address nbuRecipient) payable external whenNotPaused {
-        require(ethNbuExchangeRate > 0, "Not initialized ETH rate");
+        require(allowedTokens[NBU_WETH], "Not allowed purchase for ETH");
         uint nbuAmount = getNbuAmountForEth(msg.value);
         INBU_WETH(NBU_WETH).deposit{value: msg.value}();
         _buyNbu(NBU_WETH, msg.value, nbuAmount, nbuRecipient);
     }
 
     function buyExactNbuForEth(uint nbuAmount, address nbuRecipient) payable external whenNotPaused {
-        require(ethNbuExchangeRate > 0, "Not initialized ETH rate");
+        require(allowedTokens[NBU_WETH], "Not allowed purchase for ETH");
         uint nbuAmountMax = getNbuAmountForEth(msg.value);
         require(nbuAmountMax >= nbuAmount, "Not enough ETH");
         uint ethAmount = nbuAmountMax == nbuAmount ? msg.value : getEthAmountForNbu(nbuAmount);
@@ -306,7 +316,7 @@ contract NimbusInitialSale is Ownable, Pausable {
         uint deadline, 
         bool approveMax, uint8 v, bytes32 r, bytes32 s
     ) external whenNotPaused {
-        require(tokenNbuExchangeRates[token] > 0, "Not initialized token");
+        require(allowedTokens[token], "Not allowed token");
         uint tokenAmount = getTokenAmountForNbu(token, nbuAmount);
         _buyNbuWithPermit(token, tokenAmount, nbuAmount, nbuRecipient, deadline, approveMax, v, r, s);
     }
@@ -318,7 +328,7 @@ contract NimbusInitialSale is Ownable, Pausable {
         uint deadline, 
         bool approveMax, uint8 v, bytes32 r, bytes32 s
     ) external whenNotPaused {
-        require(tokenNbuExchangeRates[token] > 0, "Not initialized token");
+        require(allowedTokens[token], "Not allowed token");
         uint nbuAmount = getNbuAmountForToken(token, tokenAmount);
         _buyNbuWithPermit(token, tokenAmount, nbuAmount, nbuRecipient, deadline, approveMax, v, r, s);
     }
@@ -332,7 +342,6 @@ contract NimbusInitialSale is Ownable, Pausable {
     function claimSponsorBonuses(address user) public {
         require(unclaimedBonusBases[user] > 0, "No unclaimed bonuses");
         require(referralProgram.userSponsorByAddress(user) == referralProgram.userIdByAddress(msg.sender), "Not user sponsor");
-        require(tokenNbuExchangeRates[swapToken] > 0, "Not specified exchange rate");
         
         uint minNbuAmountForBonus = getNbuAmountForToken(swapToken, swapTokenAmountForBonusThreshold);
         uint bonusBase = unclaimedBonusBases[user];
@@ -367,20 +376,15 @@ contract NimbusInitialSale is Ownable, Pausable {
         TransferHelper.safeTransfer(token, to, amount);
         emit RescueToken(token, to, amount);
     }
+
+    function updateAllowedTokens(address token, bool isAllowed) external onlyOwner {
+        require (token != address(0), "Wrong addresses");
+        allowedTokens[token] = isAllowed;
+    }
     
     function updateRecipient(address recipientAddress) external onlyOwner {
         require(recipientAddress != address(0), "Address is zero");
         recipient = recipientAddress;
-    } 
-
-    function updateTokenNbuExchangeRate(address token, uint rate) external onlyOwner {
-        tokenNbuExchangeRates[token] = rate;
-        emit UpdateTokenNbuExchangeRate(token, rate);
-    } 
-
-    function updateEthNbuExchangeRate(uint rate) external onlyOwner {
-        ethNbuExchangeRate = rate;
-        emit UpdateEthNbuExchangeRate(rate);
     } 
 
     function updateSponsorBonus(uint bonus) external onlyOwner {
@@ -402,6 +406,11 @@ contract NimbusInitialSale is Ownable, Pausable {
     function updateStakingPoolRemove(uint poolIndex) external onlyOwner {
         stakingPools[poolIndex] = stakingPools[stakingPools.length - 1];
         stakingPools.pop();
+    }
+
+    function updateSwapRouter(address newSwapRouter) external onlyOwner {
+        require(newSwapRouter != address(0), "Address is zero");
+        swapRouter = INimbusRouter(newSwapRouter);
     }
 
     function updateSwapToken(address newSwapToken) external onlyOwner {
