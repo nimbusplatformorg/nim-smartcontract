@@ -146,7 +146,7 @@ interface INimbusRouter {
 
 
 
-contract NimbusInitialAcqisition is Ownable, Pausable {
+contract NimbusInitialAcquisition is Ownable, Pausable {
     using SafeMath for uint;
 
     INBU public immutable NBU;
