@@ -31,7 +31,7 @@ contract Ownable {
     }
 
     modifier onlyOwner {
-        require(msg.sender == owner, "LPReward: Caller is not the owner");
+        require(msg.sender == owner, "Ownable: Caller is not the owner");
         _;
     }
 
@@ -213,7 +213,6 @@ contract StakingLPRewardFixedAPY is IStakingRewards, ReentrancyGuard, Ownable {
     address public immutable lPPairTokenA;
     address public immutable lPPairTokenB;
     uint256 public rewardRate; 
-    uint256 public immutable lockDuration; 
     uint256 public constant rewardDuration = 365 days; 
 
     mapping(address => uint256) public weightedStakeDate;
@@ -239,14 +238,12 @@ contract StakingLPRewardFixedAPY is IStakingRewards, ReentrancyGuard, Ownable {
         address _lPPairTokenA,
         address _lPPairTokenB,
         address _swapRouter,
-        uint _rewardRate,
-        uint _lockDuration
+        uint _rewardRate
     ) {
         rewardsToken = IERC20(_rewardsToken);
         stakingLPToken = INimbusPair(_stakingLPToken);
         swapRouter = INimbusRouter(_swapRouter);
         rewardRate = _rewardRate;
-        lockDuration = _lockDuration;
         lPPairTokenA = _lPPairTokenA;
         lPPairTokenB = _lPPairTokenB;
     }
@@ -279,12 +276,12 @@ contract StakingLPRewardFixedAPY is IStakingRewards, ReentrancyGuard, Ownable {
     }
 
     function stake(uint256 amount) external override nonReentrant {
-        require(amount > 0, "LockStakingLPRewardFixedAPY: Cannot stake 0");
+        require(amount > 0, "StakingLPRewardFixedAPY: Cannot stake 0");
         _stake(amount, msg.sender);
     }
 
     function stakeFor(uint256 amount, address user) external override nonReentrant {
-        require(amount > 0, "LockStakingLPRewardFixedAPY: Cannot stake 0");
+        require(amount > 0, "StakingLPRewardFixedAPY: Cannot stake 0");
         _stake(amount, user);
     }
 
@@ -310,7 +307,7 @@ contract StakingLPRewardFixedAPY is IStakingRewards, ReentrancyGuard, Ownable {
 
     //A user can withdraw its staking tokens even if there is no rewards tokens on the contract account
     function withdraw(uint256 nonce) public override nonReentrant {
-        require(stakeAmounts[msg.sender][nonce] > 0, "LockStakingLPRewardFixedAPY: This stake nonce was withdrawn");
+        require(stakeAmounts[msg.sender][nonce] > 0, "StakingLPRewardFixedAPY: This stake nonce was withdrawn");
         uint amount = stakeAmounts[msg.sender][nonce];
         uint amountRewardEquivalent = stakeAmountsRewardEquivalent[msg.sender][nonce];
         _totalSupply = _totalSupply.sub(amount);
@@ -360,7 +357,7 @@ contract StakingLPRewardFixedAPY is IStakingRewards, ReentrancyGuard, Ownable {
         }
 
         uint totalLpSupply = IERC20(stakingLPToken).totalSupply();
-        require(totalLpSupply > 0, "LockStakingLPRewardFixedAPY: No liquidity for pair");
+        require(totalLpSupply > 0, "StakingLPRewardFixedAPY: No liquidity for pair");
         (uint reserveA, uint reaserveB,) = stakingLPToken.getReserves();
         uint price = 
             uint(2).mul(Math.sqrt(reserveA.mul(reaserveB))
@@ -381,9 +378,9 @@ contract StakingLPRewardFixedAPY is IStakingRewards, ReentrancyGuard, Ownable {
     }
 
     function rescue(address to, IERC20 token, uint256 amount) external onlyOwner {
-        require(to != address(0), "LockStakingLPRewardFixedAPY: Cannot rescue to the zero address");
-        require(amount > 0, "LockStakingLPRewardFixedAPY: Cannot rescue 0");
-        require(token != stakingLPToken, "LockStakingLPRewardFixedAPY: Cannot rescue staking token");
+        require(to != address(0), "StakingLPRewardFixedAPY: Cannot rescue to the zero address");
+        require(amount > 0, "StakingLPRewardFixedAPY: Cannot rescue 0");
+        require(token != stakingLPToken, "StakingLPRewardFixedAPY: Cannot rescue staking token");
         //owner can rescue rewardsToken if there is spare unused tokens on staking contract balance
 
         token.safeTransfer(to, amount);
@@ -391,8 +388,8 @@ contract StakingLPRewardFixedAPY is IStakingRewards, ReentrancyGuard, Ownable {
     }
 
     function rescue(address payable to, uint256 amount) external onlyOwner {
-        require(to != address(0), "LockStakingLPRewardFixedAPY: Cannot rescue to the zero address");
-        require(amount > 0, "LockStakingLPRewardFixedAPY: Cannot rescue 0");
+        require(to != address(0), "StakingLPRewardFixedAPY: Cannot rescue to the zero address");
+        require(amount > 0, "StakingLPRewardFixedAPY: Cannot rescue 0");
 
         to.transfer(amount);
         emit Rescue(to, amount);
