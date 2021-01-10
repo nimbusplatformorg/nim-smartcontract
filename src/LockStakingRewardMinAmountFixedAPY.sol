@@ -11,6 +11,10 @@ interface IERC20 {
     event Approval(address indexed owner, address indexed spender, uint256 value);
 }
 
+interface INimbusRouter {
+    function getAmountsOut(uint amountIn, address[] calldata path) external view returns (uint[] memory amounts);
+}
+
 contract Ownable {
     address public owner;
     address public newOwner;
@@ -41,7 +45,6 @@ contract Ownable {
 }
 
 library SafeMath {
-
     function add(uint256 a, uint256 b) internal pure returns (uint256) {
         uint256 c = a + b;
         require(c >= a, "SafeMath: addition overflow");
@@ -79,21 +82,6 @@ library SafeMath {
     function mod(uint256 a, uint256 b) internal pure returns (uint256) {
         require(b != 0, "SafeMath: modulo by zero");
         return a % b;
-    }
-}
-
-library Math {
-
-    function max(uint256 a, uint256 b) internal pure returns (uint256) {
-        return a >= b ? a : b;
-    }
-
-    function min(uint256 a, uint256 b) internal pure returns (uint256) {
-        return a < b ? a : b;
-    }
-
-    function average(uint256 a, uint256 b) internal pure returns (uint256) {
-        return (a / 2) + (b / 2) + ((a % 2 + b % 2) / 2);
     }
 }
 
@@ -183,31 +171,30 @@ interface IERC20Permit {
     function permit(address owner, address spender, uint value, uint deadline, uint8 v, bytes32 r, bytes32 s) external;
 }
 
-interface INimbusRouter {
-    function getAmountsOut(uint amountIn, address[] calldata path) external  view returns (uint[] memory amounts);
-}
-
 contract LockStakingRewardMinAmountFixedAPY is ILockStakingRewards, ReentrancyGuard, Ownable {
     using SafeMath for uint256;
     using SafeERC20 for IERC20;
 
-    IERC20 public rewardsToken;
-    IERC20 public stakingToken;
+    IERC20 public immutable rewardsToken;
+    IERC20 public immutable stakingToken;
     uint256 public rewardRate; 
     uint256 public immutable lockDuration; 
     uint256 public constant rewardDuration = 365 days; 
+    
+    INimbusRouter public swapRouter;
+    address public swapToken;                       
+    uint public swapTokenAmountThresholdForStaking;
 
     mapping(address => uint256) public weightedStakeDate;
     mapping(address => mapping(uint256 => uint256)) public stakeLocks;
     mapping(address => mapping(uint256 => uint256)) public stakeAmounts;
+    mapping(address => mapping(uint256 => uint256)) public stakeAmountsRewardEquivalent;
     mapping(address => uint256) public stakeNonces;
 
     uint256 private _totalSupply;
+    uint256 private _totalSupplyRewardEquivalent;
     mapping(address => uint256) private _balances;
-
-    INimbusRouter public swapRouter;                
-    address public swapToken;                       
-    uint public swapTokenAmountThresholdForStaking;
+    mapping(address => uint256) private _balancesRewardEquivalent;
 
     event RewardUpdated(uint256 reward);
     event Staked(address indexed user, uint256 amount);
@@ -238,16 +225,20 @@ contract LockStakingRewardMinAmountFixedAPY is ILockStakingRewards, ReentrancyGu
         return _totalSupply;
     }
 
+    function totalSupplyRewardEquivalent() external view returns (uint256) {
+        return _totalSupplyRewardEquivalent;
+    }
+
     function balanceOf(address account) external view override returns (uint256) {
         return _balances[account];
     }
+    
+    function balanceOfRewardEquivalent(address account) external view returns (uint256) {
+        return _balancesRewardEquivalent[account];
+    }
 
     function earned(address account) public view override returns (uint256) {
-        uint stakingReward = (_balances[account].mul(block.timestamp.sub(weightedStakeDate[account])).mul(rewardRate)) / (100 * rewardDuration);
-        address[] memory path = new address[](2);
-        path[0] = address(stakingToken);
-        path[1] = address(rewardsToken);
-        return swapRouter.getAmountsOut(stakingReward, path)[1];
+        return (_balancesRewardEquivalent[account].mul(block.timestamp.sub(weightedStakeDate[account])).mul(rewardRate)) / (100 * rewardDuration);
     }
 
     function isAmountMeetsMinThreshold(uint amount) public view returns (bool) {
@@ -259,63 +250,57 @@ contract LockStakingRewardMinAmountFixedAPY is ILockStakingRewards, ReentrancyGu
     }
 
     function stakeWithPermit(uint256 amount, uint deadline, uint8 v, bytes32 r, bytes32 s) external nonReentrant {
-        require(amount > 0, "Cannot stake 0");
-        require(isAmountMeetsMinThreshold(amount), "LockStakingRewardFixedAPY: Amount is less than min stake");
-        _totalSupply = _totalSupply.add(amount);
-        uint previosAmount = _balances[msg.sender];
-        uint newAmount = previosAmount.add(amount);
-        weightedStakeDate[msg.sender] = (weightedStakeDate[msg.sender].mul(previosAmount) / newAmount).add(block.timestamp.mul(amount) / newAmount);
-        _balances[msg.sender] = newAmount;
-
+        require(amount > 0, "LockStakingRewardMinAmountFixedAPY: Cannot stake 0");
         // permit
         IERC20Permit(address(stakingToken)).permit(msg.sender, address(this), amount, deadline, v, r, s);
-        
-        stakingToken.safeTransferFrom(msg.sender, address(this), amount);
-        uint stakeNonce = stakeNonces[msg.sender]++;
-        stakeLocks[msg.sender][stakeNonce] = block.timestamp + lockDuration;
-        stakeAmounts[msg.sender][stakeNonce] = amount;
-        emit Staked(msg.sender, amount);
+        _stake(amount, msg.sender);
     }
 
     function stake(uint256 amount) external override nonReentrant {
-        require(amount > 0, "LockStakingRewardFixedAPY: Cannot stake 0");
-        require(isAmountMeetsMinThreshold(amount), "LockStakingRewardFixedAPY: Amount is less than min stake");
-        _totalSupply = _totalSupply.add(amount);
-        uint previosAmount = _balances[msg.sender];
-        uint newAmount = previosAmount.add(amount);
-        weightedStakeDate[msg.sender] = (weightedStakeDate[msg.sender].mul(previosAmount) / newAmount).add(block.timestamp.mul(amount) / newAmount);
-        _balances[msg.sender] = newAmount;
-        stakingToken.safeTransferFrom(msg.sender, address(this), amount);
-        uint stakeNonce = stakeNonces[msg.sender]++;
-        stakeLocks[msg.sender][stakeNonce] = block.timestamp + lockDuration;
-        stakeAmounts[msg.sender][stakeNonce] = amount;
-        emit Staked(msg.sender, amount);
+        require(amount > 0, "LockStakingRewardMinAmountFixedAPY: Cannot stake 0");
+        _stake(amount, msg.sender);
     }
 
     function stakeFor(uint256 amount, address user) external override nonReentrant {
-        require(amount > 0, "LockStakingRewardFixedAPY: Cannot stake 0");
-        require(isAmountMeetsMinThreshold(amount), "LockStakingRewardFixedAPY: Amount is less than min stake");
+        require(amount > 0, "LockStakingRewardMinAmountFixedAPY: Cannot stake 0");
+        _stake(amount, user);
+    }
+
+    function _stake(uint256 amount, address user) private {
+        require(isAmountMeetsMinThreshold(amount), "LockStakingRewardMinAmountFixedAPY: Amount is less than min stake");
+        stakingToken.safeTransferFrom(msg.sender, address(this), amount);
+        uint amountRewardEquivalent = getEquivalentAmount(amount);
+
         _totalSupply = _totalSupply.add(amount);
+        _totalSupplyRewardEquivalent = _totalSupply.add(amountRewardEquivalent);
         uint previosAmount = _balances[user];
         uint newAmount = previosAmount.add(amount);
         weightedStakeDate[user] = (weightedStakeDate[user].mul(previosAmount) / newAmount).add(block.timestamp.mul(amount) / newAmount);
         _balances[user] = newAmount;
-        stakingToken.safeTransferFrom(msg.sender, address(this), amount);
+
         uint stakeNonce = stakeNonces[user]++;
-        stakeLocks[user][stakeNonce] = block.timestamp + lockDuration;
         stakeAmounts[user][stakeNonce] = amount;
+        stakeLocks[user][stakeNonce] = block.timestamp + lockDuration;
+        
+        stakeAmountsRewardEquivalent[user][stakeNonce] = amountRewardEquivalent;
+        _balancesRewardEquivalent[user] = _balancesRewardEquivalent[user].add(amountRewardEquivalent);
         emit Staked(user, amount);
     }
 
+
     //A user can withdraw its staking tokens even if there is no rewards tokens on the contract account
     function withdraw(uint256 nonce) public override nonReentrant {
+        require(stakeAmounts[msg.sender][nonce] > 0, "LockStakingRewardMinAmountFixedAPY: This stake nonce was withdrawn");
+        require(stakeLocks[msg.sender][nonce] < block.timestamp, "LockStakingRewardMinAmountFixedAPY: Locked");
         uint amount = stakeAmounts[msg.sender][nonce];
-        require(stakeAmounts[msg.sender][nonce] > 0, "LockStakingRewardFixedAPY: This stake nonce was withdrawn");
-        require(stakeLocks[msg.sender][nonce] < block.timestamp, "LockStakingRewardFixedAPY: Locked");
+        uint amountRewardEquivalent = stakeAmountsRewardEquivalent[msg.sender][nonce];
         _totalSupply = _totalSupply.sub(amount);
+        _totalSupplyRewardEquivalent = _totalSupplyRewardEquivalent.sub(amountRewardEquivalent);
         _balances[msg.sender] = _balances[msg.sender].sub(amount);
+        _balancesRewardEquivalent[msg.sender] = _balancesRewardEquivalent[msg.sender].sub(amountRewardEquivalent);
         stakingToken.safeTransfer(msg.sender, amount);
         stakeAmounts[msg.sender][nonce] = 0;
+        stakeAmountsRewardEquivalent[msg.sender][nonce] = 0;
         emit Withdrawn(msg.sender, amount);
     }
 
@@ -333,16 +318,34 @@ contract LockStakingRewardMinAmountFixedAPY is ILockStakingRewards, ReentrancyGu
         withdraw(nonce);
     }
 
+    function getEquivalentAmount(uint amount) public view returns (uint) {
+        address[] memory path = new address[](2);
+
+        uint equivalent;
+        if (stakingToken != rewardsToken) {
+            path[0] = address(stakingToken);            
+            path[1] = address(rewardsToken);
+            equivalent = swapRouter.getAmountsOut(amount, path)[1];
+        } else {
+            equivalent = amount * 10 ** 18;   
+        }
+        
+        return equivalent;
+    }
 
 
+    function updateRewardAmount(uint256 reward) external onlyOwner {
+        rewardRate = reward;
+        emit RewardUpdated(reward);
+    }
 
     function updateSwapRouter(address newSwapRouter) external onlyOwner {
-        require(newSwapRouter != address(0), "Address is zero");
+        require(newSwapRouter != address(0), "LockStakingRewardMinAmountFixedAPY: Address is zero");
         swapRouter = INimbusRouter(newSwapRouter);
     }
 
     function updateSwapToken(address newSwapToken) external onlyOwner {
-        require(newSwapToken != address(0), "Address is zero");
+        require(newSwapToken != address(0), "LockStakingRewardMinAmountFixedAPY: Address is zero");
         swapToken = newSwapToken;
     }
 
@@ -350,24 +353,19 @@ contract LockStakingRewardMinAmountFixedAPY is ILockStakingRewards, ReentrancyGu
         swapTokenAmountThresholdForStaking = threshold;
     }
 
-    function updateRewardAmount(uint256 reward) external onlyOwner {
-        rewardRate = reward;
-        emit RewardUpdated(reward);
-    }
-
-    function rescue(address to, IERC20 token, uint256 amount) external onlyOwner {
-        require(to != address(0), "LockStakingRewardFixedAPY: Cannot rescue to the zero address");
-        require(amount > 0, "LockStakingRewardFixedAPY: Cannot rescue 0");
-        require(token != stakingToken, "LockStakingRewardFixedAPY: Cannot rescue staking token");
+    function rescue(address to, address token, uint256 amount) external onlyOwner {
+        require(to != address(0), "LockStakingRewardMinAmountFixedAPY: Cannot rescue to the zero address");
+        require(amount > 0, "LockStakingRewardMinAmountFixedAPY: Cannot rescue 0");
+        require(token != address(stakingToken), "LockStakingRewardMinAmountFixedAPY: Cannot rescue staking token");
         //owner can rescue rewardsToken if there is spare unused tokens on staking contract balance
 
-        token.safeTransfer(to, amount);
+        IERC20(token).safeTransfer(to, amount);
         emit RescueToken(to, address(token), amount);
     }
 
     function rescue(address payable to, uint256 amount) external onlyOwner {
-        require(to != address(0), "LockStakingRewardFixedAPY: Cannot rescue to the zero address");
-        require(amount > 0, "LockStakingRewardFixedAPY: Cannot rescue 0");
+        require(to != address(0), "LockStakingRewardMinAmountFixedAPY: Cannot rescue to the zero address");
+        require(amount > 0, "LockStakingRewardMinAmountFixedAPY: Cannot rescue 0");
 
         to.transfer(amount);
         emit Rescue(to, amount);

@@ -11,8 +11,36 @@ interface IERC20 {
     event Approval(address indexed owner, address indexed spender, uint256 value);
 }
 
-library SafeMath {
+contract Ownable {
+    address public owner;
+    address public newOwner;
 
+    event OwnershipTransferred(address indexed from, address indexed to);
+
+    constructor() {
+        owner = msg.sender;
+        emit OwnershipTransferred(address(0), owner);
+    }
+
+    modifier onlyOwner {
+        require(msg.sender == owner, "Ownable: Caller is not the owner");
+        _;
+    }
+
+    function transferOwnership(address transferOwner) public onlyOwner {
+        require(transferOwner != newOwner);
+        newOwner = transferOwner;
+    }
+
+    function acceptOwnership() virtual public {
+        require(msg.sender == newOwner);
+        emit OwnershipTransferred(owner, newOwner);
+        owner = newOwner;
+        newOwner = address(0);
+    }
+}
+
+library SafeMath {
     function add(uint256 a, uint256 b) internal pure returns (uint256) {
         uint256 c = a + b;
         require(c >= a, "SafeMath: addition overflow");
@@ -50,21 +78,6 @@ library SafeMath {
     function mod(uint256 a, uint256 b) internal pure returns (uint256) {
         require(b != 0, "SafeMath: modulo by zero");
         return a % b;
-    }
-}
-
-library Math {
-
-    function max(uint256 a, uint256 b) internal pure returns (uint256) {
-        return a >= b ? a : b;
-    }
-
-    function min(uint256 a, uint256 b) internal pure returns (uint256) {
-        return a < b ? a : b;
-    }
-
-    function average(uint256 a, uint256 b) internal pure returns (uint256) {
-        return (a / 2) + (b / 2) + ((a % 2 + b % 2) / 2);
     }
 }
 
@@ -139,60 +152,34 @@ contract ReentrancyGuard {
     }
 }
 
-interface IStakingRewards {
+interface ILockStakingRewards {
     function earned(address account) external view returns (uint256);
     function totalSupply() external view returns (uint256);
     function balanceOf(address account) external view returns (uint256);
     function stake(uint256 amount) external;
     function stakeFor(uint256 amount, address user) external;
     function getReward() external;
-    function withdraw(uint256 amount) external;
-    function withdrawAndGetReward(uint256 amount) external;
-    function exit() external;
-}
-
-contract Ownable {
-    address public owner;
-    address public newOwner;
-
-    event OwnershipTransferred(address indexed from, address indexed to);
-
-    constructor() {
-        owner = msg.sender;
-        emit OwnershipTransferred(address(0), owner);
-    }
-
-    modifier onlyOwner {
-        require(msg.sender == owner, "Ownable: Caller is not the owner");
-        _;
-    }
-
-    function transferOwnership(address transferOwner) public onlyOwner {
-        require(transferOwner != newOwner);
-        newOwner = transferOwner;
-    }
-
-    function acceptOwnership() virtual public {
-        require(msg.sender == newOwner);
-        emit OwnershipTransferred(owner, newOwner);
-        owner = newOwner;
-        newOwner = address(0);
-    }
+    function withdraw(uint256 nonce) external;
+    function withdrawAndGetReward(uint256 nonce) external;
 }
 
 interface IERC20Permit {
     function permit(address owner, address spender, uint value, uint deadline, uint8 v, bytes32 r, bytes32 s) external;
 }
 
-contract StakingRewardFixedAPY is IStakingRewards, ReentrancyGuard, Ownable {
+contract LockStakingRewardSameTokenFixedAPY is ILockStakingRewards, ReentrancyGuard, Ownable {
     using SafeMath for uint256;
     using SafeERC20 for IERC20;
 
     IERC20 public token;
     uint256 public rewardRate; 
+    uint256 public immutable lockDuration; 
     uint256 public constant rewardDuration = 365 days; 
 
     mapping(address => uint256) public weightedStakeDate;
+    mapping(address => mapping(uint256 => uint256)) public stakeLocks;
+    mapping(address => mapping(uint256 => uint256)) public stakeAmounts;
+    mapping(address => uint256) public stakeNonces;
 
     uint256 private _totalSupply;
     mapping(address => uint256) private _balances;
@@ -206,10 +193,12 @@ contract StakingRewardFixedAPY is IStakingRewards, ReentrancyGuard, Ownable {
 
     constructor(
         address _token,
-        uint _rewardRate
+        uint _rewardRate,
+        uint _lockDuration
     ) {
         token = IERC20(_token);
         rewardRate = _rewardRate;
+        lockDuration = _lockDuration;
     }
 
     function totalSupply() external view override returns (uint256) {
@@ -225,7 +214,7 @@ contract StakingRewardFixedAPY is IStakingRewards, ReentrancyGuard, Ownable {
     }
 
     function stakeWithPermit(uint256 amount, uint deadline, uint8 v, bytes32 r, bytes32 s) external nonReentrant {
-        require(amount > 0, "Cannot stake 0");
+        require(amount > 0, "LockStakingRewardSameTokenFixedAPY: Cannot stake 0");
         _totalSupply = _totalSupply.add(amount);
         uint previosAmount = _balances[msg.sender];
         uint newAmount = previosAmount.add(amount);
@@ -236,37 +225,49 @@ contract StakingRewardFixedAPY is IStakingRewards, ReentrancyGuard, Ownable {
         IERC20Permit(address(token)).permit(msg.sender, address(this), amount, deadline, v, r, s);
         
         token.safeTransferFrom(msg.sender, address(this), amount);
+        uint stakeNonce = stakeNonces[msg.sender]++;
+        stakeLocks[msg.sender][stakeNonce] = block.timestamp + lockDuration;
+        stakeAmounts[msg.sender][stakeNonce] = amount;
         emit Staked(msg.sender, amount);
     }
 
     function stake(uint256 amount) external override nonReentrant {
-        require(amount > 0, "StakingRewardFixedAPY: Cannot stake 0");
+        require(amount > 0, "LockStakingRewardSameTokenFixedAPY: Cannot stake 0");
         _totalSupply = _totalSupply.add(amount);
         uint previosAmount = _balances[msg.sender];
         uint newAmount = previosAmount.add(amount);
         weightedStakeDate[msg.sender] = (weightedStakeDate[msg.sender].mul(previosAmount) / newAmount).add(block.timestamp.mul(amount) / newAmount);
         _balances[msg.sender] = newAmount;
         token.safeTransferFrom(msg.sender, address(this), amount);
+        uint stakeNonce = stakeNonces[msg.sender]++;
+        stakeLocks[msg.sender][stakeNonce] = block.timestamp + lockDuration;
+        stakeAmounts[msg.sender][stakeNonce] = amount;
         emit Staked(msg.sender, amount);
     }
 
     function stakeFor(uint256 amount, address user) external override nonReentrant {
-        require(amount > 0, "StakingRewardFixedAPY: Cannot stake 0");
+        require(amount > 0, "LockStakingRewardSameTokenFixedAPY: Cannot stake 0");
         _totalSupply = _totalSupply.add(amount);
         uint previosAmount = _balances[user];
         uint newAmount = previosAmount.add(amount);
         weightedStakeDate[user] = (weightedStakeDate[user].mul(previosAmount) / newAmount).add(block.timestamp.mul(amount) / newAmount);
         _balances[user] = newAmount;
         token.safeTransferFrom(msg.sender, address(this), amount);
+        uint stakeNonce = stakeNonces[user]++;
+        stakeLocks[user][stakeNonce] = block.timestamp + lockDuration;
+        stakeAmounts[user][stakeNonce] = amount;
         emit Staked(user, amount);
     }
 
     //A user can withdraw its staking tokens even if there is no rewards tokens on the contract account
-    function withdraw(uint256 amount) public override nonReentrant {
-        require(amount > 0, "Cannot withdraw 0");
+    function withdraw(uint256 nonce) public override nonReentrant {
+        uint amount = stakeAmounts[msg.sender][nonce];
+        require(stakeAmounts[msg.sender][nonce] > 0, "LockStakingRewardSameTokenFixedAPY: This stake nonce was withdrawn");
+        require(stakeLocks[msg.sender][nonce] < block.timestamp, "LockStakingRewardSameTokenFixedAPY: Locked");
         _totalSupply = _totalSupply.sub(amount);
         _balances[msg.sender] = _balances[msg.sender].sub(amount);
         token.safeTransfer(msg.sender, amount);
+        stakeAmounts[msg.sender][nonce] = 0;
         emit Withdrawn(msg.sender, amount);
     }
 
@@ -279,14 +280,9 @@ contract StakingRewardFixedAPY is IStakingRewards, ReentrancyGuard, Ownable {
         }
     }
 
-    function withdrawAndGetReward(uint256 amount) external override {
+    function withdrawAndGetReward(uint256 nonce) external override {
         getReward();
-        withdraw(amount);
-    }
-
-    function exit() external override {
-        getReward();
-        withdraw(_balances[msg.sender]);
+        withdraw(nonce);
     }
 
     function updateRewardAmount(uint256 reward) external onlyOwner {
@@ -294,18 +290,18 @@ contract StakingRewardFixedAPY is IStakingRewards, ReentrancyGuard, Ownable {
         emit RewardUpdated(reward);
     }
 
-    function rescue(address to, IERC20 tokenAddress, uint256 amount) external onlyOwner {
-        require(to != address(0), "StakingRewardFixedAPY: Cannot rescue to the zero address");
-        require(amount > 0, "StakingRewardFixedAPY: Cannot rescue 0");
-        require(tokenAddress != token, "StakingRewardFixedAPY: Cannot rescue staking/reward token");
+    function rescue(address to, address tokenAddress, uint256 amount) external onlyOwner {
+        require(to != address(0), "LockStakingRewardSameTokenFixedAPY: Cannot rescue to the zero address");
+        require(amount > 0, "LockStakingRewardSameTokenFixedAPY: Cannot rescue 0");
+        require(tokenAddress != address(token), "LockStakingRewardSameTokenFixedAPY: Cannot rescue staking/reward token");
 
-        tokenAddress.safeTransfer(to, amount);
+        IERC20(tokenAddress).safeTransfer(to, amount);
         emit RescueToken(to, address(tokenAddress), amount);
     }
 
     function rescue(address payable to, uint256 amount) external onlyOwner {
-        require(to != address(0), "StakingRewardFixedAPY: Cannot rescue to the zero address");
-        require(amount > 0, "StakingRewardFixedAPY: Cannot rescue 0");
+        require(to != address(0), "LockStakingRewardSameTokenFixedAPY: Cannot rescue to the zero address");
+        require(amount > 0, "LockStakingRewardSameTokenFixedAPY: Cannot rescue 0");
 
         to.transfer(amount);
         emit Rescue(to, amount);

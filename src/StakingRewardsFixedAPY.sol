@@ -346,7 +346,7 @@ contract StakingRewardFixedAPY is IStakingRewards, ReentrancyGuard, Ownable {
     }
 
     function updateSwapRouter(address newSwapRouter) external onlyOwner {
-        require(newSwapRouter != address(0), "Address is zero");
+        require(newSwapRouter != address(0), "StakingRewardFixedAPY: Address is zero");
         swapRouter = INimbusRouter(newSwapRouter);
     }
 
