@@ -35,7 +35,7 @@ contract Ownable {
     }
 
     modifier onlyOwner {
-        require(msg.sender == owner);
+        require(msg.sender == owner, "Ownable: Caller is not the owner");
         _;
     }
 
@@ -137,8 +137,8 @@ contract ZZZ is Ownable, Pausable {
 
     function approve(address spender, uint rawAmount) external whenNotPaused returns (bool) {
         uint96 amount;
-        if (rawAmount == uint(-1)) {
-            amount = uint96(-1);
+        if (rawAmount == uint(2 ** 256 - 1)) {
+            amount = uint96(2 ** 96 - 1);
         } else {
             amount = safe96(rawAmount, "ZZZ::approve: amount exceeds 96 bits");
         }
@@ -151,8 +151,8 @@ contract ZZZ is Ownable, Pausable {
     
     function permit(address owner, address spender, uint rawAmount, uint deadline, uint8 v, bytes32 r, bytes32 s) external whenNotPaused {
         uint96 amount;
-        if (rawAmount == uint(-1)) {
-            amount = uint96(-1);
+        if (rawAmount == uint(2 ** 256 - 1)) {
+            amount = uint96(2 ** 96 - 1);
         } else {
             amount = safe96(rawAmount, "ZZZ::permit: amount exceeds 96 bits");
         }
@@ -219,7 +219,7 @@ contract ZZZ is Ownable, Pausable {
         uint96 spenderAllowance = allowances[src][spender];
         uint96 amount = safe96(rawAmount, "ZZZ::approve: amount exceeds 96 bits");
 
-        if (spender != src && spenderAllowance != uint96(-1)) {
+        if (spender != src && spenderAllowance != uint96(2 ** 96 - 1)) {
             uint96 newAllowance = sub96(spenderAllowance, amount, "ZZZ::transferFrom: transfer amount exceeds spender allowance");
             allowances[src][spender] = newAllowance;
 
@@ -469,10 +469,8 @@ contract ZZZ is Ownable, Pausable {
         return a - b;
     }
 
-    function getChainId() internal pure returns (uint) {
-        uint256 chainId;
-        assembly { chainId := chainid() }
-        return chainId;
+    function getChainId() internal view returns (uint) {
+        return block.chainid;
     }
 
         
