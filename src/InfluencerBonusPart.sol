@@ -1,5 +1,17 @@
 pragma solidity =0.8.0;
 
+interface IERC20 {
+    function totalSupply() external view returns (uint256);
+    function balanceOf(address account) external view returns (uint256);
+    function transfer(address recipient, uint256 amount) external returns (bool);
+    function allowance(address owner, address spender) external view returns (uint256);
+    function approve(address spender, uint256 amount) external returns (bool);
+    function transferFrom(address sender, address recipient, uint256 amount) external returns (bool);
+
+    event Transfer(address indexed from, address indexed to, uint256 value);
+    event Approval(address indexed owner, address indexed spender, uint256 value);
+}
+
 contract Ownable {
     address public owner;
     address public newOwner;
@@ -76,13 +88,6 @@ library SafeMath {
     }
 }
 
-interface INBU {
-    function balanceOf(address account) external view returns (uint256);
-    function transfer(address recipient, uint256 amount) external returns (bool);
-    function approve(address spender, uint256 amount) external returns (bool);
-    function give(address recipient, uint256 amount) external;
-}
-
 interface INimbusStakingPool {
     function balanceOf(address account) external view returns (uint256);
 }
@@ -99,7 +104,7 @@ interface INimbusRouter {
 contract NBUInfluencerBonusPart is Ownable {
     using SafeMath for uint;
     
-    INBU public NBU;
+    IERC20 public NBU;
     
     uint public nbuBonusAmount;
     INimbusReferralProgram public referralProgram;
@@ -113,9 +118,11 @@ contract NBUInfluencerBonusPart is Ownable {
     mapping (address => mapping (address => bool)) public processedUsers;
 
     event ProcessInfluencerBonus(address influencer, address user, uint userAmount, uint influencerBonus);
+    event Rescue(address to, uint amount);
+    event RescueToken(address token, address to, uint amount); 
 
     constructor(address nbu, address router, address referral) {
-        NBU = INBU(nbu);
+        NBU = IERC20(nbu);
         swapRouter = INimbusRouter(router);
         referralProgram = INimbusReferralProgram(referral);
         nbuBonusAmount = 5 * 10 ** 18;
@@ -128,9 +135,9 @@ contract NBUInfluencerBonusPart is Ownable {
     }
 
     function claimBonus(address user) public {
-        require(influencers[msg.sender], "Not influencer");
-        require(!processedUsers[msg.sender][user], "Bonus for user already received");
-        require(referralProgram.userSponsorByAddress(user) == referralProgram.userIdByAddress(msg.sender), "Not user sponsor");
+        require(influencers[msg.sender], "NBUInfluencerBonusPart: Not influencer");
+        require(!processedUsers[msg.sender][user], "NBUInfluencerBonusPart: Bonus for user already received");
+        require(referralProgram.userSponsorByAddress(user) == referralProgram.userIdByAddress(msg.sender), "NBUInfluencerBonusPart: Not user sponsor");
         uint amount;
         for (uint i; i < stakingPools.length; i++) {
             amount = amount.add(stakingPools[i].balanceOf(user));
@@ -140,8 +147,8 @@ contract NBUInfluencerBonusPart is Ownable {
         path[0] = swapToken;
         path[1] = address(NBU);
         uint minNbuAmountForBonus = swapRouter.getAmountsOut(swapTokenAmountForBonusThreshold, path)[1];
-        require (amount >= minNbuAmountForBonus, "Bonus threshold not met");
-        NBU.give(msg.sender, nbuBonusAmount);
+        require (amount >= minNbuAmountForBonus, "NBUInfluencerBonusPart: Bonus threshold not met");
+        NBU.transfer(msg.sender, nbuBonusAmount);
         processedUsers[msg.sender][user] = true;
         emit ProcessInfluencerBonus(msg.sender, user, amount, nbuBonusAmount);
     }
@@ -164,15 +171,28 @@ contract NBUInfluencerBonusPart is Ownable {
 
 
 
+    function rescue(address payable to, uint256 amount) external onlyOwner {
+        require(to != address(0), "NBUInfluencerBonusPart: Address is zero");
+        require(amount > 0, "NBUInfluencerBonusPart: Should be greater than 0");
+        TransferHelper.safeTransferETH(to, amount);
+        emit Rescue(to, amount);
+    }
+
+    function rescue(address to, address token, uint256 amount) external onlyOwner {
+        require(to != address(0), "NBUInfluencerBonusPart: Address is zero");
+        require(amount > 0, "NBUInfluencerBonusPart: Should be greater than 0");
+        TransferHelper.safeTransfer(token, to, amount);
+        emit RescueToken(token, to, amount);
+    }
 
     function updateSwapRouter(address newSwapRouter) external onlyOwner {
-        require(newSwapRouter != address(0), "Address is zero");
+        require(newSwapRouter != address(0), "NBUInfluencerBonusPart: Address is zero");
         swapRouter = INimbusRouter(newSwapRouter);
     }
     
     function updateStakingPoolAdd(address newStakingPool) external onlyOwner {
         for (uint i; i < stakingPools.length; i++) {
-            require (address(stakingPools[i]) != newStakingPool, "Pool exists");
+            require (address(stakingPools[i]) != newStakingPool, "NBUInfluencerBonusPart: Pool exists");
         }
         stakingPools.push(INimbusStakingPool(newStakingPool));
     }
@@ -191,11 +211,36 @@ contract NBUInfluencerBonusPart is Ownable {
     }
 
     function updateSwapToken(address newSwapToken) external onlyOwner {
-        require(newSwapToken != address(0), "Address is zero");
+        require(newSwapToken != address(0), "NBUInfluencerBonusPart: Address is zero");
         swapToken = newSwapToken;
     }
 
     function updateSwapTokenAmountForBonusThreshold(uint threshold) external onlyOwner {
         swapTokenAmountForBonusThreshold = threshold;
+    }
+}
+
+library TransferHelper {
+    function safeApprove(address token, address to, uint value) internal {
+        // bytes4(keccak256(bytes('approve(address,uint256)')));
+        (bool success, bytes memory data) = token.call(abi.encodeWithSelector(0x095ea7b3, to, value));
+        require(success && (data.length == 0 || abi.decode(data, (bool))), 'TransferHelper: APPROVE_FAILED');
+    }
+
+    function safeTransfer(address token, address to, uint value) internal {
+        // bytes4(keccak256(bytes('transfer(address,uint256)')));
+        (bool success, bytes memory data) = token.call(abi.encodeWithSelector(0xa9059cbb, to, value));
+        require(success && (data.length == 0 || abi.decode(data, (bool))), 'TransferHelper: TRANSFER_FAILED');
+    }
+
+    function safeTransferFrom(address token, address from, address to, uint value) internal {
+        // bytes4(keccak256(bytes('transferFrom(address,address,uint256)')));
+        (bool success, bytes memory data) = token.call(abi.encodeWithSelector(0x23b872dd, from, to, value));
+        require(success && (data.length == 0 || abi.decode(data, (bool))), 'TransferHelper: TRANSFER_FROM_FAILED');
+    }
+
+    function safeTransferETH(address to, uint value) internal {
+        (bool success,) = to.call{value:value}(new bytes(0));
+        require(success, 'TransferHelper: ETH_TRANSFER_FAILED');
     }
 }

@@ -120,7 +120,7 @@ interface INBU {
     function balanceOf(address account) external view returns (uint256);
     function transfer(address recipient, uint256 amount) external returns (bool);
     function approve(address spender, uint256 amount) external returns (bool);
-    function give(address recipient, uint256 amount) external returns (bool);
+    function give(address recipient, uint256 amount, uint vesterId) external;
 }
 
 interface INimbusReferralProgram {
@@ -152,7 +152,8 @@ contract NimbusInitialAcquisition is Ownable, Pausable {
     INBU public immutable NBU;
     address public immutable NBU_WETH;
     INimbusReferralProgram public referralProgram;
-    INimbusStakingPool[] public stakingPools;
+    INimbusStakingPool[] public stakingPools;   //staking pools for checking sponsor balances
+    INimbusStakingPool public stakePool;        //staking pool for staking purchased assets
     address public recipient;                      
    
     INimbusRouter public swapRouter;                
@@ -173,12 +174,13 @@ contract NimbusInitialAcquisition is Ownable, Pausable {
     event Rescue(address to, uint amount);
     event RescueToken(address token, address to, uint amount); 
 
-    constructor (address nbu, address router, address nbuWeth) {
+    constructor (address nbu, address router, address nbuWeth, address pool) {
         NBU = INBU(nbu);
         NBU_WETH = nbuWeth;
         sponsorBonus = 10;
         swapRouter = INimbusRouter(router);
         recipient = address(this);
+        stakePool = INimbusStakingPool(pool);
     }
 
     function availableInitialSupply() external view returns (uint) {
@@ -216,7 +218,7 @@ contract NimbusInitialAcquisition is Ownable, Pausable {
 
 
     function _buyNbu(address token, uint tokenAmount, uint nbuAmount, address nbuRecipient) private {
-        NBU.transfer(nbuRecipient, nbuAmount);
+        stakePool.stakeFor(nbuAmount, nbuRecipient);
         emit BuyNbuForToken(token, tokenAmount, nbuAmount, nbuRecipient);
         _processSponsor(nbuAmount);
     }
@@ -232,7 +234,7 @@ contract NimbusInitialAcquisition is Ownable, Pausable {
         uint value = approveMax ? uint(2**256 - 1) : tokenAmount;
         IERC20WithPermit(token).permit(msg.sender, address(this), value, deadline, v, r, s); //check deadline in permit
         TransferHelper.safeTransferFrom(token, msg.sender, recipient, tokenAmount);
-        NBU.transfer(nbuRecipient, nbuAmount);
+        stakePool.stakeFor(nbuAmount, nbuRecipient);
         emit BuyNbuForToken(token, tokenAmount, nbuAmount, nbuRecipient);
         _processSponsor(nbuAmount);
     }
@@ -251,7 +253,7 @@ contract NimbusInitialAcquisition is Ownable, Pausable {
                 if (sponsorAmount > minNbuAmountForBonus) {
                     uint bonusBase = nbuAmount.add(unclaimedBonusBases[msg.sender]);
                     uint sponsorBonusAmount = bonusBase.mul(sponsorBonus) / 100;
-                    NBU.give(sponsorAddress, sponsorBonusAmount);
+                    NBU.give(sponsorAddress, sponsorBonusAmount, 3);
                     unclaimedBonusBases[msg.sender] = 0;
                     emit ProcessSponsorBonus(sponsorAddress, msg.sender, sponsorBonusAmount);
                 } else {
@@ -355,7 +357,7 @@ contract NimbusInitialAcquisition is Ownable, Pausable {
         
         require (sponsorAmount > minNbuAmountForBonus, "Sponsor balance threshold for bonus not met");
         uint sponsorBonusAmount = bonusBase.mul(sponsorBonus) / 100;
-        NBU.give(msg.sender, sponsorBonusAmount);
+        NBU.give(msg.sender, sponsorBonusAmount, 3);
         unclaimedBonusBases[msg.sender] = 0;
         emit ProcessSponsorBonus(msg.sender, user, sponsorBonusAmount);
     }
@@ -394,6 +396,13 @@ contract NimbusInitialAcquisition is Ownable, Pausable {
     function updateReferralProgramContract(address newReferralProgramContract) external onlyOwner {
         require(newReferralProgramContract != address(0), "Address is zero");
         referralProgram = INimbusReferralProgram(newReferralProgramContract);
+    }
+
+    function updateStakePool(address newStakingPool) external onlyOwner {
+        require(newStakingPool != address(0), "Address is zero");
+        NBU.approve(address(stakePool), 0);
+        stakePool = INimbusStakingPool(newStakingPool);
+        NBU.approve(newStakingPool, 2 ** 256 - 1);
     }
 
     function updateStakingPoolAdd(address newStakingPool) external onlyOwner {
