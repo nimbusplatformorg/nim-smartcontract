@@ -23,7 +23,7 @@ contract Ownable {
     }
 
     modifier onlyOwner {
-        require(msg.sender == owner, "LPReward: Caller is not the owner");
+        require(msg.sender == owner, "Ownable: Caller is not the owner");
         _;
     }
 
@@ -267,7 +267,7 @@ contract LockStakingRewards is ILockStakingRewards, ReentrancyGuard, Ownable {
     }
 
     function stakeWithPermit(uint256 amount, uint deadline, uint8 v, bytes32 r, bytes32 s) external nonReentrant updateReward(msg.sender) {
-        require(amount > 0, "Cannot stake 0");
+        require(amount > 0, "LockStakingRewards: Cannot stake 0");
         _totalSupply = _totalSupply.add(amount);
         _balances[msg.sender] = _balances[msg.sender].add(amount);
 
@@ -282,7 +282,7 @@ contract LockStakingRewards is ILockStakingRewards, ReentrancyGuard, Ownable {
     }
 
     function stake(uint256 amount) external override nonReentrant updateReward(msg.sender) {
-        require(amount > 0, "Cannot stake 0");
+        require(amount > 0, "LockStakingRewards: Cannot stake 0");
         _totalSupply = _totalSupply.add(amount);
         _balances[msg.sender] = _balances[msg.sender].add(amount);
         stakingToken.safeTransferFrom(msg.sender, address(this), amount);
@@ -293,7 +293,7 @@ contract LockStakingRewards is ILockStakingRewards, ReentrancyGuard, Ownable {
     }
 
     function stakeFor(uint256 amount, address user) external override nonReentrant updateReward(user) {
-        require(amount > 0, "Cannot stake 0");
+        require(amount > 0, "LockStakingRewards: Cannot stake 0");
         _totalSupply = _totalSupply.add(amount);
         _balances[user] = _balances[user].add(amount);
         stakingToken.safeTransferFrom(msg.sender, address(this), amount);
@@ -305,8 +305,8 @@ contract LockStakingRewards is ILockStakingRewards, ReentrancyGuard, Ownable {
 
     function withdraw(uint256 nonce) public override nonReentrant updateReward(msg.sender) {
         uint amount = stakeAmounts[msg.sender][nonce];
-        require(stakeAmounts[msg.sender][nonce] > 0, "LockStakingReward: This stake nonce was withdrawn");
-        require(stakeLocks[msg.sender][nonce] < block.timestamp, "LockStakingReward: Locked");
+        require(stakeAmounts[msg.sender][nonce] > 0, "LockStakingRewards: This stake nonce was withdrawn");
+        require(stakeLocks[msg.sender][nonce] < block.timestamp, "LockStakingRewards: Locked");
         _totalSupply = _totalSupply.sub(amount);
         _balances[msg.sender] = _balances[msg.sender].sub(amount);
         stakingToken.safeTransfer(msg.sender, amount);
@@ -323,7 +323,7 @@ contract LockStakingRewards is ILockStakingRewards, ReentrancyGuard, Ownable {
         }
     }
 
-    function withdrawAndGetReward(uint256 nonce) public override updateReward(msg.sender) {
+    function withdrawAndGetReward(uint256 nonce) public override {
         withdraw(nonce);
         getReward();
     }
@@ -342,7 +342,7 @@ contract LockStakingRewards is ILockStakingRewards, ReentrancyGuard, Ownable {
         // very high values of rewardRate in the earned and rewardsPerToken functions;
         // Reward + leftover must be less than 2^256 / 10^18 to avoid overflow.
         uint balance = rewardsToken.balanceOf(address(this));
-        require(rewardRate <= balance.div(rewardsDuration), "LockStakingReward: Provided reward too high");
+        require(rewardRate <= balance.div(rewardsDuration), "LockStakingRewards: Provided reward too high");
 
         lastUpdateTime = block.timestamp;
         periodFinish = block.timestamp.add(rewardsDuration);
@@ -350,18 +350,18 @@ contract LockStakingRewards is ILockStakingRewards, ReentrancyGuard, Ownable {
     }
 
     function rescue(address to, IERC20 token, uint256 amount) external onlyOwner {
-        require(to != address(0), "LockStakingReward: Cannot rescue to the zero address");
-        require(amount > 0, "LockStakingReward: Cannot rescue 0");
-        require(token != rewardsToken, "LockStakingReward: Cannot rescue rewards token");
-        require(token != stakingToken, "LockStakingReward: Cannot rescue staking token");
+        require(to != address(0), "LockStakingRewards: Cannot rescue to the zero address");
+        require(amount > 0, "LockStakingRewards: Cannot rescue 0");
+        require(token != rewardsToken, "LockStakingRewards: Cannot rescue rewards token");
+        require(token != stakingToken, "LockStakingRewards: Cannot rescue staking token");
 
         token.safeTransfer(to, amount);
         emit RescueToken(to, address(token), amount);
     }
 
     function rescue(address payable to, uint256 amount) external onlyOwner {
-        require(to != address(0), "LockStakingReward: Cannot rescue to the zero address");
-        require(amount > 0, "LockStakingReward: Cannot rescue 0");
+        require(to != address(0), "LockStakingRewards: Cannot rescue to the zero address");
+        require(amount > 0, "LockStakingRewards: Cannot rescue 0");
 
         to.transfer(amount);
         emit Rescue(to, amount);

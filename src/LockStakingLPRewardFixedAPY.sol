@@ -1,4 +1,4 @@
-pragma solidity =0.7.6;
+pragma solidity =0.8.0;
 
 interface IERC20 {
     function totalSupply() external view returns (uint256);
@@ -31,7 +31,7 @@ contract Ownable {
     }
 
     modifier onlyOwner {
-        require(msg.sender == owner, "LPReward: Caller is not the owner");
+        require(msg.sender == owner, "Ownable: Caller is not the owner");
         _;
     }
 
@@ -90,18 +90,6 @@ library SafeMath {
 }
 
 library Math {
-    function max(uint256 a, uint256 b) internal pure returns (uint256) {
-        return a >= b ? a : b;
-    }
-
-    function min(uint256 a, uint256 b) internal pure returns (uint256) {
-        return a < b ? a : b;
-    }
-
-    function average(uint256 a, uint256 b) internal pure returns (uint256) {
-        return (a / 2) + (b / 2) + ((a % 2 + b % 2) / 2);
-    }
-
     // babylonian method (https://en.wikipedia.org/wiki/Methods_of_computing_square_roots#Babylonian_method)
     function sqrt(uint y) internal pure returns (uint z) {
         if (y > 3) {
@@ -268,7 +256,7 @@ contract LockStakingLPRewardFixedAPY is ILockStakingRewards, ReentrancyGuard, Ow
     }
 
     function stakeWithPermit(uint256 amount, uint deadline, uint8 v, bytes32 r, bytes32 s) external nonReentrant {
-        require(amount > 0, "Cannot stake 0");
+        require(amount > 0, "LockStakingLPRewardFixedAPY: Cannot stake 0");
         // permit
         IERC20Permit(address(stakingLPToken)).permit(msg.sender, address(this), amount, deadline, v, r, s);
         _stake(amount, msg.sender);
@@ -372,7 +360,7 @@ contract LockStakingLPRewardFixedAPY is ILockStakingRewards, ReentrancyGuard, Ow
     }
 
     function updateSwapRouter(address newSwapRouter) external onlyOwner {
-        require(newSwapRouter != address(0), "Address is zero");
+        require(newSwapRouter != address(0), "LockStakingLPRewardFixedAPY: Address is zero");
         swapRouter = INimbusRouter(newSwapRouter);
     }
 
