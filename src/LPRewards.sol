@@ -33,7 +33,7 @@ interface INBU {
     function balanceOf(address account) external view returns (uint256);
     function transfer(address recipient, uint256 amount) external returns (bool);
     function approve(address spender, uint256 amount) external returns (bool);
-    function give(address recipient, uint256 amount) external;
+    function give(address recipient, uint256 amount, uint vesterId) external;
 }
 
 interface INimbusRouter {
@@ -102,6 +102,8 @@ contract LPReward is Ownable {
     event RecordRemoveLiquidityUnclaimed(address recipient, address pair, uint amountA, uint amountB, uint liquidity);
     event RecordRemoveLiquidityGiveNbu(address recipient, address pair, uint nbu, uint amountA, uint amountB, uint liquidity);
     event ClaimLiquidityNbu(address recipient, uint nbu, uint amountA, uint amountB);
+    event Rescue(address to, uint amount);
+    event RescueToken(address token, address to, uint amount); 
 
     constructor(address nbu, address factory) {
         swapFactory = INimbusFactory(factory);
@@ -185,7 +187,7 @@ contract LPReward is Ownable {
         }
 
         if (amountNbu != 0 && amountNbu >= availableReward()) {
-            INBU(NBU).give(recipient, amountNbu);
+            INBU(NBU).give(recipient, amountNbu, 2);
             lpRewardUsed = lpRewardUsed.add(amountNbu);
             emit RecordRemoveLiquidityGiveNbu(recipient, pair, amountNbu, amountA, amountB, liquidity);            
         } else {
@@ -228,7 +230,7 @@ contract LPReward is Ownable {
         require (amountNbu > 0, "LPReward: No NBU pairs to token A and token B");
         require (amountNbu >= availableReward(), "LPReward: Available reward for the period is used");
         
-        INBU(NBU).give(recipient, amountNbu);
+        INBU(NBU).give(recipient, amountNbu, 2);
         lpRewardUsed = lpRewardUsed.add(amountNbu);
         emit ClaimLiquidityNbu(recipient, amountNbu, amountA, amountB);            
     }
@@ -304,6 +306,19 @@ contract LPReward is Ownable {
 
 
 
+    function rescue(address payable to, uint256 amount) external onlyOwner {
+        require(to != address(0), "LPReward: Address is zero");
+        require(amount > 0, "LPReward: Should be greater than 0");
+        TransferHelper.safeTransferETH(to, amount);
+        emit Rescue(to, amount);
+    }
+
+    function rescue(address to, address token, uint256 amount) external onlyOwner {
+        require(to != address(0), "LPReward: Address is zero");
+        require(amount > 0, "LPReward: Should be greater than 0");
+        TransferHelper.safeTransfer(token, to, amount);
+        emit RescueToken(token, to, amount);
+    }
 
     function updateRouter(address newRouter) external onlyOwner {
         require (newRouter != address(0), "LPReward: Zero address");
@@ -324,5 +339,30 @@ contract LPReward is Ownable {
 
     function updateRewardMaxAmount(uint newAmount) external onlyOwner {
         lpRewardMaxAmount = newAmount;
+    }
+}
+
+library TransferHelper {
+    function safeApprove(address token, address to, uint value) internal {
+        // bytes4(keccak256(bytes('approve(address,uint256)')));
+        (bool success, bytes memory data) = token.call(abi.encodeWithSelector(0x095ea7b3, to, value));
+        require(success && (data.length == 0 || abi.decode(data, (bool))), 'TransferHelper: APPROVE_FAILED');
+    }
+
+    function safeTransfer(address token, address to, uint value) internal {
+        // bytes4(keccak256(bytes('transfer(address,uint256)')));
+        (bool success, bytes memory data) = token.call(abi.encodeWithSelector(0xa9059cbb, to, value));
+        require(success && (data.length == 0 || abi.decode(data, (bool))), 'TransferHelper: TRANSFER_FAILED');
+    }
+
+    function safeTransferFrom(address token, address from, address to, uint value) internal {
+        // bytes4(keccak256(bytes('transferFrom(address,address,uint256)')));
+        (bool success, bytes memory data) = token.call(abi.encodeWithSelector(0x23b872dd, from, to, value));
+        require(success && (data.length == 0 || abi.decode(data, (bool))), 'TransferHelper: TRANSFER_FROM_FAILED');
+    }
+
+    function safeTransferETH(address to, uint value) internal {
+        (bool success,) = to.call{value:value}(new bytes(0));
+        require(success, 'TransferHelper: ETH_TRANSFER_FAILED');
     }
 }

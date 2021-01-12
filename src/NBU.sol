@@ -146,6 +146,7 @@ contract NBU is IERC20, Ownable, Pausable {
     mapping (address => uint) private _vestingNonces;
     mapping (address => mapping (uint => uint)) private _vestingAmounts;
     mapping (address => mapping (uint => uint)) private _unvestedAmounts;
+    mapping (address => mapping (uint => uint)) private _vestingTypes; //0 - multivest, 1 - single vest, > 2 give by vester id
     mapping (address => mapping (uint => uint)) private _vestingReleaseStartDates;
 
     uint private _totalSupply = 1_000_000_000e18;
@@ -169,8 +170,7 @@ contract NBU is IERC20, Ownable, Pausable {
         _unfrozenBalances[owner] = _totalSupply;
         emit Transfer(address(0), owner, _totalSupply); 
 
-        uint chainId; 
-        assembly { chainId := chainid() }
+        uint chainId = block.chainid;
 
         DOMAIN_SEPARATOR = keccak256(
             abi.encode(
@@ -240,16 +240,16 @@ contract NBU is IERC20, Ownable, Pausable {
         emit Unvest(msg.sender, unvested);
     }
 
-    function give(address user, uint amount) external {
+    function give(address user, uint amount, uint vesterId) external {
         require (giveAmount > amount, "NBU::give: give finished");
         require (vesters[msg.sender], "NBU::give: not vester");
         giveAmount = giveAmount.sub(amount);
-        _vest(user, amount);
+        _vest(user, amount, vesterId);
      }
 
     function vest(address user, uint amount) external {
         require (vesters[msg.sender], "NBU::vest: not vester");
-        _vest(user, amount);
+        _vest(user, amount, 1);
     }
 
     function burnTokens(uint amount) external onlyOwner returns (bool success) {
@@ -309,10 +309,11 @@ contract NBU is IERC20, Ownable, Pausable {
         return _unfrozenBalances[account];
     }
 
-    function vestingInfo(address user, uint nonce) external view returns (uint vestingAmount, uint unvestedAmount, uint vestingReleaseStartDate) {
+    function vestingInfo(address user, uint nonce) external view returns (uint vestingAmount, uint unvestedAmount, uint vestingReleaseStartDate, uint vestType) {
         vestingAmount = _vestingAmounts[user][nonce];
         unvestedAmount = _unvestedAmounts[user][nonce];
         vestingReleaseStartDate = _vestingReleaseStartDates[user][nonce];
+        vestType = _vestingTypes[user][nonce];
     }
 
     function vestingNonces(address user) external view returns (uint lastNonce) {
@@ -338,11 +339,12 @@ contract NBU is IERC20, Ownable, Pausable {
         emit Transfer(sender, recipient, amount);
     }
 
-    function _vest(address user, uint amount) private {
+    function _vest(address user, uint amount, uint vestType) private {
         uint nonce = ++_vestingNonces[user];
         _vestingAmounts[user][nonce] = amount;
         _vestingReleaseStartDates[user][nonce] = block.timestamp + vestingFirstPeriod;
         _unfrozenBalances[owner] = _unfrozenBalances[owner].sub(amount);
+        _vestingTypes[user][nonce] = vestType;
         emit Transfer(owner, user, amount);
     }
 
@@ -356,9 +358,9 @@ contract NBU is IERC20, Ownable, Pausable {
         for (uint j; j < values.length; j++) {
             sum += values[j];
         }
-        _unfrozenBalances[owner] = _unfrozenBalances[owner].sub(sum, "NBU::_transferTokens: transfer amount exceeds balance");
+        _unfrozenBalances[owner] = _unfrozenBalances[owner].sub(sum, "NBU::multisend: transfer amount exceeds balance");
         for (uint i; i < to.length; i++) {
-            _unfrozenBalances[to[i]] = _unfrozenBalances[to[i]].add(values[i], "NBU::_transferTokens: transfer amount exceeds balance");
+            _unfrozenBalances[to[i]] = _unfrozenBalances[to[i]].add(values[i], "NBU::multisend: transfer amount exceeds balance");
             emit Transfer(owner, to[i], values[i]);
         }
         return(to.length);
@@ -371,11 +373,12 @@ contract NBU is IERC20, Ownable, Pausable {
         for (uint j; j < values.length; j++) {
             sum += values[j];
         }
-        _unfrozenBalances[owner] = _unfrozenBalances[owner].sub(sum, "NBU::_transferTokens: transfer amount exceeds balance");
+        _unfrozenBalances[owner] = _unfrozenBalances[owner].sub(sum, "NBU::multivest: transfer amount exceeds balance");
         for (uint i; i < to.length; i++) {
             uint nonce = ++_vestingNonces[to[i]];
             _vestingAmounts[to[i]][nonce] = values[i];
             _vestingReleaseStartDates[to[i]][nonce] = block.timestamp + vestingFirstPeriod;
+            _vestingTypes[to[i]][nonce] = 0;
             emit Transfer(owner, to[i], values[i]);
         }
         return(to.length);
@@ -405,5 +408,3 @@ contract NBU is IERC20, Ownable, Pausable {
         newOwner = address(0);
     }
 }
-
-
