@@ -277,9 +277,9 @@ contract LockStakingLPRewardFixedAPY is ILockStakingRewards, ReentrancyGuard, Ow
         uint amountRewardEquivalent = getCurrentLPPrice().mul(amount) / 10 ** 18;
 
         _totalSupply = _totalSupply.add(amount);
-        uint previosAmount = _balances[user];
-        uint newAmount = previosAmount.add(amount);
-        weightedStakeDate[user] = (weightedStakeDate[user].mul(previosAmount) / newAmount).add(block.timestamp.mul(amount) / newAmount);
+        uint previousAmount = _balances[user];
+        uint newAmount = previousAmount.add(amount);
+        weightedStakeDate[user] = (weightedStakeDate[user].mul(previousAmount) / newAmount).add(block.timestamp.mul(amount) / newAmount);
         _balances[user] = newAmount;
 
         uint stakeNonce = stakeNonces[user]++;

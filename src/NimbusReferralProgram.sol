@@ -91,6 +91,7 @@ library SafeMath {
 interface INimbusReferralProgram {
     function userSponsorByAddress(address user) external view returns (uint);
     function userIdByAddress(address user) external view returns (uint);
+    function userSponsorAddressByAddress(address user) external view returns (address);s
 }
 
 interface INimbusStakingPool {
@@ -110,7 +111,7 @@ contract NimbusReferralProgram is INimbusReferralProgram, Ownable {
 
     uint[] public levels;
     uint public maxLevel;
-    uint public maxLevelDebth;
+    uint public maxLevelDepth;
 
     mapping(uint => uint) private _userSponsor;
     mapping(address => mapping(uint => uint)) private _undistributedFees;
@@ -187,7 +188,13 @@ contract NimbusReferralProgram is INimbusReferralProgram, Ownable {
 
     function userSponsor(uint user) external view returns (uint) {
         return _userSponsor[user];
-    }    
+    }
+
+    function userSponsorAddressByAddress(address user) external override view returns (address) {
+        uint sponsorId = _userSponsor[userIdByAddress[user]];
+        if (sponsorId < 1000000001) return address(0);
+        else return userAddressById[sponsorId];
+    }
 
     function getUserReferrals(uint userId) external view returns (uint[] memory) {
         return _userReferrals[userId];
@@ -287,7 +294,7 @@ contract NimbusReferralProgram is INimbusReferralProgram, Ownable {
 
     function transferToSponsor(address token, uint userId, uint amount, uint level, uint levelGuard) private returns (uint) {
         if (level >= maxLevel) return maxLevel;
-        if (levelGuard > maxLevelDebth) return level;
+        if (levelGuard > maxLevelDepth) return level;
         uint sponsorId = _userSponsor[userId];
         if (sponsorId < 1000000001) return level;
         address sponsorAddress = userAddressById[sponsorId];
@@ -460,8 +467,8 @@ contract NimbusReferralProgram is INimbusReferralProgram, Ownable {
         swapTokenAmountForFeeDistributionThreshold = threshold;
     }
 
-    function updateMaxLevelDebth(uint newMaxLevelDebth) external onlyOwner {
-        maxLevelDebth = newMaxLevelDebth;
+    function updateMaxLevelDepth(uint newMaxLevelDepth) external onlyOwner {
+        maxLevelDepth = newMaxLevelDepth;
     }
 
     function updateStakingPoolAdd(address newStakingPool) external onlyOwner {

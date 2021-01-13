@@ -296,10 +296,10 @@ contract StakingRewardMinAmountFixedAPY is IStakingRewards, ReentrancyGuard, Own
         uint amountRewardEquivalent = getEquivalentAmount(amount);
 
         _totalSupply = _totalSupply.add(amount);
-        _totalSupplyRewardEquivalent = _totalSupply.add(amountRewardEquivalent);
-        uint previosAmount = _balances[user];
-        uint newAmount = previosAmount.add(amount);
-        weightedStakeDate[user] = (weightedStakeDate[user].mul(previosAmount) / newAmount).add(block.timestamp.mul(amount) / newAmount);
+        _totalSupplyRewardEquivalent = _totalSupplyRewardEquivalent.add(amountRewardEquivalent);
+        uint previousAmount = _balances[user];
+        uint newAmount = previousAmount.add(amount);
+        weightedStakeDate[user] = (weightedStakeDate[user].mul(previousAmount) / newAmount).add(block.timestamp.mul(amount) / newAmount);
         _balances[user] = newAmount;
 
         uint stakeNonce = stakeNonces[user]++;
@@ -349,7 +349,7 @@ contract StakingRewardMinAmountFixedAPY is IStakingRewards, ReentrancyGuard, Own
             path[1] = address(rewardsToken);
             equivalent = swapRouter.getAmountsOut(amount, path)[1];
         } else {
-            equivalent = amount * 10 ** 18;   
+            equivalent = amount;   
         }
         
         return equivalent;

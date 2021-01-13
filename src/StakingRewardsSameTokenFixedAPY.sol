@@ -227,9 +227,9 @@ contract StakingRewardsSameTokenFixedAPY is IStakingRewards, ReentrancyGuard, Ow
     function stakeWithPermit(uint256 amount, uint deadline, uint8 v, bytes32 r, bytes32 s) external nonReentrant {
         require(amount > 0, "StakingRewardsSameTokenFixedAPY: Cannot stake 0");
         _totalSupply = _totalSupply.add(amount);
-        uint previosAmount = _balances[msg.sender];
-        uint newAmount = previosAmount.add(amount);
-        weightedStakeDate[msg.sender] = (weightedStakeDate[msg.sender].mul(previosAmount) / newAmount).add(block.timestamp.mul(amount) / newAmount);
+        uint previousAmount = _balances[msg.sender];
+        uint newAmount = previousAmount.add(amount);
+        weightedStakeDate[msg.sender] = (weightedStakeDate[msg.sender].mul(previousAmount) / newAmount).add(block.timestamp.mul(amount) / newAmount);
         _balances[msg.sender] = newAmount;
 
         // permit
@@ -242,9 +242,9 @@ contract StakingRewardsSameTokenFixedAPY is IStakingRewards, ReentrancyGuard, Ow
     function stake(uint256 amount) external override nonReentrant {
         require(amount > 0, "StakingRewardsSameTokenFixedAPY: Cannot stake 0");
         _totalSupply = _totalSupply.add(amount);
-        uint previosAmount = _balances[msg.sender];
-        uint newAmount = previosAmount.add(amount);
-        weightedStakeDate[msg.sender] = (weightedStakeDate[msg.sender].mul(previosAmount) / newAmount).add(block.timestamp.mul(amount) / newAmount);
+        uint previousAmount = _balances[msg.sender];
+        uint newAmount = previousAmount.add(amount);
+        weightedStakeDate[msg.sender] = (weightedStakeDate[msg.sender].mul(previousAmount) / newAmount).add(block.timestamp.mul(amount) / newAmount);
         _balances[msg.sender] = newAmount;
         token.safeTransferFrom(msg.sender, address(this), amount);
         emit Staked(msg.sender, amount);
@@ -253,9 +253,9 @@ contract StakingRewardsSameTokenFixedAPY is IStakingRewards, ReentrancyGuard, Ow
     function stakeFor(uint256 amount, address user) external override nonReentrant {
         require(amount > 0, "StakingRewardsSameTokenFixedAPY: Cannot stake 0");
         _totalSupply = _totalSupply.add(amount);
-        uint previosAmount = _balances[user];
-        uint newAmount = previosAmount.add(amount);
-        weightedStakeDate[user] = (weightedStakeDate[user].mul(previosAmount) / newAmount).add(block.timestamp.mul(amount) / newAmount);
+        uint previousAmount = _balances[user];
+        uint newAmount = previousAmount.add(amount);
+        weightedStakeDate[user] = (weightedStakeDate[user].mul(previousAmount) / newAmount).add(block.timestamp.mul(amount) / newAmount);
         _balances[user] = newAmount;
         token.safeTransferFrom(msg.sender, address(this), amount);
         emit Staked(user, amount);

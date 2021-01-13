@@ -8,7 +8,7 @@ library SafeMath {
 }
 
 
-contract Nus_Weth {
+contract NBU_WETH {
     using SafeMath for uint;
     string public name     = "Nimbus Wrapped Ether";
     string public symbol   = "NWETH";
