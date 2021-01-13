@@ -112,6 +112,7 @@ contract NimbusReferralProgram is INimbusReferralProgram, Ownable {
     uint[] public levels;
     uint public maxLevel;
     uint public maxLevelDepth;
+    uint public minTokenAmountForCheck;
 
     mapping(uint => uint) private _userSponsor;
     mapping(address => mapping(uint => uint)) private _undistributedFees;
@@ -157,6 +158,9 @@ contract NimbusReferralProgram is INimbusReferralProgram, Ownable {
         levels = [40, 20, 13, 10, 10, 7];
         maxLevel = 6;
         NBU = IERC20(nbu);
+
+        minTokenAmountForCheck = 10 * 10 ** 18;
+        maxLevelDepth = 25;
 
         uint chainId;
         assembly {
@@ -309,12 +313,13 @@ contract NimbusReferralProgram is INimbusReferralProgram, Ownable {
         }            
     }
 
-    function isUserBalanceEnough(address user) private view returns (bool) {
+    function isUserBalanceEnough(address user) public view returns (bool) {
         if (user == address(0)) return false;
         uint amount = NBU.balanceOf(user);
         for (uint i; i < stakingPools.length; i++) {
             amount = amount.add(stakingPools[i].balanceOf(user));
         }
+        if (amount < minTokenAmountForCheck) return false;
         address[] memory path = new address[](2);
         path[0] = address(NBU);
         path[1] = swapToken;
@@ -470,6 +475,12 @@ contract NimbusReferralProgram is INimbusReferralProgram, Ownable {
     function updateMaxLevelDepth(uint newMaxLevelDepth) external onlyOwner {
         maxLevelDepth = newMaxLevelDepth;
     }
+
+    function updateMinTokenAmountForCheck(uint newMinTokenAmountForCheck) external onlyOwner {
+        minTokenAmountForCheck = newMinTokenAmountForCheck;
+    }
+
+    
 
     function updateStakingPoolAdd(address newStakingPool) external onlyOwner {
         for (uint i; i < stakingPools.length; i++) {
