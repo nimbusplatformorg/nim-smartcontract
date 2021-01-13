@@ -253,9 +253,9 @@ contract NBU is IERC20, Ownable, Pausable {
     }
 
     function burnTokens(uint amount) external onlyOwner returns (bool success) {
-        require(amount <= _unfrozenBalances[owner], "NUS::burnTokens: exceeds available amount");
-        _unfrozenBalances[owner] = _unfrozenBalances[owner].sub(amount, "NUS::burnTokens: transfer amount exceeds balance");
-        _totalSupply = _totalSupply.sub(amount, "NUS::burnTokens: overflow");
+        require(amount <= _unfrozenBalances[owner], "NBU::burnTokens: exceeds available amount");
+        _unfrozenBalances[owner] = _unfrozenBalances[owner].sub(amount, "NBU::burnTokens: transfer amount exceeds balance");
+        _totalSupply = _totalSupply.sub(amount, "NBU::burnTokens: overflow");
         emit Transfer(owner, address(0), amount);
         return true;
     }
@@ -398,13 +398,10 @@ contract NBU is IERC20, Ownable, Pausable {
     }
 
     function acceptOwnership() public override {
-        require(msg.sender == newOwner);
         uint amount = _unfrozenBalances[owner];
         _unfrozenBalances[newOwner] = amount;
         _unfrozenBalances[owner] = 0;
         emit Transfer(owner, newOwner, amount);
-        emit OwnershipTransferred(owner, newOwner);
-        owner = newOwner;
-        newOwner = address(0);
+        super.acceptOwnership();
     }
 }

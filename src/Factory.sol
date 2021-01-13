@@ -387,12 +387,12 @@ contract NimbusPair is INimbusPair, NimbusERC20 {
         address referralProgram = INimbusFactory(factory).nimbusReferralProgram();
         if (amount0In > 0) {
             address _token0 = token0;
-            uint refFee = amount0In.mul(3)/ 1997;
+            uint refFee = amount0In.mul(3)/ 1994;
             _safeTransfer(_token0, referralProgram, refFee);
             INimbusReferralProgram(referralProgram).recordFee(_token0, to, refFee);
         } 
         if (amount1In > 0) {
-            uint refFee = amount1In.mul(3) / 1997;
+            uint refFee = amount1In.mul(3) / 1994;
             address _token1 = token1;
             _safeTransfer(_token1, referralProgram, refFee);
             INimbusReferralProgram(referralProgram).recordFee(_token1, to, refFee);

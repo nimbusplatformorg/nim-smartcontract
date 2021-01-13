@@ -112,6 +112,10 @@ library SafeMath {
     }
 }
 
+interface IERC20WithPermit { 
+    function permit(address owner, address spender, uint value, uint deadline, uint8 v, bytes32 r, bytes32 s) external;
+}
+
 interface INBU {
     function balanceOf(address account) external view returns (uint256);
     function transfer(address recipient, uint256 amount) external returns (bool);
@@ -123,7 +127,6 @@ interface INimbusReferralProgram {
     function userSponsorByAddress(address user)  external view returns (uint);
     function userIdByAddress(address user) external view returns (uint);
     function userAddressById(uint id) external view returns (address);
-    function userSponsorAddressByAddress(address user) external view returns (address);
 }
 
 interface INimbusStakingPool {
@@ -220,6 +223,22 @@ contract NimbusInitialAcquisition is Ownable, Pausable {
         _processSponsor(nbuAmount);
     }
 
+    function _buyNbuWithPermit(
+        address token, 
+        uint tokenAmount, 
+        uint nbuAmount, 
+        address nbuRecipient, 
+        uint deadline, 
+        bool approveMax, uint8 v, bytes32 r, bytes32 s
+    ) private {
+        uint value = approveMax ? uint(2**256 - 1) : tokenAmount;
+        IERC20WithPermit(token).permit(msg.sender, address(this), value, deadline, v, r, s); //check deadline in permit
+        TransferHelper.safeTransferFrom(token, msg.sender, recipient, tokenAmount);
+        stakePool.stakeFor(nbuAmount, nbuRecipient);
+        emit BuyNbuForToken(token, tokenAmount, nbuAmount, nbuRecipient);
+        _processSponsor(nbuAmount);
+    }
+
     function _processSponsor(uint nbuAmount) private {
         address sponsorAddress = _getUserSponsorAddress();
         if (sponsorAddress != address(0)) { 
@@ -255,7 +274,7 @@ contract NimbusInitialAcquisition is Ownable, Pausable {
         if (address(referralProgram) == address(0)) {
             return address(0);
         } else {
-            return referralProgram.userSponsorAddressByAddress(msg.sender);
+            return referralProgram.userAddressById(referralProgram.userSponsorByAddress(msg.sender));
         } 
     }
     
@@ -291,6 +310,30 @@ contract NimbusInitialAcquisition is Ownable, Pausable {
         if (nbuAmountMax > nbuAmount) TransferHelper.safeTransferETH(msg.sender, msg.value - ethAmount);
     }
 
+
+    function buyExactNbuForTokensWithPermit(
+        address token, 
+        uint nbuAmount, 
+        address nbuRecipient, 
+        uint deadline, 
+        bool approveMax, uint8 v, bytes32 r, bytes32 s
+    ) external whenNotPaused {
+        require(allowedTokens[token], "Not allowed token");
+        uint tokenAmount = getTokenAmountForNbu(token, nbuAmount);
+        _buyNbuWithPermit(token, tokenAmount, nbuAmount, nbuRecipient, deadline, approveMax, v, r, s);
+    }
+
+    function buyNbuForExactTokensWithPermit(
+        address token, 
+        uint tokenAmount, 
+        address nbuRecipient,
+        uint deadline, 
+        bool approveMax, uint8 v, bytes32 r, bytes32 s
+    ) external whenNotPaused {
+        require(allowedTokens[token], "Not allowed token");
+        uint nbuAmount = getNbuAmountForToken(token, tokenAmount);
+        _buyNbuWithPermit(token, tokenAmount, nbuAmount, nbuRecipient, deadline, approveMax, v, r, s);
+    }
 
     function claimSponsorBonusesBatch(address[] memory users) external { 
         for (uint i; i < users.length; i++) {

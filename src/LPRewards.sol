@@ -131,9 +131,9 @@ contract LPReward is Ownable {
         if (ratio < previousRatio) {
             return;
         }
-        uint previosAmount = lpTokenAmounts[recipient][pair];
-        uint newAmount = previosAmount.add(liquidity);
-        uint weighted =  (previousRatio.mul(previosAmount) / newAmount).add(ratio.mul(liquidity) / newAmount); 
+        uint previousAmount = lpTokenAmounts[recipient][pair];
+        uint newAmount = previousAmount.add(liquidity);
+        uint weighted =  (previousRatio.mul(previousAmount) / newAmount).add(ratio.mul(liquidity) / newAmount); 
         weightedRatio[recipient][pair] = weighted;
         lpTokenAmounts[recipient][pair] = newAmount;
         ratioUpdateLast[recipient][pair] = block.timestamp;
@@ -150,9 +150,9 @@ contract LPReward is Ownable {
         uint previousRatio = weightedRatio[recipient][pair];
         if (previousRatio != 0 && ratio < previousRatio) return;
         uint difference = ratio.sub(previousRatio);
-        uint previosAmount = lpTokenAmounts[recipient][pair];
-        weightedRatio[recipient][pair] = (previousRatio.mul(previosAmount.sub(liquidity)) / previosAmount).add(ratio.mul(liquidity) / previosAmount);    
-        lpTokenAmounts[recipient][pair] = previosAmount.sub(liquidity);
+        uint previousAmount = lpTokenAmounts[recipient][pair];
+        weightedRatio[recipient][pair] = (previousRatio.mul(previousAmount.sub(liquidity)) / previousAmount).add(ratio.mul(liquidity) / previousAmount);    
+        lpTokenAmounts[recipient][pair] = previousAmount.sub(liquidity);
         amount0 = amountA * difference / 1e18;
         amount1 = amountB * difference / 1e18; 
         }
@@ -221,10 +221,10 @@ contract LPReward is Ownable {
         require (unclaimedAmounts[recipient][pair].length > 0 && (unclaimedAmounts[recipient][pair][0] > 0 || unclaimedAmounts[recipient][pair][1] > 0), "LPReward: No undistributed fee bonuses");
         uint amountA;
         uint amountB;
-        amountA = unclaimedAmounts[msg.sender][pair][0];
-        amountB = unclaimedAmounts[msg.sender][pair][1];
-        unclaimedAmounts[msg.sender][pair][0] = 0;
-        unclaimedAmounts[msg.sender][pair][1] = 0;
+        amountA = unclaimedAmounts[recipient][pair][0];
+        amountB = unclaimedAmounts[recipient][pair][1];
+        unclaimedAmounts[recipient][pair][0] = 0;
+        unclaimedAmounts[recipient][pair][1] = 0;
 
         uint amountNbu = nbuAmountForPair(pair, amountA, amountB);
         require (amountNbu > 0, "LPReward: No NBU pairs to token A and token B");
