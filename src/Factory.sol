@@ -88,7 +88,7 @@ contract NimbusERC20 is INimbusERC20 {
     using SafeMath for uint;
 
     string public constant override name = 'Nimbus LP';
-    string public constant override symbol = 'NUS_LP';
+    string public constant override symbol = 'NBU_LP';
     uint8 public constant override decimals = 18;
     uint  public override totalSupply;
     mapping(address => uint) public override balanceOf;

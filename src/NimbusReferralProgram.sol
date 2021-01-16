@@ -91,7 +91,7 @@ library SafeMath {
 interface INimbusReferralProgram {
     function userSponsorByAddress(address user) external view returns (uint);
     function userIdByAddress(address user) external view returns (uint);
-    function userSponsorAddressByAddress(address user) external view returns (address);s
+    function userSponsorAddressByAddress(address user) external view returns (address);
 }
 
 interface INimbusStakingPool {
