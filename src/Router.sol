@@ -244,7 +244,7 @@ library NimbusLibrary {
                 hex'ff',
                 factory,
                 keccak256(abi.encodePacked(token0, token1)),
-                hex'aa9206bd881244f98f68446d39f2567a156f7986d80d99c180207cc3dcb3ef8f' // init code hash
+                hex'80e833693a813f60cf5fd373d5ca4a130c7626620f8d5c5841cd6be95bdb1e75' // init code hash
             ))));
     }
 

@@ -421,16 +421,6 @@ contract NimbusPair is INimbusPair, NimbusERC20 {
     function sync() external override lock {
         _update(IERC20(token0).balanceOf(address(this)), IERC20(token1).balanceOf(address(this)), reserve0, reserve1);
     }
-
-    /*
-    function getHash() pure external returns (bytes32) { 
-        bytes memory bytecode = type(NimbusPair).creationCode;
-        return keccak256(abi.encodePacked(bytecode));
-    }
-
-    function getHash1() pure external returns (bytes memory) { 
-        return type(NimbusPair).creationCode;
-    } */
 }
 
 
@@ -481,13 +471,4 @@ contract NimbusFactory is INimbusFactory {
         require(msg.sender == feeToSetter, 'Nimbus: FORBIDDEN');
         nimbusReferralProgram = _nimbusReferralProgram;
     }
-
-    /* function getHash() pure external returns (bytes32) { 
-        bytes memory bytecode = type(NimbusPair).creationCode;
-        return keccak256(abi.encodePacked(bytecode));
-    }
-
-    function getHash1() pure external returns (bytes memory) { 
-        return type(NimbusPair).creationCode;
-    } */
 }
