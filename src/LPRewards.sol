@@ -126,7 +126,7 @@ contract LPReward is Ownable {
     
     function recordAddLiquidity(address recipient, address pair, uint amountA, uint amountB, uint liquidity) external onlyRouter {
         if (!allowedPairs[pair]) return;
-        uint ratio = Math.sqrt(amountA.mul(amountB)) * 1e18 / liquidity;   
+        uint ratio = Math.sqrt(amountA.mul(amountB)).mul(1e18) / liquidity;   
         uint previousRatio = weightedRatio[recipient][pair];
         if (ratio < previousRatio) {
             return;
@@ -146,29 +146,25 @@ contract LPReward is Ownable {
         uint amount0;
         uint amount1;
         {
-        uint ratio = Math.sqrt(amountA.mul(amountB)) * 1e18 / liquidity;   
+        uint ratio = Math.sqrt(amountA.mul(amountB)).mul(1e18) / liquidity;   
         uint previousRatio = weightedRatio[recipient][pair];
-        if (previousRatio != 0 && ratio < previousRatio) return;
+        if (previousRatio == 0 || (previousRatio != 0 && ratio < previousRatio)) return;
         uint difference = ratio.sub(previousRatio);
         uint previousAmount = lpTokenAmounts[recipient][pair];
         weightedRatio[recipient][pair] = (previousRatio.mul(previousAmount.sub(liquidity)) / previousAmount).add(ratio.mul(liquidity) / previousAmount);    
         lpTokenAmounts[recipient][pair] = previousAmount.sub(liquidity);
-        amount0 = amountA * difference / 1e18;
-        amount1 = amountB * difference / 1e18; 
+        amount0 = amountA.mul(difference) / 1e18;
+        amount1 = amountB.mul(difference) / 1e18; 
         }
 
         uint amountNbu;
-        if (tokenA != NBU) {
+        if (tokenA != NBU && tokenB != NBU) {
             address tokenToNbuPair = swapFactory.getPair(tokenA, NBU);
             if (tokenToNbuPair != address(0)) {
                 amountNbu = INimbusRouter(swapRouter).getAmountsOut(amount0, getPathForToken(tokenA))[1];
             }
-        } else {
-            amountNbu = amount0;
-        }
-        
-        if (tokenB != NBU) {
-            address tokenToNbuPair = swapFactory.getPair(tokenB, NBU);
+
+            tokenToNbuPair = swapFactory.getPair(tokenB, NBU);
             if (tokenToNbuPair != address(0)) {
                 if (amountNbu != 0) {
                     amountNbu = amountNbu.add(INimbusRouter(swapRouter).getAmountsOut(amount1, getPathForToken(tokenB))[1]);
@@ -179,14 +175,14 @@ contract LPReward is Ownable {
                 amountNbu = amountNbu.mul(2);
             }
         } else {
-            if (amountNbu != 0) { 
-                amountNbu = amountNbu.add(amount1);
+            if (tokenA == NBU) { 
+                amountNbu = amount0.mul(2);
             } else {
                 amountNbu = amount1.mul(2);
             }
         }
-
-        if (amountNbu != 0 && amountNbu >= availableReward()) {
+        
+        if (amountNbu != 0 && amountNbu <= availableReward()) {
             INBU(NBU).give(recipient, amountNbu, 2);
             lpRewardUsed = lpRewardUsed.add(amountNbu);
             emit RecordRemoveLiquidityGiveNbu(recipient, pair, amountNbu, amountA, amountB, liquidity);            
@@ -228,7 +224,7 @@ contract LPReward is Ownable {
 
         uint amountNbu = nbuAmountForPair(pair, amountA, amountB);
         require (amountNbu > 0, "LPReward: No NBU pairs to token A and token B");
-        require (amountNbu >= availableReward(), "LPReward: Available reward for the period is used");
+        require (amountNbu <= availableReward(), "LPReward: Available reward for the period is used");
         
         INBU(NBU).give(recipient, amountNbu, 2);
         lpRewardUsed = lpRewardUsed.add(amountNbu);
