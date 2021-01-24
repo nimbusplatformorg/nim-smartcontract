@@ -151,6 +151,7 @@ contract LPReward is Ownable {
         if (previousRatio == 0 || (previousRatio != 0 && ratio < previousRatio)) return;
         uint difference = ratio.sub(previousRatio);
         uint previousAmount = lpTokenAmounts[recipient][pair];
+        if (previousAmount < liquidity) return;
         weightedRatio[recipient][pair] = (previousRatio.mul(previousAmount.sub(liquidity)) / previousAmount).add(ratio.mul(liquidity) / previousAmount);    
         lpTokenAmounts[recipient][pair] = previousAmount.sub(liquidity);
         amount0 = amountA.mul(difference) / 1e18;
