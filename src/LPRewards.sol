@@ -282,7 +282,7 @@ contract LPReward is Ownable {
             } else {
                 amountNbu = amountNbu.mul(2);
             }
-        } else if (amountNbu != 0) {
+        } else if (tokenA == NBU) {
             amountNbu = amountA.mul(2);
         } else {
             amountNbu = amountB.mul(2);
