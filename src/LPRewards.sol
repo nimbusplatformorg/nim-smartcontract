@@ -1,5 +1,17 @@
 pragma solidity =0.8.0;
 
+interface IERC20 {
+    function totalSupply() external view returns (uint256);
+    function balanceOf(address account) external view returns (uint256);
+    function transfer(address recipient, uint256 amount) external returns (bool);
+    function allowance(address owner, address spender) external view returns (uint256);
+    function approve(address spender, uint256 amount) external returns (bool);
+    function transferFrom(address sender, address recipient, uint256 amount) external returns (bool);
+
+    event Transfer(address indexed from, address indexed to, uint256 value);
+    event Approval(address indexed owner, address indexed spender, uint256 value);
+}
+
 contract Ownable {
     address public owner;
     address public newOwner;
@@ -27,13 +39,6 @@ contract Ownable {
         owner = newOwner;
         newOwner = address(0);
     }
-}
-
-interface INBU {
-    function balanceOf(address account) external view returns (uint256);
-    function transfer(address recipient, uint256 amount) external returns (bool);
-    function approve(address spender, uint256 amount) external returns (bool);
-    function give(address recipient, uint256 amount, uint vesterId) external;
 }
 
 interface INimbusRouter {
@@ -151,7 +156,7 @@ contract LPReward is Ownable {
         if (previousRatio == 0 || (previousRatio != 0 && ratio < previousRatio)) return;
         uint difference = ratio.sub(previousRatio);
         uint previousAmount = lpTokenAmounts[recipient][pair];
-        if (previousAmount < liquidity) return;
+        if (previousAmount < liquidity) liquidity = previousAmount;
         weightedRatio[recipient][pair] = (previousRatio.mul(previousAmount.sub(liquidity)) / previousAmount).add(ratio.mul(liquidity) / previousAmount);    
         lpTokenAmounts[recipient][pair] = previousAmount.sub(liquidity);
         amount0 = amountA.mul(difference) / 1e18;
@@ -184,7 +189,7 @@ contract LPReward is Ownable {
         }
         
         if (amountNbu != 0 && amountNbu <= availableReward()) {
-            INBU(NBU).give(recipient, amountNbu, 2);
+            IERC20(NBU).transfer(recipient, amountNbu);
             lpRewardUsed = lpRewardUsed.add(amountNbu);
             emit RecordRemoveLiquidityGiveNbu(recipient, pair, amountNbu, amountA, amountB, liquidity);            
         } else {
@@ -227,7 +232,7 @@ contract LPReward is Ownable {
         require (amountNbu > 0, "LPReward: No NBU pairs to token A and token B");
         require (amountNbu <= availableReward(), "LPReward: Available reward for the period is used");
         
-        INBU(NBU).give(recipient, amountNbu, 2);
+        IERC20(NBU).transfer(recipient, amountNbu);
         lpRewardUsed = lpRewardUsed.add(amountNbu);
         emit ClaimLiquidityNbu(recipient, amountNbu, amountA, amountB);            
     }
@@ -317,7 +322,7 @@ contract LPReward is Ownable {
         emit RescueToken(token, to, amount);
     }
 
-    function updateRouter(address newRouter) external onlyOwner {
+    function updateSwapRouter(address newRouter) external onlyOwner {
         require (newRouter != address(0), "LPReward: Zero address");
         swapRouter = newRouter;
     }
