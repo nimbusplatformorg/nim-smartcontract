@@ -185,11 +185,9 @@ contract LPReward is Ownable {
         } else {
             amountNbu = amount1.mul(2);
         }
-        }
         
-        IERC20 nbu = IERC20(NBU);
-        if (amountNbu != 0 && amountNbu <= availableReward() && nbu.balanceOf(address(this)) >= amountNbu) {
-            nbu.transfer(recipient, amountNbu);
+        if (amountNbu != 0 && amountNbu <= availableReward() && IERC20(NBU).balanceOf(address(this)) >= amountNbu) {
+            IERC20(NBU).transfer(recipient, amountNbu);
             lpRewardUsed = lpRewardUsed.add(amountNbu);
             emit RecordRemoveLiquidityGiveNbu(recipient, pair, amountNbu, amountA, amountB, liquidity);            
         } else {
