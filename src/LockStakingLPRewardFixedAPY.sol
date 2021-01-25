@@ -3,6 +3,7 @@ pragma solidity =0.8.0;
 interface IERC20 {
     function totalSupply() external view returns (uint256);
     function balanceOf(address account) external view returns (uint256);
+    function decimals() external pure returns (uint);
     function transfer(address recipient, uint256 amount) external returns (bool);
     function allowance(address owner, address spender) external view returns (uint256);
     function approve(address spender, uint256 amount) external returns (bool);
@@ -211,6 +212,9 @@ contract LockStakingLPRewardFixedAPY is ILockStakingRewards, ReentrancyGuard, Ow
     mapping(address => uint256) public stakeNonces;
 
     uint256 private _totalSupply;
+    uint256 private _totalSupplyRewardEquivalent;
+    uint256 private immutable _tokenADecimalCompensate;
+    uint256 private immutable _tokenBDecimalCompensate;
     mapping(address => uint256) private _balances;
     mapping(address => uint256) private _balancesRewardEquivalent;
 
@@ -237,10 +241,25 @@ contract LockStakingLPRewardFixedAPY is ILockStakingRewards, ReentrancyGuard, Ow
         lockDuration = _lockDuration;
         lPPairTokenA = _lPPairTokenA;
         lPPairTokenB = _lPPairTokenB;
+        uint tokenADecimals = IERC20(_lPPairTokenA).decimals();
+        require(tokenADecimals >= 6, "LockStakingLPRewardFixedAPY: small amount of decimals");
+        _tokenADecimalCompensate = tokenADecimals.sub(6);
+        uint tokenBDecimals = IERC20(_lPPairTokenB).decimals();
+        require(tokenBDecimals >= 6, "LockStakingLPRewardFixedAPY: small amount of decimals");
+        _tokenBDecimalCompensate = tokenBDecimals.sub(6);
     }
 
     function totalSupply() external view override returns (uint256) {
         return _totalSupply;
+    }
+
+    function totalSupplyRewardEquivalent() external view returns (uint256) {
+        return _totalSupplyRewardEquivalent;
+    }
+
+    function getDecimalPriceCalculationCompensate() external view returns (uint tokenADecimalCompensate, uint tokenBDecimalCompensate) { 
+        tokenADecimalCompensate = _tokenADecimalCompensate;
+        tokenBDecimalCompensate = _tokenBDecimalCompensate;
     }
 
     function balanceOf(address account) external view override returns (uint256) {
@@ -277,6 +296,7 @@ contract LockStakingLPRewardFixedAPY is ILockStakingRewards, ReentrancyGuard, Ow
         uint amountRewardEquivalent = getCurrentLPPrice().mul(amount) / 10 ** 18;
 
         _totalSupply = _totalSupply.add(amount);
+        _totalSupplyRewardEquivalent = _totalSupplyRewardEquivalent.add(amountRewardEquivalent);
         uint previousAmount = _balances[user];
         uint newAmount = previousAmount.add(amount);
         weightedStakeDate[user] = (weightedStakeDate[user].mul(previousAmount) / newAmount).add(block.timestamp.mul(amount) / newAmount);
@@ -299,6 +319,7 @@ contract LockStakingLPRewardFixedAPY is ILockStakingRewards, ReentrancyGuard, Ow
         uint amount = stakeAmounts[msg.sender][nonce];
         uint amountRewardEquivalent = stakeAmountsRewardEquivalent[msg.sender][nonce];
         _totalSupply = _totalSupply.sub(amount);
+        _totalSupplyRewardEquivalent = _totalSupplyRewardEquivalent.sub(amountRewardEquivalent);
         _balances[msg.sender] = _balances[msg.sender].sub(amount);
         _balancesRewardEquivalent[msg.sender] = _balancesRewardEquivalent[msg.sender].sub(amountRewardEquivalent);
         IERC20(stakingLPToken).safeTransfer(msg.sender, amount);
@@ -330,17 +351,21 @@ contract LockStakingLPRewardFixedAPY is ILockStakingRewards, ReentrancyGuard, Ow
         path[1] = address(rewardToken);
 
         if (lPPairTokenA != rewardToken) {
-            path[0] = lPPairTokenA;            
+            path[0] = lPPairTokenA;
             tokenAToRewardPrice = swapRouter.getAmountsOut(10 ** 6, path)[1];
+            if (_tokenADecimalCompensate > 0) 
+                tokenAToRewardPrice = tokenAToRewardPrice.mul(10 ** _tokenADecimalCompensate);
         } else {
             tokenAToRewardPrice = 10 ** 18;
         }
         
         if (lPPairTokenB != rewardToken) {
-            path[0] = lPPairTokenB;            
+            path[0] = lPPairTokenB;  
             tokenBToRewardPrice = swapRouter.getAmountsOut(10 ** 6, path)[1];
+            if (_tokenBDecimalCompensate > 0)
+                tokenBToRewardPrice = tokenBToRewardPrice.mul(10 ** _tokenBDecimalCompensate);
         } else {
-            tokenBToRewardPrice = 10 ** 18; //works
+            tokenBToRewardPrice = 10 ** 18;
         }
 
         uint totalLpSupply = IERC20(stakingLPToken).totalSupply();
