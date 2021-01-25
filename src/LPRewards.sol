@@ -180,16 +180,16 @@ contract LPReward is Ownable {
             } else {
                 amountNbu = amountNbu.mul(2);
             }
+        } else if (tokenA == NBU) { 
+            amountNbu = amount0.mul(2);
         } else {
-            if (tokenA == NBU) { 
-                amountNbu = amount0.mul(2);
-            } else {
-                amountNbu = amount1.mul(2);
-            }
+            amountNbu = amount1.mul(2);
+        }
         }
         
-        if (amountNbu != 0 && amountNbu <= availableReward()) {
-            IERC20(NBU).transfer(recipient, amountNbu);
+        IERC20 nbu = IERC20(NBU);
+        if (amountNbu != 0 && amountNbu <= availableReward() && nbu.balanceOf(address(this)) >= amountNbu) {
+            nbu.transfer(recipient, amountNbu);
             lpRewardUsed = lpRewardUsed.add(amountNbu);
             emit RecordRemoveLiquidityGiveNbu(recipient, pair, amountNbu, amountA, amountB, liquidity);            
         } else {
@@ -266,17 +266,13 @@ contract LPReward is Ownable {
     function nbuAmountForPair(address pair, uint amountA, uint amountB) private view returns (uint amountNbu) {
         address tokenA = pairTokens[pair][0];
         address tokenB = pairTokens[pair][1];
-        if (tokenA != NBU) {
+        if (tokenA != NBU && tokenB != NBU) {
             address tokenToNbuPair = swapFactory.getPair(tokenA, NBU);
             if (tokenToNbuPair != address(0)) {
                 amountNbu = INimbusRouter(swapRouter).getAmountsOut(amountA, getPathForToken(tokenA))[1];
             }
-        } else {
-            amountNbu = amountA;
-        }
 
-        if (tokenB != NBU) {
-            address tokenToNbuPair = swapFactory.getPair(tokenB, NBU);
+            tokenToNbuPair = swapFactory.getPair(tokenB, NBU);
             if (tokenToNbuPair != address(0)) {
                 if (amountNbu != 0) {
                     amountNbu = amountNbu.add(INimbusRouter(swapRouter).getAmountsOut(amountB, getPathForToken(tokenB))[1]);
@@ -286,12 +282,10 @@ contract LPReward is Ownable {
             } else {
                 amountNbu = amountNbu.mul(2);
             }
+        } else if (amountNbu != 0) {
+            amountNbu = amountA.mul(2);
         } else {
-            if (amountNbu != 0) {
-                amountNbu = amountNbu.add(amountB);
-            } else {
-                amountNbu = amountB.mul(2);
-            }
+            amountNbu = amountB.mul(2);
         }
     }
 
