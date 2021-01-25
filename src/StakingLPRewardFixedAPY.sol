@@ -3,6 +3,7 @@ pragma solidity =0.8.0;
 interface IERC20 {
     function totalSupply() external view returns (uint256);
     function balanceOf(address account) external view returns (uint256);
+    function decimals() external pure returns (uint);
     function transfer(address recipient, uint256 amount) external returns (bool);
     function allowance(address owner, address spender) external view returns (uint256);
     function approve(address spender, uint256 amount) external returns (bool);
@@ -222,6 +223,8 @@ contract StakingLPRewardFixedAPY is IStakingRewards, ReentrancyGuard, Ownable {
 
     uint256 private _totalSupply;
     uint256 private _totalSupplyRewardEquivalent;
+    uint256 private immutable _tokenADecimalCompensate;
+    uint256 private immutable _tokenBDecimalCompensate;
     mapping(address => uint256) private _balances;
     mapping(address => uint256) private _balancesRewardEquivalent;
 
@@ -229,8 +232,8 @@ contract StakingLPRewardFixedAPY is IStakingRewards, ReentrancyGuard, Ownable {
     event Staked(address indexed user, uint256 amount);
     event Withdrawn(address indexed user, uint256 amount);
     event RewardPaid(address indexed user, uint256 reward);
-    event Rescue(address to, uint amount);
-    event RescueToken(address to, address token, uint amount);
+    event Rescue(address to, uint256 amount);
+    event RescueToken(address to, address token, uint256 amount);
 
     constructor(
         address _rewardsToken,
@@ -246,6 +249,12 @@ contract StakingLPRewardFixedAPY is IStakingRewards, ReentrancyGuard, Ownable {
         rewardRate = _rewardRate;
         lPPairTokenA = _lPPairTokenA;
         lPPairTokenB = _lPPairTokenB;
+        uint tokenADecimals = IERC20(_lPPairTokenA).decimals();
+        require(tokenADecimals >= 6, "StakingLPRewardFixedAPY: small amount of decimals");
+        _tokenADecimalCompensate = tokenADecimals.sub(6);
+        uint tokenBDecimals = IERC20(_lPPairTokenB).decimals();
+        require(tokenBDecimals >= 6, "StakingLPRewardFixedAPY: small amount of decimals");
+        _tokenBDecimalCompensate = tokenBDecimals.sub(6);
     }
 
     function totalSupply() external view override returns (uint256) {
@@ -254,6 +263,11 @@ contract StakingLPRewardFixedAPY is IStakingRewards, ReentrancyGuard, Ownable {
 
     function totalSupplyRewardEquivalent() external view returns (uint256) {
         return _totalSupplyRewardEquivalent;
+    }
+
+    function getDecimalPriceCalculationCompensate() external view returns (uint tokenADecimalCompensate, uint tokenBDecimalCompensate) { 
+        tokenADecimalCompensate = _tokenADecimalCompensate;
+        tokenBDecimalCompensate = _tokenBDecimalCompensate;
     }
 
     function balanceOf(address account) external view override returns (uint256) {
@@ -343,17 +357,21 @@ contract StakingLPRewardFixedAPY is IStakingRewards, ReentrancyGuard, Ownable {
         path[1] = address(rewardToken);
 
         if (lPPairTokenA != rewardToken) {
-            path[0] = lPPairTokenA;            
+            path[0] = lPPairTokenA;
             tokenAToRewardPrice = swapRouter.getAmountsOut(10 ** 6, path)[1];
+            if (_tokenADecimalCompensate > 0) 
+                tokenAToRewardPrice = tokenAToRewardPrice.mul(10 ** _tokenADecimalCompensate);
         } else {
             tokenAToRewardPrice = 10 ** 18;
         }
         
         if (lPPairTokenB != rewardToken) {
-            path[0] = lPPairTokenB;            
+            path[0] = lPPairTokenB;
             tokenBToRewardPrice = swapRouter.getAmountsOut(10 ** 6, path)[1];
+            if (_tokenBDecimalCompensate > 0)
+                tokenBToRewardPrice = tokenBToRewardPrice.mul(10 ** _tokenBDecimalCompensate);
         } else {
-            tokenBToRewardPrice = 10 ** 18; //works
+            tokenBToRewardPrice = 10 ** 18;
         }
 
         uint totalLpSupply = IERC20(stakingLPToken).totalSupply();
