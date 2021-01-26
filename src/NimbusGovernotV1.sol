@@ -122,6 +122,7 @@ contract NimbusGovernorV1 {
         proposals[id].signatures = signatures;
         proposals[id].calldatas = calldatas;
         proposals[id].startBlock = startBlock;
+        proposals[id].endBlock = endBlock;
 
         latestProposalIds[msg.sender] = id;
 
@@ -277,9 +278,7 @@ contract NimbusGovernorV1 {
         return a - b;
     }
 
-    function getChainId() internal pure returns (uint) {
-        uint chainId;
-        assembly { chainId := chainid() }
-        return chainId;
+    function getChainId() internal view returns (uint) {
+        return block.chainid;
     }
 }
