@@ -390,15 +390,17 @@ contract NimbusPair is INimbusPair, NimbusERC20 {
             uint refFee = amount0In.mul(3)/ 1994;
             _safeTransfer(_token0, referralProgram, refFee);
             INimbusReferralProgram(referralProgram).recordFee(_token0, to, refFee);
+            balance0 = balance0.sub(refFee);
         } 
         if (amount1In > 0) {
             uint refFee = amount1In.mul(3) / 1994;
             address _token1 = token1;
             _safeTransfer(_token1, referralProgram, refFee);
             INimbusReferralProgram(referralProgram).recordFee(_token1, to, refFee);
+            balance1 = balance1.sub(refFee);
+        }
         }
         
-        }
         { // scope for reserve{0,1}Adjusted, avoids stack too deep errors
         uint balance0Adjusted = balance0.mul(10000).sub(amount0In.mul(15));
         uint balance1Adjusted = balance1.mul(10000).sub(amount1In.mul(15));
