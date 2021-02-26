@@ -211,7 +211,7 @@ contract LPReward is Ownable {
         ratioUpdateLast[recipient][pair] = block.timestamp;
     }
     
-    function claimBonusBatch(address[] memory pairs, address recipient) external lock {
+    function claimBonusBatch(address[] memory pairs, address recipient) external {
         for (uint i; i < pairs.length; i++) {
             claimBonus(pairs[i],recipient);
         }
