@@ -387,13 +387,13 @@ contract NimbusPair is INimbusPair, NimbusERC20 {
         address referralProgram = INimbusFactory(factory).nimbusReferralProgram();
         if (amount0In > 0) {
             address _token0 = token0;
-            uint refFee = amount0In.mul(3)/ 1994;
+            uint refFee = amount0In.mul(3)/ 2000;
             _safeTransfer(_token0, referralProgram, refFee);
             INimbusReferralProgram(referralProgram).recordFee(_token0, to, refFee);
             balance0 = balance0.sub(refFee);
         } 
         if (amount1In > 0) {
-            uint refFee = amount1In.mul(3) / 1994;
+            uint refFee = amount1In.mul(3) / 2000;
             address _token1 = token1;
             _safeTransfer(_token1, referralProgram, refFee);
             INimbusReferralProgram(referralProgram).recordFee(_token1, to, refFee);
@@ -404,7 +404,7 @@ contract NimbusPair is INimbusPair, NimbusERC20 {
         { // scope for reserve{0,1}Adjusted, avoids stack too deep errors
         uint balance0Adjusted = balance0.mul(10000).sub(amount0In.mul(15));
         uint balance1Adjusted = balance1.mul(10000).sub(amount1In.mul(15));
-        require(balance0Adjusted.mul(balance1Adjusted) >= uint(_reserve0).mul(_reserve1).mul(1000**2), 'Nimbus: K');
+        require(balance0Adjusted.mul(balance1Adjusted) >= uint(_reserve0).mul(_reserve1).mul(10000**2), 'Nimbus: K');
         }
 
         _update(balance0, balance1, _reserve0, _reserve1);
