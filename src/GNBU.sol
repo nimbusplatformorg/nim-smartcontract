@@ -1,10 +1,10 @@
 pragma solidity =0.8.0;
 
 // ----------------------------------------------------------------------------
-// ZZZ token main contract (2020)
+// GNBU token main contract (2021)
 //
-// Symbol       : ZZZ
-// Name         : ZZZ
+// Symbol       : GNBU
+// Name         : Nimbus Governance Token
 // Total supply : 100.000.000 (burnable)
 // Decimals     : 18
 // ----------------------------------------------------------------------------
@@ -80,11 +80,11 @@ contract Pausable is Ownable {
     }
 }
 
-contract ZZZ is Ownable, Pausable {
-    string public constant name = "ZZZ";
-    string public constant symbol = "ZZZ";
+contract GNBU is Ownable, Pausable {
+    string public constant name = "Nimbus Governance Token";
+    string public constant symbol = "GNBU";
     uint8 public constant decimals = 18;
-    uint96 public totalSupply = 100_000_000e18; // 100 million ZZZ
+    uint96 public totalSupply = 100_000_000e18; // 100 million GNBU
     mapping (address => mapping (address => uint96)) internal allowances;
 
     mapping (address => uint96) private _unfrozenBalances;
@@ -126,9 +126,9 @@ contract ZZZ is Ownable, Pausable {
     function freeCirculation() external view returns (uint) {
         uint96 systemAmount = _unfrozenBalances[owner];
         for (uint i; i < supportUnits.length; i++) {
-            systemAmount = add96(systemAmount, _unfrozenBalances[supportUnits[i]], "ZZZ::freeCirculation: adding overflow");
+            systemAmount = add96(systemAmount, _unfrozenBalances[supportUnits[i]], "GNBU::freeCirculation: adding overflow");
         }
-        return sub96(totalSupply, systemAmount, "ZZZ::freeCirculation: amount exceed totalSupply");
+        return sub96(totalSupply, systemAmount, "GNBU::freeCirculation: amount exceed totalSupply");
     }
     
     function allowance(address account, address spender) external view returns (uint) {
@@ -140,7 +140,7 @@ contract ZZZ is Ownable, Pausable {
         if (rawAmount == uint(2 ** 256 - 1)) {
             amount = uint96(2 ** 96 - 1);
         } else {
-            amount = safe96(rawAmount, "ZZZ::approve: amount exceeds 96 bits");
+            amount = safe96(rawAmount, "GNBU::approve: amount exceeds 96 bits");
         }
 
         allowances[msg.sender][spender] = amount;
@@ -154,16 +154,16 @@ contract ZZZ is Ownable, Pausable {
         if (rawAmount == uint(2 ** 256 - 1)) {
             amount = uint96(2 ** 96 - 1);
         } else {
-            amount = safe96(rawAmount, "ZZZ::permit: amount exceeds 96 bits");
+            amount = safe96(rawAmount, "GNBU::permit: amount exceeds 96 bits");
         }
 
         bytes32 domainSeparator = keccak256(abi.encode(DOMAIN_TYPEHASH, keccak256(bytes(name)), getChainId(), address(this)));
         bytes32 structHash = keccak256(abi.encode(PERMIT_TYPEHASH, owner, spender, rawAmount, nonces[owner]++, deadline));
         bytes32 digest = keccak256(abi.encodePacked("\x19\x01", domainSeparator, structHash));
         address signatory = ecrecover(digest, v, r, s);
-        require(signatory != address(0), "ZZZ::permit: invalid signature");
-        require(signatory == owner, "ZZZ::permit: unauthorized");
-        require(block.timestamp <= deadline, "ZZZ::permit: signature expired");
+        require(signatory != address(0), "GNBU::permit: invalid signature");
+        require(signatory == owner, "GNBU::permit: unauthorized");
+        require(block.timestamp <= deadline, "GNBU::permit: signature expired");
 
         allowances[owner][spender] = amount;
 
@@ -174,8 +174,8 @@ contract ZZZ is Ownable, Pausable {
         uint96 amount = _unfrozenBalances[account];
         if (_vestingNonces[account] == 0) return amount;
         for (uint32 i = 1; i <= _vestingNonces[account]; i++) {
-            uint96 unvested = sub96(_vestingAmounts[account][i], _unvestedAmounts[account][i], "ZZZ::balanceOf: unvested exceed vested amount");
-            amount = add96(amount, unvested, "ZZZ::balanceOf: overflow");
+            uint96 unvested = sub96(_vestingAmounts[account][i], _unvestedAmounts[account][i], "GNBU::balanceOf: unvested exceed vested amount");
+            amount = add96(amount, unvested, "GNBU::balanceOf: overflow");
         }
         return amount;
     }
@@ -209,7 +209,7 @@ contract ZZZ is Ownable, Pausable {
     }
     
     function transfer(address dst, uint rawAmount) external whenNotPaused returns (bool) {
-        uint96 amount = safe96(rawAmount, "ZZZ::transfer: amount exceeds 96 bits");
+        uint96 amount = safe96(rawAmount, "GNBU::transfer: amount exceeds 96 bits");
         _transferTokens(msg.sender, dst, amount);
         return true;
     }
@@ -217,10 +217,10 @@ contract ZZZ is Ownable, Pausable {
     function transferFrom(address src, address dst, uint rawAmount) external whenNotPaused returns (bool) {
         address spender = msg.sender;
         uint96 spenderAllowance = allowances[src][spender];
-        uint96 amount = safe96(rawAmount, "ZZZ::approve: amount exceeds 96 bits");
+        uint96 amount = safe96(rawAmount, "GNBU::approve: amount exceeds 96 bits");
 
         if (spender != src && spenderAllowance != uint96(2 ** 96 - 1)) {
-            uint96 newAllowance = sub96(spenderAllowance, amount, "ZZZ::transferFrom: transfer amount exceeds spender allowance");
+            uint96 newAllowance = sub96(spenderAllowance, amount, "GNBU::transferFrom: transfer amount exceeds spender allowance");
             allowances[src][spender] = newAllowance;
 
             emit Approval(src, spender, newAllowance);
@@ -239,14 +239,14 @@ contract ZZZ is Ownable, Pausable {
         bytes32 structHash = keccak256(abi.encode(DELEGATION_TYPEHASH, delegatee, nonce, expiry));
         bytes32 digest = keccak256(abi.encodePacked("\x19\x01", domainSeparator, structHash));
         address signatory = ecrecover(digest, v, r, s);
-        require(signatory != address(0), "ZZZ::delegateBySig: invalid signature");
-        require(nonce == nonces[signatory]++, "ZZZ::delegateBySig: invalid nonce");
-        require(block.timestamp <= expiry, "ZZZ::delegateBySig: signature expired");
+        require(signatory != address(0), "GNBU::delegateBySig: invalid signature");
+        require(nonce == nonces[signatory]++, "GNBU::delegateBySig: invalid nonce");
+        require(block.timestamp <= expiry, "GNBU::delegateBySig: signature expired");
         return _delegate(signatory, delegatee);
     }
 
     function unvest() external whenNotPaused returns (uint96 unvested) {
-        require (_vestingNonces[msg.sender] > 0, "ZZZ::unvest:No vested amount");
+        require (_vestingNonces[msg.sender] > 0, "GNBU::unvest:No vested amount");
         for (uint32 i = 1; i <= _vestingNonces[msg.sender]; i++) {
             if (_vestingAmounts[msg.sender][i] == _unvestedAmounts[msg.sender][i]) continue;
             if (_vestingReleaseStartDates[msg.sender][i] > block.timestamp) break;
@@ -255,11 +255,11 @@ contract ZZZ is Ownable, Pausable {
                 toUnvest = _vestingAmounts[msg.sender][i];
             } 
             uint96 totalUnvestedForNonce = toUnvest;
-            toUnvest = sub96(toUnvest, _unvestedAmounts[msg.sender][i], "ZZZ::unvest: already unvested amount exceeds toUnvest");
-            unvested = add96(unvested, toUnvest, "ZZZ::unvest: adding overflow");
+            toUnvest = sub96(toUnvest, _unvestedAmounts[msg.sender][i], "GNBU::unvest: already unvested amount exceeds toUnvest");
+            unvested = add96(unvested, toUnvest, "GNBU::unvest: adding overflow");
             _unvestedAmounts[msg.sender][i] = totalUnvestedForNonce;
         }
-        _unfrozenBalances[msg.sender] = add96(_unfrozenBalances[msg.sender], unvested, "ZZZ::unvest: adding overflow");
+        _unfrozenBalances[msg.sender] = add96(_unfrozenBalances[msg.sender], unvested, "GNBU::unvest: adding overflow");
         emit Unvest(msg.sender, unvested);
     }
     
@@ -269,7 +269,7 @@ contract ZZZ is Ownable, Pausable {
     }
     
     function getPriorVotes(address account, uint blockNumber) public view returns (uint96) {
-        require(blockNumber < block.number, "ZZZ::getPriorVotes: not yet determined");
+        require(blockNumber < block.number, "GNBU::getPriorVotes: not yet determined");
 
         uint32 nCheckpoints = numCheckpoints[account];
         if (nCheckpoints == 0) {
@@ -313,11 +313,11 @@ contract ZZZ is Ownable, Pausable {
     }
 
     function _transferTokens(address src, address dst, uint96 amount) internal {
-        require(src != address(0), "ZZZ::_transferTokens: cannot transfer from the zero address");
-        require(dst != address(0), "ZZZ::_transferTokens: cannot transfer to the zero address");
+        require(src != address(0), "GNBU::_transferTokens: cannot transfer from the zero address");
+        require(dst != address(0), "GNBU::_transferTokens: cannot transfer to the zero address");
 
-        _unfrozenBalances[src] = sub96(_unfrozenBalances[src], amount, "ZZZ::_transferTokens: transfer amount exceeds balance");
-        _unfrozenBalances[dst] = add96(_unfrozenBalances[dst], amount, "ZZZ::_transferTokens: transfer amount overflows");
+        _unfrozenBalances[src] = sub96(_unfrozenBalances[src], amount, "GNBU::_transferTokens: transfer amount exceeds balance");
+        _unfrozenBalances[dst] = add96(_unfrozenBalances[dst], amount, "GNBU::_transferTokens: transfer amount overflows");
         emit Transfer(src, dst, amount);
 
         _moveDelegates(delegates[src], delegates[dst], amount);
@@ -328,21 +328,21 @@ contract ZZZ is Ownable, Pausable {
             if (srcRep != address(0)) {
                 uint32 srcRepNum = numCheckpoints[srcRep];
                 uint96 srcRepOld = srcRepNum > 0 ? checkpoints[srcRep][srcRepNum - 1].votes : 0;
-                uint96 srcRepNew = sub96(srcRepOld, amount, "ZZZ::_moveVotes: vote amount underflows");
+                uint96 srcRepNew = sub96(srcRepOld, amount, "GNBU::_moveVotes: vote amount underflows");
                 _writeCheckpoint(srcRep, srcRepNum, srcRepOld, srcRepNew);
             }
 
             if (dstRep != address(0)) {
                 uint32 dstRepNum = numCheckpoints[dstRep];
                 uint96 dstRepOld = dstRepNum > 0 ? checkpoints[dstRep][dstRepNum - 1].votes : 0;
-                uint96 dstRepNew = add96(dstRepOld, amount, "ZZZ::_moveVotes: vote amount overflows");
+                uint96 dstRepNew = add96(dstRepOld, amount, "GNBU::_moveVotes: vote amount overflows");
                 _writeCheckpoint(dstRep, dstRepNum, dstRepOld, dstRepNew);
             }
         }
     }
     
     function _writeCheckpoint(address delegatee, uint32 nCheckpoints, uint96 oldVotes, uint96 newVotes) internal {
-      uint32 blockNumber = safe32(block.number, "ZZZ::_writeCheckpoint: block number exceeds 32 bits");
+      uint32 blockNumber = safe32(block.number, "GNBU::_writeCheckpoint: block number exceeds 32 bits");
 
       if (nCheckpoints > 0 && checkpoints[delegatee][nCheckpoints - 1].fromBlock == blockNumber) {
           checkpoints[delegatee][nCheckpoints - 1].votes = newVotes;
@@ -358,24 +358,24 @@ contract ZZZ is Ownable, Pausable {
         uint32 nonce = ++_vestingNonces[user];
         _vestingAmounts[user][nonce] = amount;
         _vestingReleaseStartDates[user][nonce] = block.timestamp + vestingFirstPeriod;
-        _unfrozenBalances[owner] = sub96(_unfrozenBalances[owner], amount, "ZZZ::_vest: exceeds owner balance");
+        _unfrozenBalances[owner] = sub96(_unfrozenBalances[owner], amount, "GNBU::_vest: exceeds owner balance");
         emit Transfer(owner, user, amount);
     }
 
 
     
     function burnTokens(uint rawAmount) public onlyOwner returns (bool success) {
-        uint96 amount = safe96(rawAmount, "ZZZ::burnTokens: amount exceeds 96 bits");
+        uint96 amount = safe96(rawAmount, "GNBU::burnTokens: amount exceeds 96 bits");
         require(amount <= _unfrozenBalances[owner]);
-        _unfrozenBalances[owner] = sub96(_unfrozenBalances[owner], amount, "ZZZ::burnTokens: transfer amount exceeds balance");
-        totalSupply = sub96(totalSupply, amount, "ZZZ::burnTokens: transfer amount exceeds total supply");
+        _unfrozenBalances[owner] = sub96(_unfrozenBalances[owner], amount, "GNBU::burnTokens: transfer amount exceeds balance");
+        totalSupply = sub96(totalSupply, amount, "GNBU::burnTokens: transfer amount exceeds total supply");
         emit Transfer(owner, address(0), amount);
         return true;
     }
 
     function vest(address user, uint rawAmount) external {
-        require (vesters[msg.sender], "ZZZ::vest: not vester");
-        uint96 amount = safe96(rawAmount, "ZZZ::vest: amount exceeds 96 bits");
+        require (vesters[msg.sender], "GNBU::vest: not vester");
+        uint96 amount = safe96(rawAmount, "GNBU::vest: amount exceeds 96 bits");
         _vest(user, amount);
     }
     
@@ -387,10 +387,10 @@ contract ZZZ is Ownable, Pausable {
         for (uint j; j < values.length; j++) {
             sum += values[j];
         }
-        uint96 _sum = safe96(sum, "ZZZ::transfer: amount exceeds 96 bits");
-        _unfrozenBalances[owner] = sub96(_unfrozenBalances[owner], _sum, "ZZZ::_transferTokens: transfer amount exceeds balance");
+        uint96 _sum = safe96(sum, "GNBU::transfer: amount exceeds 96 bits");
+        _unfrozenBalances[owner] = sub96(_unfrozenBalances[owner], _sum, "GNBU::_transferTokens: transfer amount exceeds balance");
         for (uint i; i < to.length; i++) {
-            _unfrozenBalances[to[i]] = add96(_unfrozenBalances[to[i]], uint96(values[i]), "ZZZ::_transferTokens: transfer amount exceeds balance");
+            _unfrozenBalances[to[i]] = add96(_unfrozenBalances[to[i]], uint96(values[i]), "GNBU::_transferTokens: transfer amount exceeds balance");
             emit Transfer(owner, to[i], values[i]);
         }
         return(to.length);
@@ -403,8 +403,8 @@ contract ZZZ is Ownable, Pausable {
         for (uint j; j < values.length; j++) {
             sum += values[j];
         }
-        uint96 _sum = safe96(sum, "ZZZ::multivest: amount exceeds 96 bits");
-        _unfrozenBalances[owner] = sub96(_unfrozenBalances[owner], _sum, "ZZZ::multivest: transfer amount exceeds balance");
+        uint96 _sum = safe96(sum, "GNBU::multivest: amount exceeds 96 bits");
+        _unfrozenBalances[owner] = sub96(_unfrozenBalances[owner], _sum, "GNBU::multivest: transfer amount exceeds balance");
         for (uint i; i < to.length; i++) {
             uint32 nonce = ++_vestingNonces[to[i]];
             _vestingAmounts[to[i]][nonce] = uint96(values[i]);
@@ -433,7 +433,7 @@ contract ZZZ is Ownable, Pausable {
 
     function updateSupportUnitAdd(address newSupportUnit) external onlyOwner {
         for (uint i; i < supportUnits.length; i++) {
-            require (supportUnits[i] != newSupportUnit, "ZZZ::updateSupportUnitAdd: support unit exists");
+            require (supportUnits[i] != newSupportUnit, "GNBU::updateSupportUnitAdd: support unit exists");
         }
         supportUnits.push(newSupportUnit);
         supportUnitsCnt++;
@@ -479,17 +479,17 @@ contract ZZZ is Ownable, Pausable {
             return 0;
         }
         uint96 c = a * b;
-        require(c / a == b, "ZZZ:mul96: multiplication overflow");
+        require(c / a == b, "GNBU:mul96: multiplication overflow");
         return c;
     }
 
     function mul96(uint256 a, uint96 b) internal pure returns (uint96) {
-        uint96 _a = safe96(a, "ZZZ:mul96: amount exceeds uint96");
+        uint96 _a = safe96(a, "GNBU:mul96: amount exceeds uint96");
         if (_a == 0) {
             return 0;
         }
         uint96 c = _a * b;
-        require(c / _a == b, "ZZZ:mul96: multiplication overflow");
+        require(c / _a == b, "GNBU:mul96: multiplication overflow");
         return c;
     }
 }
