@@ -1,6 +1,6 @@
 pragma solidity =0.8.0;
 
-interface IZZZ {
+interface IGNBU {
     function getPriorVotes(address account, uint blockNumber) external view returns (uint96);
     function freeCirculation() external view returns (uint96);
 }
@@ -46,11 +46,11 @@ contract NimbusGovernorV1 {
     uint public votingDelay = 1; // 1 block
     uint public votingPeriod = 80_640; // ~14 days in blocks (assuming 15s blocks)
 
-    uint96 public quorumPercentage = 4000; // 40% from ZZZ free circulation, changeable by voting
-    uint96 public participationThresholdPercentage = 100; // 1% from ZZZ free circulation, changeable by voting
-    uint96 public proposalStakeThresholdPercentage = 10; // 0.1% from ZZZ free circulation, changeable by voting
-    uint96 public maxVoteWeightPercentage = 1000; // 10% from ZZZ free circulation, changeable by voting
-    IZZZ public immutable ZZZ;
+    uint96 public quorumPercentage = 4000; // 40% from GNBU free circulation, changeable by voting
+    uint96 public participationThresholdPercentage = 100; // 1% from GNBU free circulation, changeable by voting
+    uint96 public proposalStakeThresholdPercentage = 10; // 0.1% from GNBU free circulation, changeable by voting
+    uint96 public maxVoteWeightPercentage = 1000; // 10% from GNBU free circulation, changeable by voting
+    IGNBU public immutable GNBU;
     uint public proposalCount;
     INimbusStakingPool[] public stakingPools; 
 
@@ -66,31 +66,31 @@ contract NimbusGovernorV1 {
     event ProposalExecuted(uint id);
     event ExecuteTransaction(address indexed target, uint value, string signature,  bytes data);
 
-    constructor(address zzz, address[] memory pools) {
-        ZZZ = IZZZ(zzz);
+    constructor(address gnbu, address[] memory pools) {
+        GNBU = IGNBU(gnbu);
         for (uint i = 0; i < pools.length; i++) {
             stakingPools.push(INimbusStakingPool(pools[i]));
         }
     }
 
     function quorumVotes() public view returns (uint) { 
-        return ZZZ.freeCirculation() * quorumPercentage / 10000;
+        return GNBU.freeCirculation() * quorumPercentage / 10000;
     }
 
     function participationThreshold() public view returns (uint) { 
-        return ZZZ.freeCirculation() * participationThresholdPercentage / 10000;
+        return GNBU.freeCirculation() * participationThresholdPercentage / 10000;
     } 
 
     function proposalStakeThreshold() public view returns (uint) {
-        return ZZZ.freeCirculation() * proposalStakeThresholdPercentage / 10000;
+        return GNBU.freeCirculation() * proposalStakeThresholdPercentage / 10000;
     }
 
     function maxVoteWeight() public view returns (uint96) {
-        return ZZZ.freeCirculation() * maxVoteWeightPercentage / 10000;
+        return GNBU.freeCirculation() * maxVoteWeightPercentage / 10000;
     }
 
     function propose(address[] memory targets, uint[] memory values, string[] memory signatures, bytes[] memory calldatas, string memory description) public returns (uint) {
-        require(ZZZ.getPriorVotes(msg.sender, sub256(block.number, 1)) > participationThreshold(), "NimbusGovernorV1::propose: proposer votes below participation threshold");
+        require(GNBU.getPriorVotes(msg.sender, sub256(block.number, 1)) > participationThreshold(), "NimbusGovernorV1::propose: proposer votes below participation threshold");
         require(targets.length == values.length && targets.length == signatures.length && targets.length == calldatas.length, "NimbusGovernorV1::propose: proposal function information arity mismatch");
         require(targets.length != 0, "NimbusGovernorV1::propose: must provide actions");
         require(targets.length <= proposalMaxOperations, "NimbusGovernorV1::propose: too many actions");
@@ -157,11 +157,11 @@ contract NimbusGovernorV1 {
         require(proposalState != ProposalState.Executed, "NimbusGovernorV1::cancel: cannot cancel executed proposal");
 
         Proposal storage proposal = proposals[proposalId];
-        require(ZZZ.getPriorVotes(proposal.proposer, sub256(block.number, 1)) < participationThreshold(), "NimbusGovernorV1::cancel: proposer above threshold");
+        require(GNBU.getPriorVotes(proposal.proposer, sub256(block.number, 1)) < participationThreshold(), "NimbusGovernorV1::cancel: proposer above threshold");
 
         uint stakedAmount;
         for (uint i = 0; i < stakingPools.length; i++) {
-            stakedAmount = add256(stakedAmount, stakingPools[i].balanceOf(msg.sender));
+            stakedAmount = add256(stakedAmount, stakingPools[i].balanceOf(proposal.proposer));
         }
         require(stakedAmount < proposalStakeThreshold(), "NimbusGovernorV1::cancel: proposer above threshold");
 
@@ -214,7 +214,7 @@ contract NimbusGovernorV1 {
         Proposal storage proposal = proposals[proposalId];
         Receipt storage receipt = proposal.receipts[voter];
         require(receipt.hasVoted == false, "NimbusGovernorV1::_castVote: voter already voted");
-        uint96 votes = ZZZ.getPriorVotes(voter, proposal.startBlock);
+        uint96 votes = GNBU.getPriorVotes(voter, proposal.startBlock);
         require(votes > participationThreshold(), "NimbusGovernorV1::_castVote: voter votes below participation threshold");
 
         uint96 maxWeight = maxVoteWeight();
