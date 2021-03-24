@@ -372,7 +372,7 @@ contract ProtocolSettings is State, ProtocolSettingsEvents {
         external
         onlyOwner
     {
-        protocolTokenHeld = IERC20(nbuTokenAddress).balanceOf(address(this));;
+        protocolTokenHeld = IERC20(nbuTokenAddress).balanceOf(address(this));
     }
 
     function grantRewards(
