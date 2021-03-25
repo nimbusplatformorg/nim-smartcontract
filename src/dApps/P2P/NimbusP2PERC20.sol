@@ -166,7 +166,9 @@ contract NimbusERC20P2P_V1 {
     function state(uint tradeId) public view returns (TradeState) {
         require(tradeCount >= tradeId && tradeId > 0, "NimbusERC20P2P_V1: invalid trade id");
         Trade storage trade = trades[tradeId];
-        if (trade.status == 2 || trade.status == 3) {
+        if (trade.status == 1) {
+            return TradeState.Succeeded;
+        } else if (trade.status == 2 || trade.status == 3) {
             return TradeState(trade.status);
         } else if (trade.deadline < block.timestamp) {
             return TradeState.Overdue;
