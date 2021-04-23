@@ -1,4 +1,4 @@
-pragma solidity =0.7.6;
+pragma solidity =0.8.0;
 
 interface INimbusFactory {
     event PairCreated(address indexed token0, address indexed token1, address pair, uint);
@@ -240,12 +240,12 @@ library NimbusLibrary {
     // calculates the CREATE2 address for a pair without making any external calls
     function pairFor(address factory, address tokenA, address tokenB) internal pure returns (address pair) {
         (address token0, address token1) = sortTokens(tokenA, tokenB);
-        pair = address(uint(keccak256(abi.encodePacked(
+        pair = address(uint160(uint(keccak256(abi.encodePacked(
                 hex'ff',
                 factory,
                 keccak256(abi.encodePacked(token0, token1)),
                 hex'9caea71a4e9798d7bbdf720c7f8b2d9b63e1f0522376b899ba0c8f6c9737c731' // init code hash
-            ))));
+            )))));
     }
 
     // fetches and sorts the reserves for a pair
@@ -492,7 +492,7 @@ contract NimbusRouter is INimbusRouter {
         bool approveMax, uint8 v, bytes32 r, bytes32 s
     ) external virtual override returns (uint amountA, uint amountB) {
         address pair = NimbusLibrary.pairFor(factory, tokenA, tokenB);
-        uint value = approveMax ? uint(-1) : liquidity;
+        uint value = approveMax ? type(uint256).max : liquidity;
         INimbusPair(pair).permit(msg.sender, address(this), value, deadline, v, r, s);
         (amountA, amountB) = removeLiquidity(tokenA, tokenB, liquidity, amountAMin, amountBMin, to, deadline);
     }
@@ -506,7 +506,7 @@ contract NimbusRouter is INimbusRouter {
         bool approveMax, uint8 v, bytes32 r, bytes32 s
     ) external virtual override returns (uint amountToken, uint amountETH) {
         address pair = NimbusLibrary.pairFor(factory, token, NUS_WETH);
-        uint value = approveMax ? uint(-1) : liquidity;
+        uint value = approveMax ? type(uint256).max : liquidity;
         INimbusPair(pair).permit(msg.sender, address(this), value, deadline, v, r, s);
         (amountToken, amountETH) = removeLiquidityETH(token, liquidity, amountTokenMin, amountETHMin, to, deadline);
     }
@@ -543,7 +543,7 @@ contract NimbusRouter is INimbusRouter {
         bool approveMax, uint8 v, bytes32 r, bytes32 s
     ) external virtual override returns (uint amountETH) {
         address pair = NimbusLibrary.pairFor(factory, token, NUS_WETH);
-        uint value = approveMax ? uint(-1) : liquidity;
+        uint value = approveMax ? type(uint256).max : liquidity;
         INimbusPair(pair).permit(msg.sender, address(this), value, deadline, v, r, s);
         amountETH = removeLiquidityETHSupportingFeeOnTransferTokens(
             token, liquidity, amountTokenMin, amountETHMin, to, deadline
