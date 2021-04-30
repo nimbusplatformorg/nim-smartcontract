@@ -23,7 +23,7 @@
 //
 // const fs = require('fs');
 // const mnemonic = fs.readFileSync(".secret").toString().trim();
-
+const { constants } = require("@openzeppelin/test-helpers");
 module.exports = {
   /**
    * Networks define how you connect to your ethereum client and let you set the
@@ -43,20 +43,29 @@ module.exports = {
     // options below to some value.
     //
     development: {
-     host: "127.0.0.1",     // Localhost (default: none)
-     port: 8545,            // Standard Ethereum port (default: none)
-     network_id: "*",       // Any network (default: none)'
-     gasPrice: 0x1,
-     gas: 0x1fffffffffffff
+      host: "127.0.0.1", // Localhost (default: none)
+      port: 8545, // Standard Ethereum port (default: none)
+      network_id: "*", // Any network (default: none)'
+      gasPrice: 0x1,
+      gas: 0x1fffffffffffff,
+      defaultEtherBalance: constants.MAX_UINT256.toString(),
+    },
+    develop: {
+      host: "127.0.0.1", // Localhost (default: none)
+      port: 8545, // Standard Ethereum port (default: none)
+      network_id: "*", // Any network (default: none)
+      gasPrice: 0x1,
+      gas: 0x1fffffffffffff,
+      defaultEtherBalance: constants.MAX_UINT256.toString(),
     },
     // Another network with more advanced options...
     //advanced: {
-      //port: 8777,             // Custom port
-      //network_id: 1342,       // Custom network
-      //gas: 8500000,           // Gas sent with each transaction (default: ~6700000)
-      //gasPrice: 20000000000,  // 20 gwei (in wei) (default: 100 gwei)
-      //from: <address>,        // Account to send txs from (default: accounts[0])
-      //websocket: true        // Enable EventEmitter interface for web3 (default: false)
+    //port: 8777,             // Custom port
+    //network_id: 1342,       // Custom network
+    //gas: 8500000,           // Gas sent with each transaction (default: ~6700000)
+    //gasPrice: 20000000000,  // 20 gwei (in wei) (default: 100 gwei)
+    //from: <address>,        // Account to send txs from (default: accounts[0])
+    //websocket: true        // Enable EventEmitter interface for web3 (default: false)
     //},
     // Useful for deploying to a public network.
     // NB: It's important to wrap the provider as a function.
@@ -84,16 +93,17 @@ module.exports = {
   // Configure your compilers
   compilers: {
     solc: {
-      version: "0.8.0",    // Fetch exact version from solc-bin (default: truffle's version)
+      version: "0.8.0", // Fetch exact version from solc-bin (default: truffle's version)
       // docker: true,        // Use "0.5.1" you've installed locally with docker (default: false)
-      settings: {          // See the solidity docs for advice about optimization and evmVersion
-       optimizer: {
-         enabled: true,
-         runs: 1000
-       },
-      //  evmVersion: "byzantium"
-      }
-    }
+      settings: {
+        // See the solidity docs for advice about optimization and evmVersion
+        optimizer: {
+          enabled: true,
+          runs: 999999,
+        },
+        //  evmVersion: "byzantium"
+      },
+    },
   },
 
   // Truffle DB is currently disabled by default; to enable it, change enabled: false to enabled: true
@@ -103,6 +113,6 @@ module.exports = {
   // $ truffle migrate --reset --compile-all
 
   db: {
-    enabled: false
-  }
+    enabled: false,
+  },
 };
