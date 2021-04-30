@@ -18,5 +18,8 @@
   "homepage": "https://github.com/nimbusplatformorg/nim-smartcontract#readme",
   "dependencies": {
     "truffle": "^5.3.2"
+  },
+  "devDependencies": {
+    "@openzeppelin/test-helpers": "^0.5.10"
   }
 }
