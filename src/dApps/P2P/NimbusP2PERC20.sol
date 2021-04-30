@@ -25,6 +25,19 @@ library TransferHelper {
     }
 }
 
+library Address {
+    function isContract(address account) internal view returns (bool) {
+        // This method relies on extcodesize, which returns 0 for contracts in
+        // construction, since the code is only stored at the end of the
+        // constructor execution.
+
+        uint256 size;
+        // solhint-disable-next-line no-inline-assembly
+        assembly { size := extcodesize(account) }
+        return size > 0;
+    }
+}
+
 interface INBU_WETH {
     function deposit() external payable;
     function transfer(address to, uint value) external returns (bool);
@@ -83,11 +96,13 @@ contract NimbusERC20P2P_V1 {
     }
 
     function createTrade(address proposedAsset, uint proposedAmount, address askedAsset, uint askedAmount, uint deadline) external returns (uint tradeId) {
+        require(Address.isContract(proposedAsset) && Address.isContract(askedAsset), "NimbusERC20P2P_V1: Not contracts");
         TransferHelper.safeTransferFrom(proposedAsset, msg.sender, address(this), proposedAmount);
         tradeId = _createTrade(proposedAsset, proposedAmount, askedAsset, askedAmount, deadline);   
     }
 
     function createTradeETH(address askedAsset, uint askedAmount, uint deadline) payable external returns (uint tradeId) {
+        require(Address.isContract(askedAsset), "NimbusERC20P2P_V1: Not contract");
         NBU_WETH.deposit{value: msg.value}();
         tradeId = _createTrade(address(NBU_WETH), msg.value, askedAsset, askedAmount, deadline);   
     }
