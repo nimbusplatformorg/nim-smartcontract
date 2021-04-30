@@ -112,9 +112,11 @@ contract NimbusERC20P2P_V1 {
         require(tradeCount >= tradeId && tradeId > 0, "NimbusERC20P2P_V1: invalid trade id");
         Trade storage trade = trades[tradeId];
         require(trade.status == 0 && trade.deadline > block.timestamp, "NimbusERC20P2P_V1: not active trade");
-        require(trade.askedAsset == address(NBU_WETH), "NimbusERC20P2P_V1: not active trade");
+        require(msg.value >= trade.askedAmount, "NimbusERC20P2P_V1: Not enough ETH sent");
+        require(trade.askedAsset == address(NBU_WETH), "NimbusERC20P2P_V1: ERC20 trade");
 
         TransferHelper.safeTransferETH(trade.initiator, trade.askedAmount);
+        if (msg.value > trade.askedAmount) TransferHelper.safeTransferETH(msg.sender, msg.value - trade.askedAmount);
         _supportTrade(tradeId);
     }
 
