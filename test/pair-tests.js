@@ -1,7 +1,7 @@
-const Pair = artifacts.require("./Swaps/NimbusPair");
-const NBU = artifacts.require("./NimbusCore/NBU.sol");
-const GNBU = artifacts.require("./Governance/GNBU.sol");
-const Factory = artifacts.require("./Swaps/NimbusFactory");
+const Pair = artifacts.require("NimbusPair");
+const NBU = artifacts.require("NBU");
+const GNBU = artifacts.require("GNBU");
+const Factory = artifacts.require("NimbusFactory");
 
 const {
   BN,

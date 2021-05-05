@@ -1,4 +1,4 @@
-const Factory = artifacts.require("./Swaps/NimbusFactory");
+const Factory = artifacts.require("NimbusFactory");
 const {
   BN,
   constants,
