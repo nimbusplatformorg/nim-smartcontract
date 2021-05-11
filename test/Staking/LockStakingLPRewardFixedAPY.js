@@ -159,23 +159,6 @@ contract("LockStakingLPRewardFixedAPY", (accounts) => {
     });
   });
 
-  describe.skip("getCurrentLPPrice", function () {
-    // LP PRICE = 2 * SQRT(reserveA * reaserveB ) * SQRT(token1/RewardTokenPrice * token2/RewardTokenPrice) / LPTotalSupply
-    it("equal", async function () {
-      const LPTokenTotalSupply = await this.stakingLPToken.totalSupply();
-      const decimals = await this.contract.getDecimalPriceCalculationCompensate();
-      expect(await this.contract.getCurrentLPPrice()).to.be.bignumber.equal(
-        mockCurrentLPPrice(
-          LPTokenTotalSupply,
-          this.rewardTokenAReserves,
-          this.rewardTokenBReserves,
-          this.LPTokenReserves,
-          decimals
-        )
-      );
-    });
-  });
-
   describe("total supply", function () {
     describe("before stake", function () {
       it("tokens", async function () {
@@ -879,18 +862,6 @@ contract("LockStakingLPRewardFixedAPY", (accounts) => {
             }),
             "LockStakingLPRewardFixedAPY: Cannot rescue 0"
           );
-        });
-
-        it.skip("success rescue ", async function () {
-          const { logs } = await this.contract.methods[
-            "rescue(address,uint256)"
-          ](this.rewardToken.address, value, {
-            from: owner,
-          });
-          expectEvent.inLogs(logs, "Rescue", {
-            to: this.rewardToken.address,
-            amount: value,
-          });
         });
       });
     });

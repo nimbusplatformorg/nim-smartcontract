@@ -799,46 +799,6 @@ contract("NBU", (accounts) => {
       });
     });
   });
-
-  // describe("permit", function () {
-  //   it("", async function () {
-  //     const nonce = await this.token.nonces(initialHolder);
-  //     const deadline = MAX_UINT256;
-  //     const TEST_AMOUNT = new BN(10).mul(new BN(10).pow(18));
-  //     const digest = await getApprovalDigest(
-  //       token,
-  //       { owner: initialHolder, spender: recipient, value: TEST_AMOUNT },
-  //       nonce,
-  //       deadline
-  //     );
-  //     const wallet = web3.eth.accounts.wallet;
-
-  //     const { v, r, s } = ecsign(
-  //       Buffer.from(digest.slice(2), "hex"),
-  //       Buffer.from(wallet.privateKey.slice(2), "hex")
-  //     );
-  //     console.log(initialHolder);
-
-  //     console.log(wallet.address);
-  //     // await expect(
-  //     //   token.permit(
-  //     //     wallet.address,
-  //     //     recipient,
-  //     //     TEST_AMOUNT,
-  //     //     deadline,
-  //     //     v,
-  //     //     hexlify(r),
-  //     //     hexlify(s)
-  //     //   )
-  //     // )
-  //     //   .to.emit(this.token, "Approval")
-  //     //   .withArgs(wallet.address, other.address, TEST_AMOUNT);
-  //     // expect(await this.token.allowance(wallet.address, other.address)).to.eq(
-  //     //   TEST_AMOUNT
-  //     // );
-  //     // expect(await this.token.nonces(wallet.address)).to.eq(bigNumberify(1));
-  //   });
-  // });
 });
 
 function shouldBehaveLikeERC20Transfer(

@@ -649,23 +649,6 @@ contract("LockStakingRewardSameTokenFixedAPY", (accounts) => {
             "LockStakingRewardSameTokenFixedAPY: Cannot rescue 0"
           );
         });
-
-        it.skip("success rescue ", async function () {
-          await web3.eth.sendTransaction({
-            from: anotherAccount,
-            to: this.contract.address,
-            value: 10,
-          });
-          const { logs } = await this.contract.methods[
-            "rescue(address,uint256)"
-          ](anotherAccount, rescueEth, {
-            from: owner,
-          });
-          expectEvent.inLogs(logs, "Rescue", {
-            to: anotherAccount,
-            amount: rescueEth,
-          });
-        });
       });
     });
   });

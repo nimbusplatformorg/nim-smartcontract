@@ -753,18 +753,6 @@ contract("StakingRewardFixedAPY", (accounts) => {
             "StakingRewardFixedAPY: Cannot rescue 0"
           );
         });
-
-        it.skip("success rescue ", async function () {
-          const { logs } = await this.contract.methods[
-            "rescue(address,uint256)"
-          ](this.rewardToken.address, value, {
-            from: owner,
-          });
-          expectEvent.inLogs(logs, "Rescue", {
-            to: this.rewardToken.address,
-            amount: value,
-          });
-        });
       });
     });
   });

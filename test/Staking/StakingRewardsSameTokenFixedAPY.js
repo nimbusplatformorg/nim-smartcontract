@@ -564,18 +564,6 @@ contract("StakingRewardsSameTokenFixedAPY", (accounts) => {
             "StakingRewardsSameTokenFixedAPY: Cannot rescue 0"
           );
         });
-
-        it.skip("success rescue ", async function () {
-          const { logs } = await this.contract.methods[
-            "rescue(address,uint256)"
-          ](this.swapToken.address, value, {
-            from: owner,
-          });
-          expectEvent.inLogs(logs, "Rescue", {
-            to: this.swapToken.address,
-            amount: value,
-          });
-        });
       });
     });
   });
