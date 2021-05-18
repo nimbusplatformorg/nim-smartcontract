@@ -81,64 +81,7 @@ contract Pausable is Ownable {
     }
 }
 
-library SafeMath {
-    function add(uint256 a, uint256 b) internal pure returns (uint256) {
-        return add(a, b, "SafeMath: addition overflow");
-    }
-    
-    function add(uint256 a, uint256 b, string memory errorMessage) internal pure returns (uint256) {
-        uint256 c = a + b;
-        require(c >= a, errorMessage);
-
-        return c;
-    }
-
-    function sub(uint256 a, uint256 b) internal pure returns (uint256) {
-        return sub(a, b, "SafeMath: subtraction overflow");
-    }
-
-    function sub(uint256 a, uint256 b, string memory errorMessage) internal pure returns (uint256) {
-        require(b <= a, errorMessage);
-        uint256 c = a - b;
-
-        return c;
-    }
-
-    function mul(uint256 a, uint256 b) internal pure returns (uint256) {
-        if (a == 0) {
-            return 0;
-        }
-
-        uint256 c = a * b;
-        require(c / a == b, "SafeMath: multiplication overflow");
-
-        return c;
-    }
-
-    function div(uint256 a, uint256 b) internal pure returns (uint256) {
-        return div(a, b, "SafeMath: division by zero");
-    }
-
-    function div(uint256 a, uint256 b, string memory errorMessage) internal pure returns (uint256) {
-        require(b > 0, errorMessage);
-        uint256 c = a / b;
-        // assert(a == b * c + a % b); // There is no case in which this doesn't hold
-        return c;
-    }
-
-    function mod(uint256 a, uint256 b) internal pure returns (uint256) {
-        return mod(a, b, "SafeMath: modulo by zero");
-    }
-
-    function mod(uint256 a, uint256 b, string memory errorMessage) internal pure returns (uint256) {
-        require(b != 0, errorMessage);
-        return a % b;
-    }
-}
-
 contract NBU is IERC20, Ownable, Pausable {
-    using SafeMath for uint;
-
     mapping (address => mapping (address => uint)) private _allowances;
     
     mapping (address => uint) private _unfrozenBalances;
@@ -195,7 +138,11 @@ contract NBU is IERC20, Ownable, Pausable {
 
     function transferFrom(address sender, address recipient, uint amount) external override whenNotPaused returns (bool) {
         _transfer(sender, recipient, amount);
-        _approve(sender, msg.sender, _allowances[sender][msg.sender].sub(amount, "NBU::transferFrom: transfer amount exceeds allowance"));
+        
+        uint256 currentAllowance = _allowances[sender][msg.sender];
+        require(currentAllowance >= amount, "NBU::transferFrom: transfer amount exceeds allowance");
+        _approve(sender, msg.sender, currentAllowance - amount);
+
         return true;
     }
 
@@ -213,12 +160,15 @@ contract NBU is IERC20, Ownable, Pausable {
     }
 
     function increaseAllowance(address spender, uint addedValue) external returns (bool) {
-        _approve(msg.sender, spender, _allowances[msg.sender][spender].add(addedValue));
+        _approve(msg.sender, spender, _allowances[msg.sender][spender] + addedValue);
         return true;
     }
 
     function decreaseAllowance(address spender, uint subtractedValue) external returns (bool) {
-        _approve(msg.sender, spender, _allowances[msg.sender][spender].sub(subtractedValue, "NBU::decreaseAllowance: decreased allowance below zero"));
+        uint256 currentAllowance = _allowances[msg.sender][spender];
+        require(currentAllowance >= subtractedValue, "NBU::decreaseAllowance: decreased allowance below zero");
+        _approve(msg.sender, spender, currentAllowance - subtractedValue);
+
         return true;
     }
 
@@ -227,23 +177,23 @@ contract NBU is IERC20, Ownable, Pausable {
         for (uint i = 1; i <= _vestingNonces[msg.sender]; i++) {
             if (_vestingAmounts[msg.sender][i] == _unvestedAmounts[msg.sender][i]) continue;
             if (_vestingReleaseStartDates[msg.sender][i] > block.timestamp) break;
-            uint toUnvest = block.timestamp.sub(_vestingReleaseStartDates[msg.sender][i]).mul(_vestingAmounts[msg.sender][i]) / vestingSecondPeriod;
+            uint toUnvest = (block.timestamp - _vestingReleaseStartDates[msg.sender][i]) * _vestingAmounts[msg.sender][i] / vestingSecondPeriod;
             if (toUnvest > _vestingAmounts[msg.sender][i]) {
                 toUnvest = _vestingAmounts[msg.sender][i];
             } 
             uint totalUnvestedForNonce = toUnvest;
-            toUnvest = toUnvest.sub(_unvestedAmounts[msg.sender][i]);
-            unvested = unvested.add(toUnvest);
+            toUnvest -= _unvestedAmounts[msg.sender][i];
+            unvested += toUnvest;
             _unvestedAmounts[msg.sender][i] = totalUnvestedForNonce;
         }
-        _unfrozenBalances[msg.sender] = _unfrozenBalances[msg.sender].add(unvested);
+        _unfrozenBalances[msg.sender] += unvested;
         emit Unvest(msg.sender, unvested);
     }
 
     function give(address user, uint amount, uint vesterId) external {
         require (giveAmount > amount, "NBU::give: give finished");
         require (vesters[msg.sender], "NBU::give: not vester");
-        giveAmount = giveAmount.sub(amount);
+        giveAmount -= amount;
         _vest(user, amount, vesterId);
      }
 
@@ -254,8 +204,12 @@ contract NBU is IERC20, Ownable, Pausable {
 
     function burnTokens(uint amount) external onlyOwner returns (bool success) {
         require(amount <= _unfrozenBalances[owner], "NBU::burnTokens: exceeds available amount");
-        _unfrozenBalances[owner] = _unfrozenBalances[owner].sub(amount, "NBU::burnTokens: transfer amount exceeds balance");
-        _totalSupply = _totalSupply.sub(amount, "NBU::burnTokens: overflow");
+
+        uint256 ownerBalance = _unfrozenBalances[owner];
+        require(ownerBalance >= amount, "NBU::burnTokens: burn amount exceeds owner balance");
+
+        _unfrozenBalances[owner] = ownerBalance - amount;
+        _totalSupply -= amount;
         emit Transfer(owner, address(0), amount);
         return true;
     }
@@ -286,7 +240,7 @@ contract NBU is IERC20, Ownable, Pausable {
         uint amount = _unfrozenBalances[account];
         if (_vestingNonces[account] == 0) return amount;
         for (uint i = 1; i <= _vestingNonces[account]; i++) {
-            amount = amount.add(_vestingAmounts[account][i]).sub(_unvestedAmounts[account][i]);
+            amount += _vestingAmounts[account][i] - _unvestedAmounts[account][i];
         }
         return amount;
     }
@@ -296,12 +250,12 @@ contract NBU is IERC20, Ownable, Pausable {
         for (uint i = 1; i <= _vestingNonces[user]; i++) {
             if (_vestingAmounts[user][i] == _unvestedAmounts[user][i]) continue;
             if (_vestingReleaseStartDates[user][i] > block.timestamp) break;
-            uint toUnvest = block.timestamp.sub(_vestingReleaseStartDates[user][i]).mul(_vestingAmounts[user][i]) / vestingSecondPeriod;
+            uint toUnvest = (block.timestamp - _vestingReleaseStartDates[user][i]) * _vestingAmounts[user][i] / vestingSecondPeriod;
             if (toUnvest > _vestingAmounts[user][i]) {
                 toUnvest = _vestingAmounts[user][i];
             } 
-            toUnvest = toUnvest.sub(_unvestedAmounts[user][i]);
-            unvestAmount = unvestAmount.add(toUnvest);
+            toUnvest -= _unvestedAmounts[user][i];
+            unvestAmount += toUnvest;
         }
     }
 
@@ -334,8 +288,11 @@ contract NBU is IERC20, Ownable, Pausable {
         require(sender != address(0), "NBU::_transfer: transfer from the zero address");
         require(recipient != address(0), "NBU::_transfer: transfer to the zero address");
 
-        _unfrozenBalances[sender] = _unfrozenBalances[sender].sub(amount, "NBU::_transfer: transfer amount exceeds balance");
-        _unfrozenBalances[recipient] = _unfrozenBalances[recipient].add(amount);
+        uint256 senderAvailableBalance = _unfrozenBalances[sender];
+        require(senderAvailableBalance >= amount, "NBU::_transfer: amount exceeds available for transfer balance");
+        _unfrozenBalances[sender] = senderAvailableBalance - amount;
+        _unfrozenBalances[recipient] += amount;
+
         emit Transfer(sender, recipient, amount);
     }
 
@@ -343,7 +300,7 @@ contract NBU is IERC20, Ownable, Pausable {
         uint nonce = ++_vestingNonces[user];
         _vestingAmounts[user][nonce] = amount;
         _vestingReleaseStartDates[user][nonce] = block.timestamp + vestingFirstPeriod;
-        _unfrozenBalances[owner] = _unfrozenBalances[owner].sub(amount);
+        _unfrozenBalances[owner] -= amount;
         _vestingTypes[user][nonce] = vestType;
         emit Transfer(owner, user, amount);
     }
@@ -358,9 +315,9 @@ contract NBU is IERC20, Ownable, Pausable {
         for (uint j; j < values.length; j++) {
             sum += values[j];
         }
-        _unfrozenBalances[owner] = _unfrozenBalances[owner].sub(sum, "NBU::multisend: transfer amount exceeds balance");
+        _unfrozenBalances[owner] -= sum;
         for (uint i; i < to.length; i++) {
-            _unfrozenBalances[to[i]] = _unfrozenBalances[to[i]].add(values[i], "NBU::multisend: transfer amount exceeds balance");
+            _unfrozenBalances[to[i]] += values[i];
             emit Transfer(owner, to[i], values[i]);
         }
         return(to.length);
@@ -373,7 +330,7 @@ contract NBU is IERC20, Ownable, Pausable {
         for (uint j; j < values.length; j++) {
             sum += values[j];
         }
-        _unfrozenBalances[owner] = _unfrozenBalances[owner].sub(sum, "NBU::multivest: transfer amount exceeds balance");
+        _unfrozenBalances[owner] -= sum;
         for (uint i; i < to.length; i++) {
             uint nonce = ++_vestingNonces[to[i]];
             _vestingAmounts[to[i]][nonce] = values[i];
