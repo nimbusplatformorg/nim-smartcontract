@@ -27,7 +27,7 @@ contract("LockStakingRewardMinAmountFixedAPY", (accounts) => {
   const [owner, client, notAllowAccount] = accounts;
   const clientAllowance = MAX_UINT256;
 
-  const _lockDuration = new BN(86400); // 1 day
+  const _lockDuration = new BN(86400); 
   const _rewardRate = new BN(100);
   const _rewardDuration = DAY.muln(365);
   const _minSwapTokenAmount = new BN(100);

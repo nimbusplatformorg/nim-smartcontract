@@ -208,7 +208,7 @@ contract LockStakingRewards is ILockStakingRewards, ReentrancyGuard, Ownable {
             return rewardPerTokenStored;
         }
         return
-            (rewardPerTokenStored + (lastTimeRewardApplicable() - lastUpdateTime) * rewardRate * 1e18) / _totalSupply;
+            rewardPerTokenStored + ((lastTimeRewardApplicable() - lastUpdateTime) * rewardRate * 1e18 / _totalSupply);
     }
 
     function earned(address account) public view override returns (uint256) {

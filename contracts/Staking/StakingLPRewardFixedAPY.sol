@@ -258,7 +258,7 @@ contract StakingLPRewardFixedAPY is IStakingRewards, ReentrancyGuard, Ownable {
 
     function _stake(uint256 amount, address user) private {
         IERC20(stakingLPToken).safeTransferFrom(msg.sender, address(this), amount);
-        uint amountRewardEquivalent = getCurrentLPPrice() * amount / 10 ** 18;
+        uint amountRewardEquivalent = getCurrentLPPrice() * amount / (10 ** 18);
 
         _totalSupply += amount;
         _totalSupplyRewardEquivalent += amountRewardEquivalent;

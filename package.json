@@ -18,7 +18,7 @@
   "homepage": "https://github.com/nimbusplatformorg/nim-smartcontract#readme",
   "dependencies": {
     "ethers": "^5.1.4",
-    "truffle": "^5.3.2"
+    "truffle": "^5.3.6"
   },
   "devDependencies": {
     "@openzeppelin/test-helpers": "^0.5.10",
