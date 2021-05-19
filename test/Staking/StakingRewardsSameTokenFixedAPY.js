@@ -526,6 +526,7 @@ contract("StakingRewardsSameTokenFixedAPY", (accounts) => {
         });
 
         it("success rescue token", async function () {
+          await this.swapToken.transfer(this.contract.address, value);
           const { logs } = await this.contract.rescue(
             owner,
             this.swapToken.address,

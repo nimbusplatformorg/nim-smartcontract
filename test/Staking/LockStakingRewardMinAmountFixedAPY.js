@@ -252,7 +252,7 @@ contract("LockStakingRewardMinAmountFixedAPY", (accounts) => {
 
       it("after two stake", async function () {
         const stakeAmount2 = this.minStakeAmount.addn(300);
-        const timeStamp = await time.latest();
+        const timeStamp1 = await time.latest();
 
         const { logs } = await this.contract.stake(stakeAmount2, {
           from: client,
@@ -280,7 +280,7 @@ contract("LockStakingRewardMinAmountFixedAPY", (accounts) => {
 
         const expectedEarn = getEarnedMock(
           await this.contract.balanceOfRewardEquivalent(client),
-          timeStamp
+          timeStamp1
             .addn(timeIncrease)
             .sub(expectedWeightedStakeDate2)
             .toNumber()

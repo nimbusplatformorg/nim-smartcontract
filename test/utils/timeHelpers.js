@@ -32,9 +32,6 @@ async function getBlockTimestamp(number) {
 }
 
 module.exports = {
-  // advanceTime,
-  // advanceBlock,
-  // advanceTimeAndBlock,
   getBlockTimestamp,
   increaseTime,
 };
