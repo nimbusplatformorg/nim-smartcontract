@@ -129,7 +129,7 @@ interface IERC20Permit {
 contract StakingRewardsSameTokenFixedAPY is IStakingRewards, ReentrancyGuard, Ownable {
     using SafeERC20 for IERC20;
 
-    IERC20 public token;
+    IERC20 public immutable token;
     uint256 public rewardRate; 
     uint256 public constant rewardDuration = 365 days; 
 
