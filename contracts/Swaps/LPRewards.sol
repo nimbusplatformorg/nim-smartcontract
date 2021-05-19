@@ -76,9 +76,9 @@ contract LPReward is Ownable {
     uint public immutable startReward;
     uint public constant rewardPeriod = 365 days;
 
-    address public NBU;
+    address public immutable NBU;
     address public swapRouter;
-    INimbusFactory public swapFactory;
+    INimbusFactory public immutable swapFactory;
 
     mapping (address => mapping (address => uint)) public lpTokenAmounts;
     mapping (address => mapping (address => uint)) public weightedRatio;

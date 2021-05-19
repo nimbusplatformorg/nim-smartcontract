@@ -42,9 +42,9 @@ contract NimbusGovernorV1 {
     }
 
     string public constant name = "Nimbus Governor v1";
-    uint public proposalMaxOperations = 10; // 10 actions
-    uint public votingDelay = 1; // 1 block
-    uint public votingPeriod = 80_640; // ~14 days in blocks (assuming 15s blocks)
+    uint public constant proposalMaxOperations = 10; // 10 actions
+    uint public constant votingDelay = 1; // 1 block
+    uint public constant votingPeriod = 80_640; // ~14 days in blocks (assuming 15s blocks)
 
     uint96 public quorumPercentage = 4000; // 40% from GNBU free circulation, changeable by voting
     uint96 public participationThresholdPercentage = 100; // 1% from GNBU free circulation, changeable by voting

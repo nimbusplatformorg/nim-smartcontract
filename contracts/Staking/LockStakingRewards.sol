@@ -145,8 +145,8 @@ interface IERC20Permit {
 contract LockStakingRewards is ILockStakingRewards, ReentrancyGuard, Ownable {
     using SafeERC20 for IERC20;
 
-    IERC20 public rewardsToken;
-    IERC20 public stakingToken;
+    IERC20 public immutable rewardsToken;
+    IERC20 public immutable stakingToken;
     uint256 public periodFinish = 0;
     uint256 public rewardRate = 0;
     uint256 public constant rewardsDuration = 60 days; 

@@ -97,8 +97,8 @@ contract NBU is IERC20, Ownable, Pausable {
     string private constant _symbol = "NBU";
     uint8 private constant _decimals = 18;
 
-    uint private vestingFirstPeriod = 60 days;
-    uint private vestingSecondPeriod = 152 days;
+    uint private constant vestingFirstPeriod = 60 days;
+    uint private constant vestingSecondPeriod = 152 days;
 
     uint public giveAmount;
     mapping (address => bool) public vesters;

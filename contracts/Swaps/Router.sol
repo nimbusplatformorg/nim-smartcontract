@@ -332,7 +332,7 @@ interface ILPRewards {
 contract NimbusRouter is INimbusRouter {
     address public immutable override factory;
     address public immutable override NBU_WETH;
-    ILPRewards public lpRewards;
+    ILPRewards public immutable lpRewards;
 
     modifier ensure(uint deadline) {
         require(deadline >= block.timestamp, 'NimbusRouter: EXPIRED');

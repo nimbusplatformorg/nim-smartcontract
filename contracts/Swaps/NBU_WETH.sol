@@ -1,17 +1,17 @@
 pragma solidity =0.8.0;
 
 contract NBU_WETH {
-    string public name     = "Nimbus Wrapped Ether";
-    string public symbol   = "NWETH";
-    uint8  public decimals = 18;
+    string public constant name = "Nimbus Wrapped Ether";
+    string public constant symbol = "NWETH";
+    uint8  public constant decimals = 18;
 
     event  Approval(address indexed src, address indexed guy, uint wad);
     event  Transfer(address indexed src, address indexed dst, uint wad);
     event  Deposit(address indexed dst, uint wad);
     event  Withdrawal(address indexed src, uint wad);
 
-    mapping (address => uint)                       public  balanceOf;
-    mapping (address => mapping (address => uint))  public  allowance;
+    mapping (address => uint) public  balanceOf;
+    mapping (address => mapping (address => uint)) public  allowance;
     
     receive() payable external {
         deposit();

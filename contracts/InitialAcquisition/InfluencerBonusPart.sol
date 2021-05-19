@@ -55,10 +55,10 @@ interface INimbusRouter {
 }
 
 contract NBUInfluencerBonusPart is Ownable {
-    IERC20 public NBU;
+    IERC20 public immutable NBU;
     
     uint public nbuBonusAmount;
-    INimbusReferralProgram public referralProgram;
+    INimbusReferralProgram public immutable referralProgram;
     INimbusStakingPool[] public stakingPools;
     
     INimbusRouter public swapRouter;                

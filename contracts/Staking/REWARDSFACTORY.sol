@@ -156,8 +156,8 @@ abstract contract RewardsDistributionRecipient {
 contract StakingRewards is IStakingRewards, RewardsDistributionRecipient, ReentrancyGuard {
     using SafeERC20 for IERC20;
 
-    IERC20 public rewardsToken;
-    IERC20 public stakingToken;
+    IERC20 public immutable rewardsToken;
+    IERC20 public immutable stakingToken;
     uint256 public periodFinish = 0;
     uint256 public rewardRate = 0;
     uint256 public rewardsDuration = 60 days;
@@ -292,9 +292,8 @@ interface IERC20Permit {
 }
 
 contract StakingRewardsFactory is Ownable {
-    // immutables
-    address public rewardsToken;
-    uint public stakingRewardsGenesis;
+    address public immutable rewardsToken;
+    uint public immutable stakingRewardsGenesis;
 
     // the staking tokens for which the rewards contract has been deployed
     address[] public stakingTokens;
@@ -311,7 +310,7 @@ contract StakingRewardsFactory is Ownable {
     constructor(
         address _rewardsToken,
         uint _stakingRewardsGenesis
-    ) Ownable() public {
+    ) Ownable() {
         require(_stakingRewardsGenesis >= block.timestamp, 'StakingRewardsFactory::constructor: genesis too soon');
 
         rewardsToken = _rewardsToken;
