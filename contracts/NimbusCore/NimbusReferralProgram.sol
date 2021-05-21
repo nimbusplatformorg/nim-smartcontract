@@ -41,53 +41,6 @@ contract Ownable {
     }
 }
 
-library SafeMath {
-    function add(uint256 a, uint256 b) internal pure returns (uint256) {
-        uint256 c = a + b;
-        require(c >= a, "SafeMath: addition overflow");
-
-        return c;
-    }
-
-    function sub(uint256 a, uint256 b) internal pure returns (uint256) {
-        return sub(a, b, "SafeMath: subtraction overflow");
-    }
-
-    function sub(uint256 a, uint256 b, string memory errorMessage) internal pure returns (uint256) {
-        require(b <= a, errorMessage);
-        return a - b;
-    }
-
-    function mul(uint256 a, uint256 b) internal pure returns (uint256) {
-        if (a == 0) {
-            return 0;
-        }
-
-        uint256 c = a * b;
-        require(c / a == b, "SafeMath: multiplication overflow");
-
-        return c;
-    }
-
-    function div(uint256 a, uint256 b) internal pure returns (uint256) {
-        return div(a, b, "SafeMath: division by zero");
-    }
-
-    function div(uint256 a, uint256 b, string memory errorMessage) internal pure returns (uint256) {
-        require(b > 0, errorMessage);
-        return a / b;
-    }
-
-    function mod(uint256 a, uint256 b) internal pure returns (uint256) {
-        return mod(a, b, "SafeMath: modulo by zero");
-    }
-
-    function mod(uint256 a, uint256 b, string memory errorMessage) internal pure returns (uint256) {
-        require(b != 0, errorMessage);
-        return a % b;
-    }
-}
-
 interface INimbusReferralProgram {
     function userSponsorByAddress(address user) external view returns (uint);
     function userIdByAddress(address user) external view returns (uint);
@@ -103,8 +56,6 @@ interface INimbusRouter {
 }
 
 contract NimbusReferralProgram is INimbusReferralProgram, Ownable {
-    using SafeMath for uint;
-
     uint public lastUserId;
     mapping(address => uint) public override userIdByAddress;
     mapping(uint => address) public userAddressById;
@@ -250,7 +201,7 @@ contract NimbusReferralProgram is INimbusReferralProgram, Ownable {
         require(actualBalance - amount >= _recordedBalances[token], "Nimbus Referral: Balance check failed");
         uint uiserId = userIdByAddress[recipient];
         if (_userSponsor[uiserId] == 0) uiserId = 0;
-        _undistributedFees[token][uiserId] = _undistributedFees[token][uiserId].add(amount);
+        _undistributedFees[token][uiserId] += amount;
         _recordedBalances[token] = actualBalance;
     }
 
@@ -288,7 +239,7 @@ contract NimbusReferralProgram is INimbusReferralProgram, Ownable {
                 undistributedPercentage += levels[ii];
             }
             uint undistributedAmount = amount * undistributedPercentage / 100;
-            _undistributedFees[token][0] = _undistributedFees[token][0].add(undistributedAmount);
+            _undistributedFees[token][0] += undistributedAmount;
             emit TransferToNimbusSpecialReserveFund(token, userId, undistributedAmount);
         }
 
@@ -303,9 +254,9 @@ contract NimbusReferralProgram is INimbusReferralProgram, Ownable {
         if (sponsorId < 1000000001) return level;
         address sponsorAddress = userAddressById[sponsorId];
         if (isUserBalanceEnough(sponsorAddress)) {
-            uint bonusAmount = amount.mul(levels[level]) / 100;
+            uint bonusAmount = amount * levels[level] / 100;
             TransferHelper.safeTransfer(token, sponsorAddress, bonusAmount);
-            _recordedBalances[token] = _recordedBalances[token].sub(bonusAmount);
+            _recordedBalances[token] = _recordedBalances[token] - bonusAmount;
             emit DistributeFeesForUser(token, sponsorId, bonusAmount);
             return transferToSponsor(token, sponsorId, amount, ++level, ++levelGuard);
         } else {
@@ -317,7 +268,7 @@ contract NimbusReferralProgram is INimbusReferralProgram, Ownable {
         if (user == address(0)) return false;
         uint amount = NBU.balanceOf(user);
         for (uint i; i < stakingPools.length; i++) {
-            amount = amount.add(stakingPools[i].balanceOf(user));
+            amount += stakingPools[i].balanceOf(user);
         }
         if (amount < minTokenAmountForCheck) return false;
         address[] memory path = new address[](2);
@@ -337,7 +288,7 @@ contract NimbusReferralProgram is INimbusReferralProgram, Ownable {
         uint amount = _undistributedFees[token][0]; 
         require(amount > 0, "Nimbus Referral: No unclaimed funds for selected token");
         TransferHelper.safeTransfer(token, specialReserveFund, amount);
-        _recordedBalances[token] = _recordedBalances[token].sub(amount);
+        _recordedBalances[token] -= amount;
         _undistributedFees[token][0] = 0;
     }
 

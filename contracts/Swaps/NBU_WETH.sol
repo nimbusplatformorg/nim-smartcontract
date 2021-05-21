@@ -1,15 +1,6 @@
 pragma solidity =0.8.0;
 
-library SafeMath {
-    function add(uint a, uint b) internal pure returns (uint c) { c = a + b; require(c >= a); }
-    function sub(uint a, uint b) internal pure returns (uint c) { require(a >= b); c = a - b; }
-    function mul(uint a, uint b) internal pure returns (uint c) { c = a * b; require(a == 0 || c / a == b); }
-    function div(uint a, uint b) internal pure returns (uint c) { require(b > 0); c = a / b; }
-}
-
-
 contract NBU_WETH {
-    using SafeMath for uint;
     string public name     = "Nimbus Wrapped Ether";
     string public symbol   = "NWETH";
     uint8  public decimals = 18;
@@ -27,13 +18,13 @@ contract NBU_WETH {
     }
     
     function deposit() public payable {
-        balanceOf[msg.sender] = balanceOf[msg.sender].add(msg.value);
+        balanceOf[msg.sender] += msg.value;
         emit Deposit(msg.sender, msg.value);
     }
     
     function withdraw(uint wad) public {
         require(balanceOf[msg.sender] >= wad);
-        balanceOf[msg.sender] = balanceOf[msg.sender].sub(wad);
+        balanceOf[msg.sender] -= wad;
         payable(msg.sender).transfer(wad);
         emit Withdrawal(msg.sender, wad);
     }
@@ -54,12 +45,12 @@ contract NBU_WETH {
 
     function transferFrom(address src, address dst, uint wad) public returns (bool) {
         require(balanceOf[src] >= wad);
-        if (src != msg.sender && allowance[src][msg.sender] != uint(2 ** 256-1 )) {
+        if (src != msg.sender && allowance[src][msg.sender] != type(uint256).max) {
             require(allowance[src][msg.sender] >= wad);
             allowance[src][msg.sender] -= wad;
         }
-        balanceOf[src] = balanceOf[src].sub(wad);
-        balanceOf[dst] = balanceOf[dst].add(wad);
+        balanceOf[src] -= wad;
+        balanceOf[dst] += wad;
         emit Transfer(src, dst, wad);
         return true;
     }    

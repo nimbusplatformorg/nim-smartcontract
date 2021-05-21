@@ -40,47 +40,6 @@ contract Ownable {
     }
 }
 
-library SafeMath {
-    function add(uint256 a, uint256 b) internal pure returns (uint256) {
-        uint256 c = a + b;
-        require(c >= a, "SafeMath: addition overflow");
-
-        return c;
-    }
-
-    function sub(uint256 a, uint256 b) internal pure returns (uint256) {
-        require(b <= a, "SafeMath: subtraction overflow");
-        uint256 c = a - b;
-
-        return c;
-    }
-
-    function mul(uint256 a, uint256 b) internal pure returns (uint256) {
-      if (a == 0) {
-            return 0;
-        }
-
-        uint256 c = a * b;
-        require(c / a == b, "SafeMath: multiplication overflow");
-
-        return c;
-    }
-
-    function div(uint256 a, uint256 b) internal pure returns (uint256) {
-        // Solidity only automatically asserts when dividing by 0
-        require(b > 0, "SafeMath: division by zero");
-        uint256 c = a / b;
-        // assert(a == b * c + a % b); // There is no case in which this doesn't hold
-
-        return c;
-    }
-
-    function mod(uint256 a, uint256 b) internal pure returns (uint256) {
-        require(b != 0, "SafeMath: modulo by zero");
-        return a % b;
-    }
-}
-
 library Address {
     function isContract(address account) internal view returns (bool) {
         // This method relies in extcodesize, which returns 0 for contracts in construction, 
@@ -94,7 +53,6 @@ library Address {
 }
 
 library SafeERC20 {
-    using SafeMath for uint256;
     using Address for address;
 
     function safeTransfer(IERC20 token, address to, uint256 value) internal {
@@ -113,12 +71,12 @@ library SafeERC20 {
     }
 
     function safeIncreaseAllowance(IERC20 token, address spender, uint256 value) internal {
-        uint256 newAllowance = token.allowance(address(this), spender).add(value);
+        uint256 newAllowance = token.allowance(address(this), spender) + value;
         callOptionalReturn(token, abi.encodeWithSelector(token.approve.selector, spender, newAllowance));
     }
 
     function safeDecreaseAllowance(IERC20 token, address spender, uint256 value) internal {
-        uint256 newAllowance = token.allowance(address(this), spender).sub(value);
+        uint256 newAllowance = token.allowance(address(this), spender) - value;
         callOptionalReturn(token, abi.encodeWithSelector(token.approve.selector, spender, newAllowance));
     }
 
@@ -168,7 +126,6 @@ interface IERC20Permit {
 }
 
 contract LockStakingRewardSameTokenFixedAPY is ILockStakingRewards, ReentrancyGuard, Ownable {
-    using SafeMath for uint256;
     using SafeERC20 for IERC20;
 
     IERC20 public token;
@@ -210,15 +167,15 @@ contract LockStakingRewardSameTokenFixedAPY is ILockStakingRewards, ReentrancyGu
     }
 
     function earned(address account) public view override returns (uint256) {
-        return (_balances[account].mul(block.timestamp.sub(weightedStakeDate[account])).mul(rewardRate)) / (100 * rewardDuration);
+        return (_balances[account] * (block.timestamp - weightedStakeDate[account]) * rewardRate) / (100 * rewardDuration);
     }
 
     function stakeWithPermit(uint256 amount, uint deadline, uint8 v, bytes32 r, bytes32 s) external nonReentrant {
         require(amount > 0, "LockStakingRewardSameTokenFixedAPY: Cannot stake 0");
-        _totalSupply = _totalSupply.add(amount);
+        _totalSupply += amount;
         uint previousAmount = _balances[msg.sender];
-        uint newAmount = previousAmount.add(amount);
-        weightedStakeDate[msg.sender] = (weightedStakeDate[msg.sender].mul(previousAmount) / newAmount).add(block.timestamp.mul(amount) / newAmount);
+        uint newAmount = previousAmount + amount;
+        weightedStakeDate[msg.sender] = (weightedStakeDate[msg.sender] * previousAmount / newAmount) + (block.timestamp * amount / newAmount);
         _balances[msg.sender] = newAmount;
 
         // permit
@@ -233,10 +190,10 @@ contract LockStakingRewardSameTokenFixedAPY is ILockStakingRewards, ReentrancyGu
 
     function stake(uint256 amount) external override nonReentrant {
         require(amount > 0, "LockStakingRewardSameTokenFixedAPY: Cannot stake 0");
-        _totalSupply = _totalSupply.add(amount);
+        _totalSupply += amount;
         uint previousAmount = _balances[msg.sender];
-        uint newAmount = previousAmount.add(amount);
-        weightedStakeDate[msg.sender] = (weightedStakeDate[msg.sender].mul(previousAmount) / newAmount).add(block.timestamp.mul(amount) / newAmount);
+        uint newAmount = previousAmount + amount;
+        weightedStakeDate[msg.sender] = (weightedStakeDate[msg.sender] * previousAmount / newAmount) + (block.timestamp * amount / newAmount);
         _balances[msg.sender] = newAmount;
         token.safeTransferFrom(msg.sender, address(this), amount);
         uint stakeNonce = stakeNonces[msg.sender]++;
@@ -247,10 +204,10 @@ contract LockStakingRewardSameTokenFixedAPY is ILockStakingRewards, ReentrancyGu
 
     function stakeFor(uint256 amount, address user) external override nonReentrant {
         require(amount > 0, "LockStakingRewardSameTokenFixedAPY: Cannot stake 0");
-        _totalSupply = _totalSupply.add(amount);
+        _totalSupply += amount;
         uint previousAmount = _balances[user];
-        uint newAmount = previousAmount.add(amount);
-        weightedStakeDate[user] = (weightedStakeDate[user].mul(previousAmount) / newAmount).add(block.timestamp.mul(amount) / newAmount);
+        uint newAmount = previousAmount + amount;
+        weightedStakeDate[user] = (weightedStakeDate[user] * previousAmount / newAmount) + (block.timestamp * amount / newAmount);
         _balances[user] = newAmount;
         token.safeTransferFrom(msg.sender, address(this), amount);
         uint stakeNonce = stakeNonces[user]++;
@@ -264,8 +221,8 @@ contract LockStakingRewardSameTokenFixedAPY is ILockStakingRewards, ReentrancyGu
         uint amount = stakeAmounts[msg.sender][nonce];
         require(stakeAmounts[msg.sender][nonce] > 0, "LockStakingRewardSameTokenFixedAPY: This stake nonce was withdrawn");
         require(stakeLocks[msg.sender][nonce] < block.timestamp, "LockStakingRewardSameTokenFixedAPY: Locked");
-        _totalSupply = _totalSupply.sub(amount);
-        _balances[msg.sender] = _balances[msg.sender].sub(amount);
+        _totalSupply -= amount;
+        _balances[msg.sender] -= amount;
         token.safeTransfer(msg.sender, amount);
         stakeAmounts[msg.sender][nonce] = 0;
         emit Withdrawn(msg.sender, amount);

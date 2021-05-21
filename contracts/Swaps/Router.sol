@@ -43,7 +43,7 @@ library TransferHelper {
 
 interface INimbusRouter01 {
     function factory() external view returns (address);
-    function NUS_WETH() external view returns (address);
+    function NBU_WETH() external view returns (address);
 
     function addLiquidity(
         address tokenA,
@@ -228,8 +228,6 @@ interface INimbusPair {
 }
 
 library NimbusLibrary {
-    using SafeMath for uint;
-
     // returns sorted token addresses, used to handle return values from pairs sorted in this order
     function sortTokens(address tokenA, address tokenB) internal pure returns (address token0, address token1) {
         require(tokenA != tokenB, 'NimbusLibrary: IDENTICAL_ADDRESSES');
@@ -259,16 +257,16 @@ library NimbusLibrary {
     function quote(uint amountA, uint reserveA, uint reserveB) internal pure returns (uint amountB) {
         require(amountA > 0, 'NimbusLibrary: INSUFFICIENT_AMOUNT');
         require(reserveA > 0 && reserveB > 0, 'NimbusLibrary: INSUFFICIENT_LIQUIDITY');
-        amountB = amountA.mul(reserveB) / reserveA;
+        amountB = amountA * reserveB / reserveA;
     }
 
     // given an input amount of an asset and pair reserves, returns the maximum output amount of the other asset
     function getAmountOut(uint amountIn, uint reserveIn, uint reserveOut) internal pure returns (uint amountOut) {
         require(amountIn > 0, 'NimbusLibrary: INSUFFICIENT_INPUT_AMOUNT');
         require(reserveIn > 0 && reserveOut > 0, 'NimbusLibrary: INSUFFICIENT_LIQUIDITY');
-        uint amountInWithFee = amountIn.mul(997);
-        uint numerator = amountInWithFee.mul(reserveOut);
-        uint denominator = reserveIn.mul(1000).add(amountInWithFee);
+        uint amountInWithFee = amountIn * 997;
+        uint numerator = amountInWithFee * reserveOut;
+        uint denominator = reserveIn * 1000 + amountInWithFee;
         amountOut = numerator / denominator;
     }
 
@@ -276,9 +274,9 @@ library NimbusLibrary {
     function getAmountIn(uint amountOut, uint reserveIn, uint reserveOut) internal pure returns (uint amountIn) {
         require(amountOut > 0, 'NimbusLibrary: INSUFFICIENT_OUTPUT_AMOUNT');
         require(reserveIn > 0 && reserveOut > 0, 'NimbusLibrary: INSUFFICIENT_LIQUIDITY');
-        uint numerator = reserveIn.mul(amountOut).mul(1000);
-        uint denominator = reserveOut.sub(amountOut).mul(997);
-        amountIn = (numerator / denominator).add(1);
+        uint numerator = reserveIn * amountOut * 1000;
+        uint denominator = (reserveOut - amountOut) * 997;
+        amountIn = (numerator / denominator) + 1;
     }
 
     // performs chained getAmountOut calculations on any number of pairs
@@ -304,20 +302,6 @@ library NimbusLibrary {
     }
 }
 
-library SafeMath {
-    function add(uint x, uint y) internal pure returns (uint z) {
-        require((z = x + y) >= x, 'ds-math-add-overflow');
-    }
-
-    function sub(uint x, uint y) internal pure returns (uint z) {
-        require((z = x - y) <= x, 'ds-math-sub-underflow');
-    }
-
-    function mul(uint x, uint y) internal pure returns (uint z) {
-        require(y == 0 || (z = x * y) / y == x, 'ds-math-mul-overflow');
-    }
-}
-
 interface IERC20 {
     event Approval(address indexed owner, address indexed spender, uint value);
     event Transfer(address indexed from, address indexed to, uint value);
@@ -334,7 +318,7 @@ interface IERC20 {
     function transferFrom(address from, address to, uint value) external returns (bool);
 }
 
-interface INUS_WETH {
+interface INBU_WETH {
     function deposit() external payable;
     function transfer(address to, uint value) external returns (bool);
     function withdraw(uint) external;
@@ -346,10 +330,8 @@ interface ILPRewards {
 }
 
 contract NimbusRouter is INimbusRouter {
-    using SafeMath for uint;
-
     address public immutable override factory;
-    address public immutable override NUS_WETH;
+    address public immutable override NBU_WETH;
     ILPRewards public lpRewards;
 
     modifier ensure(uint deadline) {
@@ -357,14 +339,14 @@ contract NimbusRouter is INimbusRouter {
         _;
     }
 
-    constructor(address _factory, address _NUS_WETH, address _lpRewards) {
+    constructor(address _factory, address _NBU_WETH, address _lpRewards) {
         factory = _factory;
-        NUS_WETH = _NUS_WETH;
+        NBU_WETH = _NBU_WETH;
         lpRewards = ILPRewards(_lpRewards);
     }
 
     receive() external payable {
-        assert(msg.sender == NUS_WETH); // only accept ETH via fallback from the NUS_WETH contract
+        assert(msg.sender == NBU_WETH); // only accept ETH via fallback from the NBU_WETH contract
     }
 
     // **** ADD LIQUIDITY ****
@@ -423,16 +405,16 @@ contract NimbusRouter is INimbusRouter {
     ) external virtual override payable ensure(deadline) returns (uint amountToken, uint amountETH, uint liquidity) {
         (amountToken, amountETH) = _addLiquidity(
             token,
-            NUS_WETH,
+            NBU_WETH,
             amountTokenDesired,
             msg.value,
             amountTokenMin,
             amountETHMin
         );
-        address pair = NimbusLibrary.pairFor(factory, token, NUS_WETH);
+        address pair = NimbusLibrary.pairFor(factory, token, NBU_WETH);
         TransferHelper.safeTransferFrom(token, msg.sender, pair, amountToken);
-        INUS_WETH(NUS_WETH).deposit{value: amountETH}();
-        assert(INUS_WETH(NUS_WETH).transfer(pair, amountETH));
+        INBU_WETH(NBU_WETH).deposit{value: amountETH}();
+        assert(INBU_WETH(NBU_WETH).transfer(pair, amountETH));
         liquidity = INimbusPair(pair).mint(to);
         // refund dust eth, if any
         if (msg.value > amountETH) TransferHelper.safeTransferETH(msg.sender, msg.value - amountETH);
@@ -470,7 +452,7 @@ contract NimbusRouter is INimbusRouter {
     ) public virtual override ensure(deadline) returns (uint amountToken, uint amountETH) {
         (amountToken, amountETH) = removeLiquidity(
             token,
-            NUS_WETH,
+            NBU_WETH,
             liquidity,
             amountTokenMin,
             amountETHMin,
@@ -478,7 +460,7 @@ contract NimbusRouter is INimbusRouter {
             deadline
         );
         TransferHelper.safeTransfer(token, to, amountToken);
-        INUS_WETH(NUS_WETH).withdraw(amountETH);
+        INBU_WETH(NBU_WETH).withdraw(amountETH);
         TransferHelper.safeTransferETH(to, amountETH);
     }
     function removeLiquidityWithPermit(
@@ -505,7 +487,7 @@ contract NimbusRouter is INimbusRouter {
         uint deadline,
         bool approveMax, uint8 v, bytes32 r, bytes32 s
     ) external virtual override returns (uint amountToken, uint amountETH) {
-        address pair = NimbusLibrary.pairFor(factory, token, NUS_WETH);
+        address pair = NimbusLibrary.pairFor(factory, token, NBU_WETH);
         uint value = approveMax ? type(uint256).max : liquidity;
         INimbusPair(pair).permit(msg.sender, address(this), value, deadline, v, r, s);
         (amountToken, amountETH) = removeLiquidityETH(token, liquidity, amountTokenMin, amountETHMin, to, deadline);
@@ -522,7 +504,7 @@ contract NimbusRouter is INimbusRouter {
     ) public virtual override ensure(deadline) returns (uint amountETH) {
         (, amountETH) = removeLiquidity(
             token,
-            NUS_WETH,
+            NBU_WETH,
             liquidity,
             amountTokenMin,
             amountETHMin,
@@ -530,7 +512,7 @@ contract NimbusRouter is INimbusRouter {
             deadline
         );
         TransferHelper.safeTransfer(token, to, IERC20(token).balanceOf(address(this)));
-        INUS_WETH(NUS_WETH).withdraw(amountETH);
+        INBU_WETH(NBU_WETH).withdraw(amountETH);
         TransferHelper.safeTransferETH(to, amountETH);
     }
     function removeLiquidityETHWithPermitSupportingFeeOnTransferTokens(
@@ -542,7 +524,7 @@ contract NimbusRouter is INimbusRouter {
         uint deadline,
         bool approveMax, uint8 v, bytes32 r, bytes32 s
     ) external virtual override returns (uint amountETH) {
-        address pair = NimbusLibrary.pairFor(factory, token, NUS_WETH);
+        address pair = NimbusLibrary.pairFor(factory, token, NBU_WETH);
         uint value = approveMax ? type(uint256).max : liquidity;
         INimbusPair(pair).permit(msg.sender, address(this), value, deadline, v, r, s);
         amountETH = removeLiquidityETHSupportingFeeOnTransferTokens(
@@ -600,11 +582,11 @@ contract NimbusRouter is INimbusRouter {
         ensure(deadline)
         returns (uint[] memory amounts)
     {
-        require(path[0] == NUS_WETH, 'NimbusRouter: INVALID_PATH');
+        require(path[0] == NBU_WETH, 'NimbusRouter: INVALID_PATH');
         amounts = NimbusLibrary.getAmountsOut(factory, msg.value, path);
         require(amounts[amounts.length - 1] >= amountOutMin, 'NimbusRouter: INSUFFICIENT_OUTPUT_AMOUNT');
-        INUS_WETH(NUS_WETH).deposit{value: amounts[0]}();
-        assert(INUS_WETH(NUS_WETH).transfer(NimbusLibrary.pairFor(factory, path[0], path[1]), amounts[0]));
+        INBU_WETH(NBU_WETH).deposit{value: amounts[0]}();
+        assert(INBU_WETH(NBU_WETH).transfer(NimbusLibrary.pairFor(factory, path[0], path[1]), amounts[0]));
         _swap(amounts, path, to);
     }
     function swapTokensForExactETH(uint amountOut, uint amountInMax, address[] calldata path, address to, uint deadline)
@@ -614,14 +596,14 @@ contract NimbusRouter is INimbusRouter {
         ensure(deadline)
         returns (uint[] memory amounts)
     {
-        require(path[path.length - 1] == NUS_WETH, 'NimbusRouter: INVALID_PATH');
+        require(path[path.length - 1] == NBU_WETH, 'NimbusRouter: INVALID_PATH');
         amounts = NimbusLibrary.getAmountsIn(factory, amountOut, path);
         require(amounts[0] <= amountInMax, 'NimbusRouter: EXCESSIVE_INPUT_AMOUNT');
         TransferHelper.safeTransferFrom(
             path[0], msg.sender, NimbusLibrary.pairFor(factory, path[0], path[1]), amounts[0]
         );
         _swap(amounts, path, address(this));
-        INUS_WETH(NUS_WETH).withdraw(amounts[amounts.length - 1]);
+        INBU_WETH(NBU_WETH).withdraw(amounts[amounts.length - 1]);
         TransferHelper.safeTransferETH(to, amounts[amounts.length - 1]);
     }
     function swapExactTokensForETH(uint amountIn, uint amountOutMin, address[] calldata path, address to, uint deadline)
@@ -631,14 +613,14 @@ contract NimbusRouter is INimbusRouter {
         ensure(deadline)
         returns (uint[] memory amounts)
     {
-        require(path[path.length - 1] == NUS_WETH, 'NimbusRouter: INVALID_PATH');
+        require(path[path.length - 1] == NBU_WETH, 'NimbusRouter: INVALID_PATH');
         amounts = NimbusLibrary.getAmountsOut(factory, amountIn, path);
         require(amounts[amounts.length - 1] >= amountOutMin, 'NimbusRouter: INSUFFICIENT_OUTPUT_AMOUNT');
         TransferHelper.safeTransferFrom(
             path[0], msg.sender, NimbusLibrary.pairFor(factory, path[0], path[1]), amounts[0]
         );
         _swap(amounts, path, address(this));
-        INUS_WETH(NUS_WETH).withdraw(amounts[amounts.length - 1]);
+        INBU_WETH(NBU_WETH).withdraw(amounts[amounts.length - 1]);
         TransferHelper.safeTransferETH(to, amounts[amounts.length - 1]);
     }
     function swapETHForExactTokens(uint amountOut, address[] calldata path, address to, uint deadline)
@@ -649,11 +631,11 @@ contract NimbusRouter is INimbusRouter {
         ensure(deadline)
         returns (uint[] memory amounts)
     {
-        require(path[0] == NUS_WETH, 'NimbusRouter: INVALID_PATH');
+        require(path[0] == NBU_WETH, 'NimbusRouter: INVALID_PATH');
         amounts = NimbusLibrary.getAmountsIn(factory, amountOut, path);
         require(amounts[0] <= msg.value, 'NimbusRouter: EXCESSIVE_INPUT_AMOUNT');
-        INUS_WETH(NUS_WETH).deposit{value: amounts[0]}();
-        assert(INUS_WETH(NUS_WETH).transfer(NimbusLibrary.pairFor(factory, path[0], path[1]), amounts[0]));
+        INBU_WETH(NBU_WETH).deposit{value: amounts[0]}();
+        assert(INBU_WETH(NBU_WETH).transfer(NimbusLibrary.pairFor(factory, path[0], path[1]), amounts[0]));
         _swap(amounts, path, to);
         // refund dust eth, if any
         if (msg.value > amounts[0]) TransferHelper.safeTransferETH(msg.sender, msg.value - amounts[0]);
@@ -671,7 +653,7 @@ contract NimbusRouter is INimbusRouter {
             { // scope to avoid stack too deep errors
             (uint reserve0, uint reserve1,) = pair.getReserves();
             (uint reserveInput, uint reserveOutput) = input == token0 ? (reserve0, reserve1) : (reserve1, reserve0);
-            amountInput = IERC20(input).balanceOf(address(pair)).sub(reserveInput);
+            amountInput = IERC20(input).balanceOf(address(pair)) - reserveInput;
             amountOutput = NimbusLibrary.getAmountOut(amountInput, reserveInput, reserveOutput);
             }
             (uint amount0Out, uint amount1Out) = input == token0 ? (uint(0), amountOutput) : (amountOutput, uint(0));
@@ -692,7 +674,7 @@ contract NimbusRouter is INimbusRouter {
         uint balanceBefore = IERC20(path[path.length - 1]).balanceOf(to);
         _swapSupportingFeeOnTransferTokens(path, to);
         require(
-            IERC20(path[path.length - 1]).balanceOf(to).sub(balanceBefore) >= amountOutMin,
+            IERC20(path[path.length - 1]).balanceOf(to) - balanceBefore >= amountOutMin,
             'NimbusRouter: INSUFFICIENT_OUTPUT_AMOUNT'
         );
     }
@@ -708,14 +690,14 @@ contract NimbusRouter is INimbusRouter {
         payable
         ensure(deadline)
     {
-        require(path[0] == NUS_WETH, 'NimbusRouter: INVALID_PATH');
+        require(path[0] == NBU_WETH, 'NimbusRouter: INVALID_PATH');
         uint amountIn = msg.value;
-        INUS_WETH(NUS_WETH).deposit{value: amountIn}();
-        assert(INUS_WETH(NUS_WETH).transfer(NimbusLibrary.pairFor(factory, path[0], path[1]), amountIn));
+        INBU_WETH(NBU_WETH).deposit{value: amountIn}();
+        assert(INBU_WETH(NBU_WETH).transfer(NimbusLibrary.pairFor(factory, path[0], path[1]), amountIn));
         uint balanceBefore = IERC20(path[path.length - 1]).balanceOf(to);
         _swapSupportingFeeOnTransferTokens(path, to);
         require(
-            IERC20(path[path.length - 1]).balanceOf(to).sub(balanceBefore) >= amountOutMin,
+            IERC20(path[path.length - 1]).balanceOf(to) - balanceBefore >= amountOutMin,
             'NimbusRouter: INSUFFICIENT_OUTPUT_AMOUNT'
         );
     }
@@ -731,14 +713,14 @@ contract NimbusRouter is INimbusRouter {
         override
         ensure(deadline)
     {
-        require(path[path.length - 1] == NUS_WETH, 'NimbusRouter: INVALID_PATH');
+        require(path[path.length - 1] == NBU_WETH, 'NimbusRouter: INVALID_PATH');
         TransferHelper.safeTransferFrom(
             path[0], msg.sender, NimbusLibrary.pairFor(factory, path[0], path[1]), amountIn
         );
         _swapSupportingFeeOnTransferTokens(path, address(this));
-        uint amountOut = IERC20(NUS_WETH).balanceOf(address(this));
+        uint amountOut = IERC20(NBU_WETH).balanceOf(address(this));
         require(amountOut >= amountOutMin, 'NimbusRouter: INSUFFICIENT_OUTPUT_AMOUNT');
-        INUS_WETH(NUS_WETH).withdraw(amountOut);
+        INBU_WETH(NBU_WETH).withdraw(amountOut);
         TransferHelper.safeTransferETH(to, amountOut);
     }
 

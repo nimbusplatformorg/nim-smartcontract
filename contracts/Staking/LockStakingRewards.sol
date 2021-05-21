@@ -40,50 +40,7 @@ contract Ownable {
     }
 }
 
-library SafeMath {
-
-    function add(uint256 a, uint256 b) internal pure returns (uint256) {
-        uint256 c = a + b;
-        require(c >= a, "SafeMath: addition overflow");
-
-        return c;
-    }
-
-    function sub(uint256 a, uint256 b) internal pure returns (uint256) {
-        require(b <= a, "SafeMath: subtraction overflow");
-        uint256 c = a - b;
-
-        return c;
-    }
-
-    function mul(uint256 a, uint256 b) internal pure returns (uint256) {
-      if (a == 0) {
-            return 0;
-        }
-
-        uint256 c = a * b;
-        require(c / a == b, "SafeMath: multiplication overflow");
-
-        return c;
-    }
-
-    function div(uint256 a, uint256 b) internal pure returns (uint256) {
-        // Solidity only automatically asserts when dividing by 0
-        require(b > 0, "SafeMath: division by zero");
-        uint256 c = a / b;
-        // assert(a == b * c + a % b); // There is no case in which this doesn't hold
-
-        return c;
-    }
-
-    function mod(uint256 a, uint256 b) internal pure returns (uint256) {
-        require(b != 0, "SafeMath: modulo by zero");
-        return a % b;
-    }
-}
-
 library Math {
-
     function max(uint256 a, uint256 b) internal pure returns (uint256) {
         return a >= b ? a : b;
     }
@@ -110,7 +67,6 @@ library Address {
 }
 
 library SafeERC20 {
-    using SafeMath for uint256;
     using Address for address;
 
     function safeTransfer(IERC20 token, address to, uint256 value) internal {
@@ -129,12 +85,12 @@ library SafeERC20 {
     }
 
     function safeIncreaseAllowance(IERC20 token, address spender, uint256 value) internal {
-        uint256 newAllowance = token.allowance(address(this), spender).add(value);
+        uint256 newAllowance = token.allowance(address(this), spender) + value;
         callOptionalReturn(token, abi.encodeWithSelector(token.approve.selector, spender, newAllowance));
     }
 
     function safeDecreaseAllowance(IERC20 token, address spender, uint256 value) internal {
-        uint256 newAllowance = token.allowance(address(this), spender).sub(value);
+        uint256 newAllowance = token.allowance(address(this), spender) - value;
         callOptionalReturn(token, abi.encodeWithSelector(token.approve.selector, spender, newAllowance));
     }
 
@@ -187,7 +143,6 @@ interface IERC20Permit {
 }
 
 contract LockStakingRewards is ILockStakingRewards, ReentrancyGuard, Ownable {
-    using SafeMath for uint256;
     using SafeERC20 for IERC20;
 
     IERC20 public rewardsToken;
@@ -253,23 +208,21 @@ contract LockStakingRewards is ILockStakingRewards, ReentrancyGuard, Ownable {
             return rewardPerTokenStored;
         }
         return
-            rewardPerTokenStored.add(
-                lastTimeRewardApplicable().sub(lastUpdateTime).mul(rewardRate).mul(1e18).div(_totalSupply)
-            );
+            (rewardPerTokenStored + (lastTimeRewardApplicable() - lastUpdateTime) * rewardRate * 1e18) / _totalSupply;
     }
 
     function earned(address account) public view override returns (uint256) {
-        return _balances[account].mul(rewardPerToken().sub(userRewardPerTokenPaid[account])).div(1e18).add(rewards[account]);
+        return (_balances[account] * (rewardPerToken() - userRewardPerTokenPaid[account]) / 1e18) + rewards[account];
     }
 
     function getRewardForDuration() external view override returns (uint256) {
-        return rewardRate.mul(rewardsDuration);
+        return rewardRate * rewardsDuration;
     }
 
     function stakeWithPermit(uint256 amount, uint deadline, uint8 v, bytes32 r, bytes32 s) external nonReentrant updateReward(msg.sender) {
         require(amount > 0, "LockStakingRewards: Cannot stake 0");
-        _totalSupply = _totalSupply.add(amount);
-        _balances[msg.sender] = _balances[msg.sender].add(amount);
+        _totalSupply += amount;
+        _balances[msg.sender] += amount;
 
         // permit
         IERC20Permit(address(stakingToken)).permit(msg.sender, address(this), amount, deadline, v, r, s);
@@ -283,8 +236,8 @@ contract LockStakingRewards is ILockStakingRewards, ReentrancyGuard, Ownable {
 
     function stake(uint256 amount) external override nonReentrant updateReward(msg.sender) {
         require(amount > 0, "LockStakingRewards: Cannot stake 0");
-        _totalSupply = _totalSupply.add(amount);
-        _balances[msg.sender] = _balances[msg.sender].add(amount);
+        _totalSupply += amount;
+        _balances[msg.sender] += amount;
         stakingToken.safeTransferFrom(msg.sender, address(this), amount);
         uint stakeNonce = stakeNonces[msg.sender]++;
         stakeLocks[msg.sender][stakeNonce] = block.timestamp + lockDuration;
@@ -294,8 +247,8 @@ contract LockStakingRewards is ILockStakingRewards, ReentrancyGuard, Ownable {
 
     function stakeFor(uint256 amount, address user) external override nonReentrant updateReward(user) {
         require(amount > 0, "LockStakingRewards: Cannot stake 0");
-        _totalSupply = _totalSupply.add(amount);
-        _balances[user] = _balances[user].add(amount);
+        _totalSupply += amount;
+        _balances[user] += amount;
         stakingToken.safeTransferFrom(msg.sender, address(this), amount);
         uint stakeNonce = stakeNonces[user]++;
         stakeLocks[user][stakeNonce] = block.timestamp + lockDuration;
@@ -307,8 +260,8 @@ contract LockStakingRewards is ILockStakingRewards, ReentrancyGuard, Ownable {
         uint amount = stakeAmounts[msg.sender][nonce];
         require(stakeAmounts[msg.sender][nonce] > 0, "LockStakingRewards: This stake nonce was withdrawn");
         require(stakeLocks[msg.sender][nonce] < block.timestamp, "LockStakingRewards: Locked");
-        _totalSupply = _totalSupply.sub(amount);
-        _balances[msg.sender] = _balances[msg.sender].sub(amount);
+        _totalSupply -= amount;
+        _balances[msg.sender] -= amount;
         stakingToken.safeTransfer(msg.sender, amount);
         stakeAmounts[msg.sender][nonce] = 0;
         emit Withdrawn(msg.sender, amount);
@@ -330,11 +283,11 @@ contract LockStakingRewards is ILockStakingRewards, ReentrancyGuard, Ownable {
 
     function notifyRewardAmount(uint256 reward) external onlyOwner updateReward(address(0)) {
         if (block.timestamp >= periodFinish) {
-            rewardRate = reward.div(rewardsDuration);
+            rewardRate = reward / rewardsDuration;
         } else {
-            uint256 remaining = periodFinish.sub(block.timestamp);
-            uint256 leftover = remaining.mul(rewardRate);
-            rewardRate = reward.add(leftover).div(rewardsDuration);
+            uint256 remaining = periodFinish - block.timestamp;
+            uint256 leftover = remaining * rewardRate;
+            rewardRate = (reward + leftover) / rewardsDuration;
         }
 
         // Ensure the provided reward amount is not more than the balance in the contract.
@@ -342,10 +295,10 @@ contract LockStakingRewards is ILockStakingRewards, ReentrancyGuard, Ownable {
         // very high values of rewardRate in the earned and rewardsPerToken functions;
         // Reward + leftover must be less than 2^256 / 10^18 to avoid overflow.
         uint balance = rewardsToken.balanceOf(address(this));
-        require(rewardRate <= balance.div(rewardsDuration), "LockStakingRewards: Provided reward too high");
+        require(rewardRate <= balance / rewardsDuration, "LockStakingRewards: Provided reward too high");
 
         lastUpdateTime = block.timestamp;
-        periodFinish = block.timestamp.add(rewardsDuration);
+        periodFinish = block.timestamp + rewardsDuration;
         emit RewardAdded(reward);
     }
 

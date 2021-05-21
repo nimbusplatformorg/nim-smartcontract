@@ -65,53 +65,6 @@ abstract contract Pausable is Ownable {
     }
 }
 
-library SafeMath {
-    function add(uint256 a, uint256 b) internal pure returns (uint256) {
-        uint256 c = a + b;
-        require(c >= a, "SafeMath: addition overflow");
-
-        return c;
-    }
-
-    function sub(uint256 a, uint256 b) internal pure returns (uint256) {
-        return sub(a, b, "SafeMath: subtraction overflow");
-    }
-
-    function sub(uint256 a, uint256 b, string memory errorMessage) internal pure returns (uint256) {
-        require(b <= a, errorMessage);
-        return a - b;
-    }
-
-    function mul(uint256 a, uint256 b) internal pure returns (uint256) {
-        if (a == 0) {
-            return 0;
-        }
-
-        uint256 c = a * b;
-        require(c / a == b, "SafeMath: multiplication overflow");
-
-        return c;
-    }
-
-    function div(uint256 a, uint256 b) internal pure returns (uint256) {
-        return div(a, b, "SafeMath: division by zero");
-    }
-
-    function div(uint256 a, uint256 b, string memory errorMessage) internal pure returns (uint256) {
-        require(b > 0, errorMessage);
-        return a / b;
-    }
-
-    function mod(uint256 a, uint256 b) internal pure returns (uint256) {
-        return mod(a, b, "SafeMath: modulo by zero");
-    }
-
-    function mod(uint256 a, uint256 b, string memory errorMessage) internal pure returns (uint256) {
-        require(b != 0, errorMessage);
-        return a % b;
-    }
-}
-
 interface INBU {
     function balanceOf(address account) external view returns (uint256);
     function transfer(address recipient, uint256 amount) external returns (bool);
@@ -144,8 +97,6 @@ interface INimbusRouter {
 
 
 contract NimbusInitialAcquisition is Ownable, Pausable {
-    using SafeMath for uint;
-
     INBU public immutable NBU;
     address public immutable NBU_WETH;
     INimbusReferralProgram public referralProgram;
@@ -228,25 +179,25 @@ contract NimbusInitialAcquisition is Ownable, Pausable {
                 uint sponsorAmount = NBU.balanceOf(sponsorAddress);
                 for (uint i; i < stakingPools.length; i++) {
                     if (sponsorAmount > minNbuAmountForBonus) break;
-                    sponsorAmount = sponsorAmount.add(stakingPools[i].balanceOf(sponsorAddress));
+                    sponsorAmount += stakingPools[i].balanceOf(sponsorAddress);
                 }
                 
                 if (sponsorAmount > minNbuAmountForBonus) {
-                    uint bonusBase = nbuAmount.add(unclaimedBonusBases[msg.sender]);
-                    uint sponsorBonusAmount = bonusBase.mul(sponsorBonus) / 100;
+                    uint bonusBase = nbuAmount + unclaimedBonusBases[msg.sender];
+                    uint sponsorBonusAmount = bonusBase * sponsorBonus / 100;
                     NBU.give(sponsorAddress, sponsorBonusAmount, 3);
                     unclaimedBonusBases[msg.sender] = 0;
                     emit ProcessSponsorBonus(sponsorAddress, msg.sender, sponsorBonusAmount);
                 } else {
-                    unclaimedBonusBases[msg.sender] = unclaimedBonusBases[msg.sender].add(nbuAmount);
+                    unclaimedBonusBases[msg.sender] += nbuAmount;
                     emit AddUnclaimedSponsorBonus(msg.sender, nbuAmount);
                 }
             } else {
-                unclaimedBonusBases[msg.sender] = unclaimedBonusBases[msg.sender].add(nbuAmount);
+                unclaimedBonusBases[msg.sender] += nbuAmount;
                 emit AddUnclaimedSponsorBonus(msg.sender, nbuAmount);
             }
         } else {
-            unclaimedBonusBases[msg.sender] = unclaimedBonusBases[msg.sender].add(nbuAmount);
+            unclaimedBonusBases[msg.sender] += nbuAmount;
             emit AddUnclaimedSponsorBonus(msg.sender, nbuAmount);
         }
     }
@@ -309,11 +260,11 @@ contract NimbusInitialAcquisition is Ownable, Pausable {
         uint sponsorAmount = NBU.balanceOf(msg.sender);
         for (uint i; i < stakingPools.length; i++) {
             if (sponsorAmount > minNbuAmountForBonus) break;
-            sponsorAmount = sponsorAmount.add(stakingPools[i].balanceOf(msg.sender));
+            sponsorAmount += stakingPools[i].balanceOf(msg.sender);
         }
         
         require (sponsorAmount > minNbuAmountForBonus, "Sponsor balance threshold for bonus not met");
-        uint sponsorBonusAmount = bonusBase.mul(sponsorBonus) / 100;
+        uint sponsorBonusAmount = bonusBase * sponsorBonus / 100;
         NBU.give(msg.sender, sponsorBonusAmount, 3);
         unclaimedBonusBases[msg.sender] = 0;
         emit ProcessSponsorBonus(msg.sender, user, sponsorBonusAmount);
@@ -359,7 +310,7 @@ contract NimbusInitialAcquisition is Ownable, Pausable {
         require(newStakingPool != address(0), "Address is zero");
         if (address(stakePool) != address(0)) NBU.approve(address(stakePool), 0);
         stakePool = INimbusStakingPool(newStakingPool);
-        NBU.approve(newStakingPool, 2 ** 256 - 1);
+        NBU.approve(newStakingPool, type(uint256).max);
     }
 
     function updateStakingPoolAdd(address newStakingPool) external onlyOwner {

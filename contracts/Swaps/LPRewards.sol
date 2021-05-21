@@ -50,20 +50,6 @@ interface INimbusFactory {
     function getReserves() external view returns (uint112 reserve0, uint112 reserve1, uint32 blockTimestampLast);
 }
 
-library SafeMath {
-    function add(uint x, uint y) internal pure returns (uint z) {
-        require((z = x + y) >= x, 'LPReward: ds-math-add-overflow');
-    }
-
-    function sub(uint x, uint y) internal pure returns (uint z) {
-        require((z = x - y) <= x, 'LPReward: ds-math-sub-underflow');
-    }
-
-    function mul(uint x, uint y) internal pure returns (uint z) {
-        require(y == 0 || (z = x * y) / y == x, 'LPReward: ds-math-mul-overflow');
-    }
-}
-
 library Math {
     function min(uint x, uint y) internal pure returns (uint z) {
         z = x < y ? x : y;
@@ -85,8 +71,6 @@ library Math {
 }
 
 contract LPReward is Ownable {
-    using SafeMath for uint;
-
     uint public lpRewardMaxAmount = 100_000_000e18;
     uint public lpRewardUsed;
     uint public immutable startReward;
@@ -131,14 +115,14 @@ contract LPReward is Ownable {
     
     function recordAddLiquidity(address recipient, address pair, uint amountA, uint amountB, uint liquidity) external onlyRouter {
         if (!allowedPairs[pair]) return;
-        uint ratio = Math.sqrt(amountA.mul(amountB)).mul(1e18) / liquidity;   
+        uint ratio = Math.sqrt(amountA * amountB) * 1e18 / liquidity;   
         uint previousRatio = weightedRatio[recipient][pair];
         if (ratio < previousRatio) {
             return;
         }
         uint previousAmount = lpTokenAmounts[recipient][pair];
-        uint newAmount = previousAmount.add(liquidity);
-        uint weighted =  (previousRatio.mul(previousAmount) / newAmount).add(ratio.mul(liquidity) / newAmount); 
+        uint newAmount = previousAmount + liquidity;
+        uint weighted =  (previousRatio * previousAmount / newAmount) + (ratio * liquidity / newAmount); 
         weightedRatio[recipient][pair] = weighted;
         lpTokenAmounts[recipient][pair] = newAmount;
         ratioUpdateLast[recipient][pair] = block.timestamp;
@@ -153,15 +137,15 @@ contract LPReward is Ownable {
         {
         uint previousAmount = lpTokenAmounts[recipient][pair];
         if (previousAmount == 0) return;
-        uint ratio = Math.sqrt(amountA.mul(amountB)).mul(1e18) / liquidity;   
+        uint ratio = Math.sqrt(amountA * amountB) * 1e18 / liquidity;   
         uint previousRatio = weightedRatio[recipient][pair];
         if (previousRatio == 0 || (previousRatio != 0 && ratio < previousRatio)) return;
-        uint difference = ratio.sub(previousRatio);
+        uint difference = ratio - previousRatio;
         if (previousAmount < liquidity) liquidity = previousAmount;
-        weightedRatio[recipient][pair] = (previousRatio.mul(previousAmount.sub(liquidity)) / previousAmount).add(ratio.mul(liquidity) / previousAmount);    
-        lpTokenAmounts[recipient][pair] = previousAmount.sub(liquidity);
-        amount0 = amountA.mul(difference) / 1e18;
-        amount1 = amountB.mul(difference) / 1e18; 
+        weightedRatio[recipient][pair] = (previousRatio * (previousAmount - liquidity) / previousAmount) + (ratio * liquidity / previousAmount);    
+        lpTokenAmounts[recipient][pair] = previousAmount - liquidity;
+        amount0 = amountA * difference / 1e18;
+        amount1 = amountB * difference / 1e18; 
         }
 
         uint amountNbu;
@@ -174,22 +158,22 @@ contract LPReward is Ownable {
             tokenToNbuPair = swapFactory.getPair(tokenB, NBU);
             if (tokenToNbuPair != address(0)) {
                 if (amountNbu != 0) {
-                    amountNbu = amountNbu.add(INimbusRouter(swapRouter).getAmountsOut(amount1, getPathForToken(tokenB))[1]);
+                    amountNbu = amountNbu + INimbusRouter(swapRouter).getAmountsOut(amount1, getPathForToken(tokenB))[1];
                 } else  {
-                    amountNbu = INimbusRouter(swapRouter).getAmountsOut(amount1, getPathForToken(tokenB))[1].mul(2);
+                    amountNbu = INimbusRouter(swapRouter).getAmountsOut(amount1, getPathForToken(tokenB))[1] * 2;
                 }
             } else {
-                amountNbu = amountNbu.mul(2);
+                amountNbu = amountNbu * 2;
             }
         } else if (tokenA == NBU) { 
-            amountNbu = amount0.mul(2);
+            amountNbu = amount0 * 2;
         } else {
-            amountNbu = amount1.mul(2);
+            amountNbu = amount1 * 2;
         }
         
         if (amountNbu != 0 && amountNbu <= availableReward() && IERC20(NBU).balanceOf(address(this)) >= amountNbu) {
             IERC20(NBU).transfer(recipient, amountNbu);
-            lpRewardUsed = lpRewardUsed.add(amountNbu);
+            lpRewardUsed = lpRewardUsed + amountNbu;
             emit RecordRemoveLiquidityGiveNbu(recipient, pair, amountNbu, amountA, amountB, liquidity);            
         } else {
             uint amountS0;
@@ -202,8 +186,8 @@ contract LPReward is Ownable {
                 unclaimedAmounts[recipient][pair].push(amountS0);
                 unclaimedAmounts[recipient][pair].push(amountS1);
             } else {
-                unclaimedAmounts[recipient][pair][0] = unclaimedAmounts[recipient][pair][0].add(amountS0);
-                unclaimedAmounts[recipient][pair][1] = unclaimedAmounts[recipient][pair][1].add(amountS1);
+                unclaimedAmounts[recipient][pair][0] += amountS0;
+                unclaimedAmounts[recipient][pair][1] += amountS1;
             }
             
             emit RecordRemoveLiquidityUnclaimed(recipient, pair, amount0, amount1, liquidity);
@@ -232,7 +216,7 @@ contract LPReward is Ownable {
         require (amountNbu <= availableReward(), "LPReward: Available reward for the period is used");
         
         IERC20(NBU).transfer(recipient, amountNbu);
-        lpRewardUsed = lpRewardUsed.add(amountNbu);
+        lpRewardUsed += amountNbu;
         emit ClaimLiquidityNbu(recipient, amountNbu, amountA, amountB);            
     }
 
@@ -257,8 +241,8 @@ contract LPReward is Ownable {
     }
 
     function availableReward() public view returns (uint) {
-        uint rewardForPeriod = lpRewardMaxAmount.mul(block.timestamp - startReward) / rewardPeriod;
-        if (rewardForPeriod > lpRewardUsed) return rewardForPeriod.sub(lpRewardUsed);
+        uint rewardForPeriod = lpRewardMaxAmount * (block.timestamp - startReward) / rewardPeriod;
+        if (rewardForPeriod > lpRewardUsed) return rewardForPeriod - lpRewardUsed;
         else return 0;
     }
 
@@ -274,17 +258,17 @@ contract LPReward is Ownable {
             tokenToNbuPair = swapFactory.getPair(tokenB, NBU);
             if (tokenToNbuPair != address(0)) {
                 if (amountNbu != 0) {
-                    amountNbu = amountNbu.add(INimbusRouter(swapRouter).getAmountsOut(amountB, getPathForToken(tokenB))[1]);
+                    amountNbu = amountNbu + INimbusRouter(swapRouter).getAmountsOut(amountB, getPathForToken(tokenB))[1];
                 } else  {
-                    amountNbu = INimbusRouter(swapRouter).getAmountsOut(amountB, getPathForToken(tokenB))[1].mul(2);
+                    amountNbu = INimbusRouter(swapRouter).getAmountsOut(amountB, getPathForToken(tokenB))[1] * 2;
                 }
             } else {
-                amountNbu = amountNbu.mul(2);
+                amountNbu = amountNbu * 2;
             }
         } else if (tokenA == NBU) {
-            amountNbu = amountA.mul(2);
+            amountNbu = amountA * 2;
         } else {
-            amountNbu = amountB.mul(2);
+            amountNbu = amountB * 2;
         }
     }
 
