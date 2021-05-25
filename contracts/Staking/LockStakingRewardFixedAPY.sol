@@ -31,12 +31,12 @@ contract Ownable {
         _;
     }
 
-    function transferOwnership(address transferOwner) public onlyOwner {
+    function transferOwnership(address transferOwner) external onlyOwner {
         require(transferOwner != newOwner);
         newOwner = transferOwner;
     }
 
-    function acceptOwnership() virtual public {
+    function acceptOwnership() virtual external {
         require(msg.sender == newOwner);
         emit OwnershipTransferred(owner, newOwner);
         owner = newOwner;
@@ -154,8 +154,8 @@ contract LockStakingRewardFixedAPY is ILockStakingRewards, ReentrancyGuard, Owna
     event Staked(address indexed user, uint256 amount);
     event Withdrawn(address indexed user, uint256 amount);
     event RewardPaid(address indexed user, uint256 reward);
-    event Rescue(address to, uint amount);
-    event RescueToken(address to, address token, uint amount);
+    event Rescue(address indexed to, uint amount);
+    event RescueToken(address indexed to, address indexed token, uint amount);
 
     constructor(
         address _rewardsToken,
@@ -205,6 +205,7 @@ contract LockStakingRewardFixedAPY is ILockStakingRewards, ReentrancyGuard, Owna
 
     function stakeFor(uint256 amount, address user) external override nonReentrant {
         require(amount > 0, "LockStakingRewardFixedAPY: Cannot stake 0");
+        require(user != address(0), "LockStakingRewardFixedAPY: Cannot stake for zero address");
         _stake(amount, user);
     }
 

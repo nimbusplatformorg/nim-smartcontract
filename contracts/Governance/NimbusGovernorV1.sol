@@ -1,12 +1,25 @@
 pragma solidity =0.8.0;
 
-interface IGNBU {
+interface IERC20 {
+    function totalSupply() external view returns (uint256);
+    function balanceOf(address account) external view returns (uint256);
+    function transfer(address recipient, uint256 amount) external returns (bool);
+    function allowance(address owner, address spender) external view returns (uint256);
+    function approve(address spender, uint256 amount) external returns (bool);
+    function transferFrom(address sender, address recipient, uint256 amount) external returns (bool);
+
+    event Transfer(address indexed from, address indexed to, uint256 value);
+    event Approval(address indexed owner, address indexed spender, uint256 value);
+}
+
+interface IGNBU is IERC20 {
     function getPriorVotes(address account, uint blockNumber) external view returns (uint96);
     function freeCirculation() external view returns (uint96);
 }
 
 interface INimbusStakingPool {
     function balanceOf(address account) external view returns (uint256);
+    function stakingToken() external view returns (IERC20);
 }
 
 contract NimbusGovernorV1 {
@@ -60,10 +73,10 @@ contract NimbusGovernorV1 {
     bytes32 public constant DOMAIN_TYPEHASH = keccak256("EIP712Domain(string name,uint256 chainId,address verifyingContract)");
     bytes32 public constant BALLOT_TYPEHASH = keccak256("Ballot(uint256 proposalId,bool support)");
 
-    event ProposalCreated(uint id, address proposer, address[] targets, uint[] values, string[] signatures, bytes[] calldatas, uint startBlock, uint endBlock, string description);
-    event VoteCast(address voter, uint proposalId, bool support, uint votes);
-    event ProposalCanceled(uint id);
-    event ProposalExecuted(uint id);
+    event ProposalCreated(uint indexed id, address indexed proposer, address[] targets, uint[] values, string[] signatures, bytes[] calldatas, uint startBlock, uint endBlock, string description);
+    event VoteCast(address indexed voter, uint indexed proposalId, bool indexed support, uint votes);
+    event ProposalCanceled(uint indexed id);
+    event ProposalExecuted(uint indexed id);
     event ExecuteTransaction(address indexed target, uint value, string signature,  bytes data);
 
     constructor(address gnbu, address[] memory pools) {
@@ -71,6 +84,10 @@ contract NimbusGovernorV1 {
         for (uint i = 0; i < pools.length; i++) {
             stakingPools.push(INimbusStakingPool(pools[i]));
         }
+    }
+
+    receive() payable external {
+        revert();
     }
 
     function quorumVotes() public view returns (uint) { 
@@ -89,7 +106,7 @@ contract NimbusGovernorV1 {
         return GNBU.freeCirculation() * maxVoteWeightPercentage / 10000;
     }
 
-    function propose(address[] memory targets, uint[] memory values, string[] memory signatures, bytes[] memory calldatas, string memory description) public returns (uint) {
+    function propose(address[] memory targets, uint[] memory values, string[] memory signatures, bytes[] memory calldatas, string memory description) external returns (uint) {
         require(GNBU.getPriorVotes(msg.sender, sub256(block.number, 1)) > participationThreshold(), "NimbusGovernorV1::propose: proposer votes below participation threshold");
         require(targets.length == values.length && targets.length == signatures.length && targets.length == calldatas.length, "NimbusGovernorV1::propose: proposal function information arity mismatch");
         require(targets.length != 0, "NimbusGovernorV1::propose: must provide actions");
@@ -130,7 +147,7 @@ contract NimbusGovernorV1 {
         return id;
     }
 
-    function execute(uint proposalId) public payable {
+    function execute(uint proposalId) external payable {
         require(state(proposalId) == ProposalState.Succeeded, "NimbusGovernorV1::execute: proposal can only be executed if it is succeeded");
 
         Proposal storage proposal = proposals[proposalId];
@@ -152,7 +169,7 @@ contract NimbusGovernorV1 {
         emit ProposalExecuted(proposalId);
     }
 
-    function cancel(uint proposalId) public {
+    function cancel(uint proposalId) external {
         ProposalState proposalState = state(proposalId);
         require(proposalState != ProposalState.Executed, "NimbusGovernorV1::cancel: cannot cancel executed proposal");
 
@@ -169,12 +186,12 @@ contract NimbusGovernorV1 {
         emit ProposalCanceled(proposalId);
     }
 
-    function getActions(uint proposalId) public view returns (address[] memory targets, uint[] memory values, string[] memory signatures, bytes[] memory calldatas) {
+    function getActions(uint proposalId) external view returns (address[] memory targets, uint[] memory values, string[] memory signatures, bytes[] memory calldatas) {
         Proposal storage p = proposals[proposalId];
         return (p.targets, p.values, p.signatures, p.calldatas);
     }
 
-    function getReceipt(uint proposalId, address voter) public view returns (Receipt memory) {
+    function getReceipt(uint proposalId, address voter) external view returns (Receipt memory) {
         return proposals[proposalId].receipts[voter];
     }
 
@@ -196,11 +213,11 @@ contract NimbusGovernorV1 {
         }
     }
 
-    function castVote(uint proposalId, bool support) public {
+    function castVote(uint proposalId, bool support) external {
         return _castVote(msg.sender, proposalId, support);
     }
 
-    function castVoteBySig(uint proposalId, bool support, uint8 v, bytes32 r, bytes32 s) public {
+    function castVoteBySig(uint proposalId, bool support, uint8 v, bytes32 r, bytes32 s) external {
         bytes32 domainSeparator = keccak256(abi.encode(DOMAIN_TYPEHASH, keccak256(bytes(name)), getChainId(), address(this)));
         bytes32 structHash = keccak256(abi.encode(BALLOT_TYPEHASH, proposalId, support));
         bytes32 digest = keccak256(abi.encodePacked("\x19\x01", domainSeparator, structHash));
@@ -235,10 +252,13 @@ contract NimbusGovernorV1 {
 
     function updateStakingPoolAdd(address newStakingPool) external {
         require(msg.sender == address(this), "NimbusGovernorV1::updateStakingPoolAdd: Call must come from Governor");
+        INimbusStakingPool pool = INimbusStakingPool(newStakingPool);
+        require (pool.stakingToken() == GNBU, "NimbusGovernorV1::updateStakingPoolAdd: Wrong pool staking tokens");
+
         for (uint i; i < stakingPools.length; i++) {
             require (address(stakingPools[i]) != newStakingPool, "NimbusGovernorV1::updateStakingPoolAdd: Pool exists");
         }
-        stakingPools.push(INimbusStakingPool(newStakingPool));
+        stakingPools.push(pool);
     }
 
     function updateStakingPoolRemove(uint poolIndex) external {

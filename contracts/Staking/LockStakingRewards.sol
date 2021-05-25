@@ -3,6 +3,7 @@ pragma solidity =0.8.0;
 interface IERC20 {
     function totalSupply() external view returns (uint256);
     function balanceOf(address account) external view returns (uint256);
+    function decimals() external pure returns (uint);
     function transfer(address recipient, uint256 amount) external returns (bool);
     function allowance(address owner, address spender) external view returns (uint256);
     function approve(address spender, uint256 amount) external returns (bool);
@@ -27,12 +28,12 @@ contract Ownable {
         _;
     }
 
-    function transferOwnership(address transferOwner) public onlyOwner {
+    function transferOwnership(address transferOwner) external onlyOwner {
         require(transferOwner != newOwner);
         newOwner = transferOwner;
     }
 
-    function acceptOwnership() virtual public {
+    function acceptOwnership() virtual external {
         require(msg.sender == newOwner);
         emit OwnershipTransferred(owner, newOwner);
         owner = newOwner;
@@ -169,7 +170,7 @@ contract LockStakingRewards is ILockStakingRewards, ReentrancyGuard, Ownable {
     event Withdrawn(address indexed user, uint256 amount);
     event RewardPaid(address indexed user, uint256 reward);
     event Rescue(address to, uint amount);
-    event RescueToken(address to, address token, uint amount);
+    event RescueToken(address indexed to, address indexed token, uint amount);
 
     constructor(
         address _rewardsToken,
@@ -178,6 +179,7 @@ contract LockStakingRewards is ILockStakingRewards, ReentrancyGuard, Ownable {
     ) {
         rewardsToken = IERC20(_rewardsToken);
         stakingToken = IERC20(_stakingToken);
+        require(IERC20(_rewardsToken).decimals() == 18 && IERC20(_stakingToken).decimals() == 18, "LockStakingRewards: Unsopported decimals");
         lockDuration = _lockDuration;
     }
 
@@ -208,7 +210,7 @@ contract LockStakingRewards is ILockStakingRewards, ReentrancyGuard, Ownable {
             return rewardPerTokenStored;
         }
         return
-            (rewardPerTokenStored + (lastTimeRewardApplicable() - lastUpdateTime) * rewardRate * 1e18) / _totalSupply;
+            rewardPerTokenStored + ((lastTimeRewardApplicable() - lastUpdateTime) * rewardRate * 1e18 / _totalSupply);
     }
 
     function earned(address account) public view override returns (uint256) {
@@ -247,6 +249,7 @@ contract LockStakingRewards is ILockStakingRewards, ReentrancyGuard, Ownable {
 
     function stakeFor(uint256 amount, address user) external override nonReentrant updateReward(user) {
         require(amount > 0, "LockStakingRewards: Cannot stake 0");
+        require(user != address(0), "LockStakingRewards: Cannot stake for zero address");
         _totalSupply += amount;
         _balances[user] += amount;
         stakingToken.safeTransferFrom(msg.sender, address(this), amount);

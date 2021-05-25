@@ -27,12 +27,12 @@ contract Ownable {
         _;
     }
 
-    function transferOwnership(address transferOwner) public onlyOwner {
+    function transferOwnership(address transferOwner) external onlyOwner {
         require(transferOwner != newOwner);
         newOwner = transferOwner;
     }
 
-    function acceptOwnership() virtual public {
+    function acceptOwnership() virtual external {
         require(msg.sender == newOwner);
         emit OwnershipTransferred(owner, newOwner);
         owner = newOwner;
@@ -128,7 +128,8 @@ interface IERC20Permit {
 contract LockStakingRewardSameTokenFixedAPY is ILockStakingRewards, ReentrancyGuard, Ownable {
     using SafeERC20 for IERC20;
 
-    IERC20 public token;
+    IERC20 public immutable token;
+    IERC20 public immutable stakingToken; //read only variable for compatibility with other contracts
     uint256 public rewardRate; 
     uint256 public immutable lockDuration; 
     uint256 public constant rewardDuration = 365 days; 
@@ -145,8 +146,8 @@ contract LockStakingRewardSameTokenFixedAPY is ILockStakingRewards, ReentrancyGu
     event Staked(address indexed user, uint256 amount);
     event Withdrawn(address indexed user, uint256 amount);
     event RewardPaid(address indexed user, uint256 reward);
-    event Rescue(address to, uint amount);
-    event RescueToken(address to, address token, uint amount);
+    event Rescue(address indexed to, uint amount);
+    event RescueToken(address indexed to, address indexed token, uint amount);
 
     constructor(
         address _token,
@@ -154,6 +155,7 @@ contract LockStakingRewardSameTokenFixedAPY is ILockStakingRewards, ReentrancyGu
         uint _lockDuration
     ) {
         token = IERC20(_token);
+        stakingToken = IERC20(_token);
         rewardRate = _rewardRate;
         lockDuration = _lockDuration;
     }
@@ -204,6 +206,7 @@ contract LockStakingRewardSameTokenFixedAPY is ILockStakingRewards, ReentrancyGu
 
     function stakeFor(uint256 amount, address user) external override nonReentrant {
         require(amount > 0, "LockStakingRewardSameTokenFixedAPY: Cannot stake 0");
+        require(user != address(0), "LockStakingRewardSameTokenFixedAPY: Cannot stake for zero address");
         _totalSupply += amount;
         uint previousAmount = _balances[user];
         uint newAmount = previousAmount + amount;

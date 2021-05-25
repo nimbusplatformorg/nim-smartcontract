@@ -40,7 +40,7 @@ contract Ownable {
         _;
     }
 
-    function transferOwnership(address transferOwner) public onlyOwner {
+    function transferOwnership(address transferOwner) external onlyOwner {
         require(transferOwner != newOwner);
         newOwner = transferOwner;
     }
@@ -107,7 +107,7 @@ contract NBU is IERC20, Ownable, Pausable {
     bytes32 public constant PERMIT_TYPEHASH = keccak256("Permit(address owner,address spender,uint256 value,uint256 nonce,uint256 deadline)");
     mapping (address => uint) public nonces;
 
-    event Unvest(address user, uint amount);
+    event Unvest(address indexed user, uint amount);
 
     constructor () {
         _unfrozenBalances[owner] = _totalSupply;
@@ -124,6 +124,10 @@ contract NBU is IERC20, Ownable, Pausable {
             )
         );
         giveAmount = _totalSupply / 10;
+    }
+
+    receive() payable external {
+        revert();
     }
 
     function approve(address spender, uint amount) external override whenNotPaused returns (bool) {
@@ -240,7 +244,7 @@ contract NBU is IERC20, Ownable, Pausable {
         uint amount = _unfrozenBalances[account];
         if (_vestingNonces[account] == 0) return amount;
         for (uint i = 1; i <= _vestingNonces[account]; i++) {
-            amount += _vestingAmounts[account][i] - _unvestedAmounts[account][i];
+            amount = amount + _vestingAmounts[account][i] - _unvestedAmounts[account][i];
         }
         return amount;
     }
@@ -297,6 +301,7 @@ contract NBU is IERC20, Ownable, Pausable {
     }
 
     function _vest(address user, uint amount, uint vestType) private {
+        require(user != address(0), "NBU::_vest: vest to the zero address");
         uint nonce = ++_vestingNonces[user];
         _vestingAmounts[user][nonce] = amount;
         _vestingReleaseStartDates[user][nonce] = block.timestamp + vestingFirstPeriod;

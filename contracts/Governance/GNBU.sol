@@ -39,12 +39,12 @@ contract Ownable {
         _;
     }
 
-    function transferOwnership(address transferOwner) public onlyOwner {
+    function transferOwnership(address transferOwner) external onlyOwner {
         require(transferOwner != newOwner);
         newOwner = transferOwner;
     }
 
-    function acceptOwnership() virtual public {
+    function acceptOwnership() virtual external {
         require(msg.sender == newOwner);
         emit OwnershipTransferred(owner, newOwner);
         owner = newOwner;
@@ -116,11 +116,15 @@ contract GNBU is Ownable, Pausable {
     event DelegateVotesChanged(address indexed delegate, uint previousBalance, uint newBalance);
     event Transfer(address indexed from, address indexed to, uint256 amount);
     event Approval(address indexed owner, address indexed spender, uint256 amount);
-    event Unvest(address user, uint amount);
+    event Unvest(address indexed user, uint amount);
 
     constructor() {
         _unfrozenBalances[owner] = uint96(totalSupply);
         emit Transfer(address(0), owner, totalSupply);
+    }
+
+    receive() payable external {
+        revert();
     }
 
     function freeCirculation() external view returns (uint) {
@@ -136,9 +140,11 @@ contract GNBU is Ownable, Pausable {
     }
 
     function approve(address spender, uint rawAmount) external whenNotPaused returns (bool) {
+        require(spender != address(0), "GNBU::approve: approve to the zero address");
+
         uint96 amount;
         if (rawAmount == type(uint256).max) {
-            amount = uint96(2 ** 96 - 1);
+            amount = type(uint96).max;
         } else {
             amount = safe96(rawAmount, "GNBU::approve: amount exceeds 96 bits");
         }
@@ -152,7 +158,7 @@ contract GNBU is Ownable, Pausable {
     function permit(address owner, address spender, uint rawAmount, uint deadline, uint8 v, bytes32 r, bytes32 s) external whenNotPaused {
         uint96 amount;
         if (rawAmount == type(uint256).max) {
-            amount = uint96(2 ** 96 - 1);
+            amount = type(uint96).max;
         } else {
             amount = safe96(rawAmount, "GNBU::permit: amount exceeds 96 bits");
         }
@@ -219,7 +225,7 @@ contract GNBU is Ownable, Pausable {
         uint96 spenderAllowance = allowances[src][spender];
         uint96 amount = safe96(rawAmount, "GNBU::approve: amount exceeds 96 bits");
 
-        if (spender != src && spenderAllowance != uint96(2 ** 96 - 1)) {
+        if (spender != src && spenderAllowance != type(uint96).max) {
             uint96 newAllowance = sub96(spenderAllowance, amount, "GNBU::transferFrom: transfer amount exceeds spender allowance");
             allowances[src][spender] = newAllowance;
 
@@ -355,6 +361,7 @@ contract GNBU is Ownable, Pausable {
     }
 
     function _vest(address user, uint96 amount) private {
+        require(user != address(0), "GNBU::_vest: vest to the zero address");
         uint32 nonce = ++_vestingNonces[user];
         _vestingAmounts[user][nonce] = amount;
         _vestingReleaseStartDates[user][nonce] = block.timestamp + vestingFirstPeriod;

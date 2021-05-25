@@ -28,12 +28,12 @@ contract Ownable {
         _;
     }
 
-    function transferOwnership(address transferOwner) public onlyOwner {
+    function transferOwnership(address transferOwner) external onlyOwner {
         require(transferOwner != newOwner);
         newOwner = transferOwner;
     }
 
-    function acceptOwnership() virtual public {
+    function acceptOwnership() virtual external {
         require(msg.sender == newOwner);
         emit OwnershipTransferred(owner, newOwner);
         owner = newOwner;
@@ -87,12 +87,12 @@ contract LPReward is Ownable {
     mapping (address => bool) public allowedPairs;
     mapping (address => address[]) public pairTokens;
 
-    event RecordAddLiquidity(uint ratio, uint weightedRatio, uint oldWeighted, uint liquidity);
-    event RecordRemoveLiquidityUnclaimed(address recipient, address pair, uint amountA, uint amountB, uint liquidity);
-    event RecordRemoveLiquidityGiveNbu(address recipient, address pair, uint nbu, uint amountA, uint amountB, uint liquidity);
-    event ClaimLiquidityNbu(address recipient, uint nbu, uint amountA, uint amountB);
-    event Rescue(address to, uint amount);
-    event RescueToken(address token, address to, uint amount); 
+    event RecordAddLiquidity(address indexed recipient, address indexed pair, uint ratio, uint weightedRatio, uint oldWeighted, uint liquidity);
+    event RecordRemoveLiquidityUnclaimed(address indexed recipient, address indexed pair, uint amountA, uint amountB, uint liquidity);
+    event RecordRemoveLiquidityGiveNbu(address indexed recipient, address indexed pair, uint nbu, uint amountA, uint amountB, uint liquidity);
+    event ClaimLiquidityNbu(address indexed recipient, address indexed pair, uint nbu, uint amountA, uint amountB);
+    event Rescue(address indexed to, uint amount);
+    event RescueToken(address indexed token, address indexed to, uint amount); 
 
     constructor(address nbu, address factory) {
         swapFactory = INimbusFactory(factory);
@@ -126,7 +126,7 @@ contract LPReward is Ownable {
         weightedRatio[recipient][pair] = weighted;
         lpTokenAmounts[recipient][pair] = newAmount;
         ratioUpdateLast[recipient][pair] = block.timestamp;
-        emit RecordAddLiquidity(ratio, weighted, previousRatio, liquidity);
+        emit RecordAddLiquidity(recipient, pair, ratio, weighted, previousRatio, liquidity);
     }
 
     function recordRemoveLiquidity(address recipient, address tokenA, address tokenB, uint amountA, uint amountB, uint liquidity) external lock onlyRouter { 
@@ -217,7 +217,7 @@ contract LPReward is Ownable {
         
         IERC20(NBU).transfer(recipient, amountNbu);
         lpRewardUsed += amountNbu;
-        emit ClaimLiquidityNbu(recipient, amountNbu, amountA, amountB);            
+        emit ClaimLiquidityNbu(recipient, pair, amountNbu, amountA, amountB);            
     }
 
     function unclaimedAmountNbu(address recipient, address pair) external view returns (uint) {

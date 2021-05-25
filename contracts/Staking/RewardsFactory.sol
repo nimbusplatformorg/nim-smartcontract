@@ -3,6 +3,7 @@ pragma solidity =0.8.0;
 interface IERC20 {
     function totalSupply() external view returns (uint256);
     function balanceOf(address account) external view returns (uint256);
+    function decimals() external pure returns (uint);
     function transfer(address recipient, uint256 amount) external returns (bool);
     function allowance(address owner, address spender) external view returns (uint256);
     function approve(address spender, uint256 amount) external returns (bool);
@@ -27,12 +28,12 @@ contract Ownable {
         _;
     }
 
-    function transferOwnership(address transferOwner) public onlyOwner {
+    function transferOwnership(address transferOwner) external onlyOwner {
         require(transferOwner != newOwner);
         newOwner = transferOwner;
     }
 
-    function acceptOwnership() virtual public {
+    function acceptOwnership() virtual external {
         require(msg.sender == newOwner);
         emit OwnershipTransferred(owner, newOwner);
         owner = newOwner;
@@ -177,6 +178,7 @@ contract StakingRewards is IStakingRewards, RewardsDistributionRecipient, Reentr
     ) {
         rewardsToken = IERC20(_rewardsToken);
         stakingToken = IERC20(_stakingToken);
+        require(IERC20(_rewardsToken).decimals() == 18 && IERC20(_stakingToken).decimals() == 18, "StakingRewards: Unsopported decimals");
         rewardsDistribution = _rewardsDistribution;
     }
 

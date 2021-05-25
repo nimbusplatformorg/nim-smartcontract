@@ -28,12 +28,12 @@ contract Ownable {
         _;
     }
 
-    function transferOwnership(address transferOwner) public onlyOwner {
+    function transferOwnership(address transferOwner) external onlyOwner {
         require(transferOwner != newOwner);
         newOwner = transferOwner;
     }
 
-    function acceptOwnership() virtual public {
+    function acceptOwnership() virtual external {
         require(msg.sender == newOwner);
         emit OwnershipTransferred(owner, newOwner);
         owner = newOwner;
@@ -49,6 +49,7 @@ interface INimbusReferralProgram {
 
 interface INimbusStakingPool {
     function balanceOf(address account) external view returns (uint256);
+    function stakingToken() external view returns (IERC20);
 }
 
 interface INimbusRouter {
@@ -84,21 +85,23 @@ contract NimbusReferralProgram is INimbusReferralProgram, Ownable {
     INimbusRouter public swapRouter;                
     INimbusStakingPool[] public stakingPools; 
     address public migrator;
+    address public registrator;
     address public specialReserveFund;
     address public swapToken;                       
     uint public swapTokenAmountForFeeDistributionThreshold;
 
-    event DistributeFees(address token, uint userId, uint amount);
-    event DistributeFeesForUser(address token, uint recipientId, uint amount);
-    event ClaimEarnedFunds(address token, uint userId, uint unclaimedAmount);
-    event TransferToNimbusSpecialReserveFund(address token, uint fromUserId, uint undistributedAmount);
+    event Register(address indexed user, uint indexed userId, uint indexed sponsorId);
+    event DistributeFees(address indexed token, uint indexed userId, uint amount);
+    event DistributeFeesForUser(address indexed token, uint indexed recipientId, uint amount);
+    event ClaimEarnedFunds(address indexed token, uint indexed userId, uint unclaimedAmount);
+    event TransferToNimbusSpecialReserveFund(address indexed token, uint indexed fromUserId, uint undistributedAmount);
     event UpdateLevels(uint[] newLevels);
     event UpdateSpecialReserveFund(address newSpecialReserveFund);
-    event MigrateUserBySign(address signatory, uint userId, address userAddress, uint nonce);
+    event MigrateUserBySign(address indexed signatory, uint indexed userId, address indexed userAddress, uint nonce);
 
     uint private unlocked = 1;
     modifier lock() {
-        require(unlocked == 1, 'Nimbus: LOCKED');
+        require(unlocked == 1, 'Nimbus Referral: LOCKED');
         unlocked = 0;
         _;
         unlocked = 1;
@@ -106,11 +109,12 @@ contract NimbusReferralProgram is INimbusReferralProgram, Ownable {
 
     constructor(address migratorAddress, address nbu)  {
         migrator = migratorAddress;
+        registrator = migratorAddress;
         levels = [40, 20, 13, 10, 10, 7];
         maxLevel = 6;
         NBU = IERC20(nbu);
 
-        minTokenAmountForCheck = 10 * 10 ** 18;
+        minTokenAmountForCheck = 10 * 1e18;
         maxLevelDepth = 25;
 
         uint chainId;
@@ -133,7 +137,12 @@ contract NimbusReferralProgram is INimbusReferralProgram, Ownable {
     }
 
     modifier onlyMigrator() {
-        require(msg.sender == migrator, "Nimbus Referral: caller is not the migrator");
+        require(msg.sender == migrator, "Nimbus Referral: Caller is not the migrator");
+        _;
+    }
+
+    modifier onlyRegistrator() {
+        require(msg.sender == registrator, "Nimbus Referral: Caller is not the registrator");
         _;
     }
 
@@ -177,24 +186,43 @@ contract NimbusReferralProgram is INimbusReferralProgram, Ownable {
 
 
     function registerBySponsorAddress(address sponsorAddress) external returns (uint) { 
-        return registerBySponsorId(userIdByAddress[sponsorAddress]);
+        return _registerUser(msg.sender, userIdByAddress[sponsorAddress]);
     }
 
     function register() public returns (uint) {
-        return registerBySponsorId(1000000001);
+        return _registerUser(msg.sender, 1000000001);
     }
 
     function registerBySponsorId(uint sponsorId) public returns (uint) {
-        require(userIdByAddress[msg.sender] == 0, "Nimbus Referral: Already registered");
+        return _registerUser(msg.sender, sponsorId);
+    }
+
+    function registerUserBySponsorAddress(address user, address sponsorAddress) external onlyRegistrator returns (uint) { 
+        return _registerUser(user, userIdByAddress[sponsorAddress]);
+    }
+
+    function registerUser(address user) public onlyRegistrator  returns (uint) {
+        return _registerUser(user, 1000000001);
+    }
+
+    function registerUserBySponsorId(address user, uint sponsorId) public onlyRegistrator returns (uint) {
+        return _registerUser(user, sponsorId);
+    }
+
+    function _registerUser(address user, uint sponsorId) private returns (uint) {
+        require(user != address(0), "Nimbus Referral: Address is zero");
+        require(userIdByAddress[user] == 0, "Nimbus Referral: Already registered");
         require(_userSponsor[sponsorId] != 0, "Nimbus Referral: No such sponsor");
         
         uint id = ++lastUserId; //gas saving
-        userIdByAddress[msg.sender] = id;
-        userAddressById[id] = msg.sender;
+        userIdByAddress[user] = id;
+        userAddressById[id] = user;
         _userSponsor[id] = sponsorId;
         _userReferrals[sponsorId].push(id);
+        emit Register(user, id, sponsorId);
         return id;
     }
+    
 
     function recordFee(address token, address recipient, uint amount) external lock { 
         uint actualBalance = IERC20(token).balanceOf(address(this));
@@ -229,7 +257,7 @@ contract NimbusReferralProgram is INimbusReferralProgram, Ownable {
     }
     
     function distributeFees(address token, uint userId) private {
-        require(_undistributedFees[token][userId] > 0, "Undistributed fee is 0");
+        require(_undistributedFees[token][userId] > 0, "Nimbus Referral: Undistributed fee is 0");
         uint amount = _undistributedFees[token][userId];
         uint level = transferToSponsor(token, userId, amount, 0, 0); 
 
@@ -296,7 +324,6 @@ contract NimbusReferralProgram is INimbusReferralProgram, Ownable {
 
 
     function migrateUsers(uint[] memory ids, uint[] memory sponsorId, address[] memory userAddress, uint[] memory nbuUsdt) external onlyMigrator {
-        require(lastUserId == 0, "Nimbus Referral: Basic migration is finished"); 
         require(ids.length == sponsorId.length, "Nimbus Referral: Different array lengths");     
         for (uint i; i < ids.length; i++) {
             uint id = ids[i];
@@ -325,7 +352,7 @@ contract NimbusReferralProgram is INimbusReferralProgram, Ownable {
 
     function updateUserAddress(uint id, address userAddress) external onlyMigrator {
         require(userAddress != address(0), "Nimbus Referral: Address is zero");
-        require(_userSponsor[id] < 1000000001, "Nimbus Referral: No such user");
+        require(_userSponsor[id] > 1000000000, "Nimbus Referral: No such user");
         require(userIdByAddress[userAddress] == 0, "Nimbus Referral: Address is already in the system");
         userIdByAddress[userAddress] = id;
         userAddressById[id] = userAddress;
@@ -344,7 +371,7 @@ contract NimbusReferralProgram is INimbusReferralProgram, Ownable {
         );
         
         address recoveredAddress = ecrecover(digest, v, r, s);
-        require(recoveredAddress != address(0) && recoveredAddress == migrator, 'Nimbus: INVALID_SIGNATURE');
+        require(recoveredAddress != address(0) && recoveredAddress == migrator, 'Nimbus Referral: INVALID_SIGNATURE');
         userIdByAddress[userAddress] = id;
         userAddressById[id] = userAddress;
         emit MigrateUserBySign(recoveredAddress, id, userAddress, nonce);
@@ -362,7 +389,7 @@ contract NimbusReferralProgram is INimbusReferralProgram, Ownable {
         );
         
         address recoveredAddress = ecrecover(digest, v, r, s);
-        require(recoveredAddress != address(0) && recoveredAddress == migrator, 'Nimbus: INVALID_SIGNATURE');
+        require(recoveredAddress != address(0) && recoveredAddress == migrator, 'Nimbus Referral: INVALID_SIGNATURE');
         userIdByAddress[userAddress] = id;
         userAddressById[id] = userAddress;
         _userReferrals[id] = referrals;
@@ -381,7 +408,7 @@ contract NimbusReferralProgram is INimbusReferralProgram, Ownable {
         );
         
         address recoveredAddress = ecrecover(digest, v, r, s);
-        require(recoveredAddress != address(0) && recoveredAddress == migrator, 'Nimbus: INVALID_SIGNATURE');
+        require(recoveredAddress != address(0) && recoveredAddress == migrator, 'Nimbus Referral: INVALID_SIGNATURE');
         userIdByAddress[userAddress] = id;
         userAddressById[id] = userAddress;
         for (uint i; i < referrals.length; i++) {
@@ -397,25 +424,28 @@ contract NimbusReferralProgram is INimbusReferralProgram, Ownable {
         }
     }
 
-    function updateMigrator(address newMigrator) external onlyMigrator {
+    function updateMigrator(address newMigrator) external {
+        require(msg.sender == migrator || msg.sender == owner, "Nimbus Referral: Not allowed");
         require(newMigrator != address(0), "Nimbus Referral: Address is zero");
         migrator = newMigrator;
     }
 
-    function finishBasicMigration(uint userId) external onlyMigrator {
-        lastUserId = userId;
+    function updateRegistrator(address newRegistrator) external {
+        require(msg.sender == registrator || msg.sender == owner, "Nimbus Referral: Not allowed");
+        require(newRegistrator != address(0), "Nimbus Referral: Address is zero");
+        registrator = newRegistrator;
     }
 
 
 
 
     function updateSwapRouter(address newSwapRouter) external onlyOwner {
-        require(newSwapRouter != address(0), "Address is zero");
+        require(newSwapRouter != address(0), "Nimbus Referral: Address is zero");
         swapRouter = INimbusRouter(newSwapRouter);
     }
 
     function updateSwapToken(address newSwapToken) external onlyOwner {
-        require(newSwapToken != address(0), "Address is zero");
+        require(newSwapToken != address(0), "Nimbus Referral: Address is zero");
         swapToken = newSwapToken;
     }
 
@@ -434,10 +464,13 @@ contract NimbusReferralProgram is INimbusReferralProgram, Ownable {
     
 
     function updateStakingPoolAdd(address newStakingPool) external onlyOwner {
+        INimbusStakingPool pool = INimbusStakingPool(newStakingPool);
+        require (pool.stakingToken() == NBU, "Nimbus Referral: Wrong pool staking tokens");
+
         for (uint i; i < stakingPools.length; i++) {
-            require (address(stakingPools[i]) != newStakingPool, "Pool exists");
+            require (address(stakingPools[i]) != newStakingPool, "Nimbus Referral: Pool exists");
         }
-        stakingPools.push(INimbusStakingPool(newStakingPool));
+        stakingPools.push(INimbusStakingPool(pool));
     }
 
     function updateStakingPoolRemove(uint poolIndex) external onlyOwner {
