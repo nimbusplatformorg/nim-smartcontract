@@ -324,6 +324,7 @@ contract NimbusReferralProgram is INimbusReferralProgram, Ownable {
 
 
     function migrateUsers(uint[] memory ids, uint[] memory sponsorId, address[] memory userAddress, uint[] memory nbuUsdt) external onlyMigrator {
+        require(lastUserId == 0, "Nimbus Referral: Basic migration is finished");
         require(ids.length == sponsorId.length, "Nimbus Referral: Different array lengths");     
         for (uint i; i < ids.length; i++) {
             uint id = ids[i];
@@ -434,6 +435,10 @@ contract NimbusReferralProgram is INimbusReferralProgram, Ownable {
         require(msg.sender == registrator || msg.sender == owner, "Nimbus Referral: Not allowed");
         require(newRegistrator != address(0), "Nimbus Referral: Address is zero");
         registrator = newRegistrator;
+    }
+
+    function finishBasicMigration(uint userId) external onlyMigrator {
+        lastUserId = userId;
     }
 
 
