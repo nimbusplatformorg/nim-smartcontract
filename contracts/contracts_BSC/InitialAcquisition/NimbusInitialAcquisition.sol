@@ -122,13 +122,16 @@ contract NimbusInitialAcquisition is Ownable, Pausable {
     uint public sponsorBonus;
     mapping(address => uint) public unclaimedBonusBases;
 
+    bool public useWeightedRates;
+    mapping(address => uint) public weightedTokenNbuExchangeRates;
+
     event BuyNbuForToken(address indexed token, uint tokenAmount, uint nbuAmount, address indexed nbuRecipient);
     event BuyNbuForBnb(uint bnbAmount, uint nbuAmount, address indexed nbuRecipient);
     event ProcessSponsorBonus(address indexed sponsor, address indexed user, uint bonusAmount);
     event AddUnclaimedSponsorBonus(address indexed user, uint nbuAmount);
 
-    event UpdateTokenNbuExchangeRate(address indexed token, uint newRate);
-    event UpdateBnbNbuExchangeRate(uint newRate);
+    event UpdateTokenNbuWeightedExchangeRate(address indexed token, uint newRate);
+    event ToggleUseWeightedRates(bool useWeightedRates);
     event Rescue(address indexed to, uint amount);
     event RescueToken(address indexed token, address indexed to, uint amount); 
 
@@ -146,10 +149,14 @@ contract NimbusInitialAcquisition is Ownable, Pausable {
     }
 
     function getNbuAmountForToken(address token, uint tokenAmount) public view returns (uint) { 
-        address[] memory path = new address[](2);
-        path[0] = token;
-        path[1] = address(NBU);
-        return swapRouter.getAmountsOut(tokenAmount, path)[1];
+        if (!useWeightedRates) {
+            address[] memory path = new address[](2);
+            path[0] = token;
+            path[1] = address(NBU);
+            return swapRouter.getAmountsOut(tokenAmount, path)[1];
+        } else {
+            return tokenAmount * weightedTokenNbuExchangeRates[token] / 1e18;
+        }  
     }
 
     function getNbuAmountForBnb(uint bnbAmount) public view returns (uint) { 
@@ -157,10 +164,14 @@ contract NimbusInitialAcquisition is Ownable, Pausable {
     }
 
     function getTokenAmountForNbu(address token, uint nbuAmount) public view returns (uint) { 
-        address[] memory path = new address[](2);
-        path[0] = address(NBU);
-        path[1] = token;
-        return swapRouter.getAmountsOut(nbuAmount, path)[1];
+        if (!useWeightedRates) { 
+            address[] memory path = new address[](2);
+            path[0] = address(NBU);
+            path[1] = token;
+            return swapRouter.getAmountsOut(nbuAmount, path)[1];
+        } else {
+            return nbuAmount * 1e18 / weightedTokenNbuExchangeRates[token];
+        }
     }
 
     function getBnbAmountForNbu(uint nbuAmount) public view returns (uint) { 
@@ -351,6 +362,16 @@ contract NimbusInitialAcquisition is Ownable, Pausable {
 
     function updateSwapTokenAmountForBonusThreshold(uint threshold) external onlyOwner {
         swapTokenAmountForBonusThreshold = threshold;
+    }
+
+    function updateTokenNbuWeightedExchangeRate(address token, uint rate) external onlyOwner {
+        weightedTokenNbuExchangeRates[token] = rate;
+        emit UpdateTokenNbuWeightedExchangeRate(token, rate);
+    }
+
+    function toggleUseWeightedRates() external onlyOwner {
+        useWeightedRates = !useWeightedRates;
+        emit ToggleUseWeightedRates(useWeightedRates);
     }
 }
 
