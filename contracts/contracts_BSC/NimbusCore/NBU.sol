@@ -13,11 +13,13 @@ pragma solidity =0.8.0;
 
 interface IBEP20 {
     function totalSupply() external view returns (uint256);
+    function decimals() external view returns (uint8);
     function balanceOf(address account) external view returns (uint256);
     function transfer(address recipient, uint256 amount) external returns (bool);
     function allowance(address owner, address spender) external view returns (uint256);
     function approve(address spender, uint256 amount) external returns (bool);
     function transferFrom(address sender, address recipient, uint256 amount) external returns (bool);
+    function getOwner() external view returns (address);
 
     event Transfer(address indexed from, address indexed to, uint256 value);
     event Approval(address indexed owner, address indexed spender, uint256 value);
@@ -130,6 +132,10 @@ contract NBU is IBEP20, Ownable, Pausable {
         revert();
     }
 
+    function getOwner() public override view returns (address) {
+        return owner;
+    }
+
     function approve(address spender, uint amount) external override whenNotPaused returns (bool) {
         _approve(msg.sender, spender, amount);
         return true;
@@ -224,7 +230,7 @@ contract NBU is IBEP20, Ownable, Pausable {
         return _allowances[owner][spender];
     }
 
-    function decimals() external pure returns (uint8) {
+    function decimals() external override pure returns (uint8) {
         return _decimals;
     }
 

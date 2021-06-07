@@ -13,11 +13,13 @@ pragma solidity =0.8.0;
 
 interface IBEP20 {
     function totalSupply() external view returns (uint);
+    function decimals() external view returns (uint8);
     function balanceOf(address tokenOwner) external view returns (uint balance);
     function allowance(address tokenOwner, address spender) external view returns (uint remaining);
     function transfer(address to, uint tokens) external returns (bool success);
     function approve(address spender, uint tokens) external returns (bool success);
     function transferFrom(address from, address to, uint tokens) external returns (bool success);
+    function getOwner() external view returns (address);
 
     event Transfer(address indexed from, address indexed to, uint tokens);
     event Approval(address indexed tokenOwner, address indexed spender, uint tokens);
@@ -37,6 +39,10 @@ contract Ownable {
     modifier onlyOwner {
         require(msg.sender == owner, "Ownable: Caller is not the owner");
         _;
+    }
+
+    function getOwner() external view returns (address) {
+        return owner;
     }
 
     function transferOwnership(address transferOwner) external onlyOwner {

@@ -2,6 +2,7 @@ pragma solidity =0.8.0;
 
 interface IBEP20 {
     function totalSupply() external view returns (uint256);
+    function decimals() external view returns (uint8);
     function balanceOf(address account) external view returns (uint256);
     function transfer(address recipient, uint256 amount) external returns (bool);
     function allowance(address owner, address spender) external view returns (uint256);
@@ -26,6 +27,10 @@ contract Ownable {
     modifier onlyOwner {
         require(msg.sender == owner, "LPReward: Caller is not the owner");
         _;
+    }
+
+    function getOwner() external view returns (address) {
+        return owner;
     }
 
     function transferOwnership(address transferOwner) external onlyOwner {
