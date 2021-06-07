@@ -77,6 +77,7 @@ contract NimbusReferralProgramUsers is INimbusReferralProgram, Ownable {
     event MigrateUserBySign(address indexed signatory, uint indexed userId, address indexed userAddress, uint nonce);
 
     constructor(address migratorAddress)  {
+        require(migratorAddress != address(0), "Nimbus Referral: Zero address");
         migrator = migratorAddress;
         registrators[migratorAddress] = true;
 

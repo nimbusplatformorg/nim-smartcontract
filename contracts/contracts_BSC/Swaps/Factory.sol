@@ -424,6 +424,7 @@ contract NimbusFactory is INimbusFactory {
     address[] public override allPairs;
 
     constructor(address _feeToSetter) {
+        require(_feeToSetter != address(0), "Nimbus: Zero address");
         feeToSetter = _feeToSetter;
     }
 
@@ -455,11 +456,13 @@ contract NimbusFactory is INimbusFactory {
 
     function setFeeToSetter(address _feeToSetter) external override {
         require(msg.sender == feeToSetter, 'Nimbus: FORBIDDEN');
+        require(_feeToSetter != address(0), 'Nimbus: ZERO_ADDRESS');
         feeToSetter = _feeToSetter;
     }
 
     function setNimbusReferralProgram(address _nimbusReferralProgram) external {
         require(msg.sender == feeToSetter, 'Nimbus: FORBIDDEN');
+        require(_nimbusReferralProgram != address(0), 'Nimbus: ZERO_ADDRESS');
         nimbusReferralProgram = _nimbusReferralProgram;
     }
 }

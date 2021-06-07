@@ -182,7 +182,7 @@ contract NimbusBEP20P2P_V1 {
         emit WithdrawOverdueAsset(tradeId);
     }
 
-    function state(uint tradeId) public view returns (TradeState) {
+    function state(uint tradeId) external view returns (TradeState) {
         require(tradeCount >= tradeId && tradeId > 0, "NimbusBEP20P2P_V1: invalid trade id");
         Trade storage trade = trades[tradeId];
         if (trade.status == 1) {
@@ -196,7 +196,7 @@ contract NimbusBEP20P2P_V1 {
         }
     }
 
-    function userTrades(address user) public view returns (uint[] memory) {
+    function userTrades(address user) external view returns (uint[] memory) {
         return _userTrades[user];
     }
 

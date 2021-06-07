@@ -161,6 +161,7 @@ contract LockStakingRewardSameTokenFixedAPY is ILockStakingRewards, ReentrancyGu
         uint _rewardRate,
         uint _lockDuration
     ) {
+        require(_token != address(0), "LockStakingRewardSameTokenFixedAPY: Zero address");
         token = IBEP20(_token);
         stakingToken = IBEP20(_token);
         rewardRate = _rewardRate;

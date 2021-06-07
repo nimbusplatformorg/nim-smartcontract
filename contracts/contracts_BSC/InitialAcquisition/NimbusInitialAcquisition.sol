@@ -336,9 +336,9 @@ contract NimbusInitialAcquisition is Ownable, Pausable {
 
     function updateStakePool(address newStakingPool) external onlyOwner {
         require(newStakingPool != address(0), "NimbusInitialAcquisition: Address is zero");
-        if (address(stakePool) != address(0)) NBU.approve(address(stakePool), 0);
+        if (address(stakePool) != address(0)) require(NBU.approve(address(stakePool), 0), "NimbusInitialAcquisition: Error on approving");
         stakePool = INimbusStakingPool(newStakingPool);
-        NBU.approve(newStakingPool, type(uint256).max);
+        require(NBU.approve(newStakingPool, type(uint256).max), "NimbusInitialAcquisition: Error on approving");
     }
 
     function updateStakingPoolAdd(address newStakingPool) external onlyOwner {

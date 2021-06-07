@@ -340,6 +340,7 @@ contract NimbusRouter is INimbusRouter {
     }
 
     constructor(address _factory, address _NBU_WBNB, address _lpRewards) {
+        require(_factory != address(0) && _NBU_WBNB != address(0) && _lpRewards != address(0), "NimbusRouter: Zero address(es)");
         factory = _factory;
         NBU_WBNB = _NBU_WBNB;
         lpRewards = ILPRewards(_lpRewards);
@@ -433,7 +434,7 @@ contract NimbusRouter is INimbusRouter {
     ) public virtual override ensure(deadline) returns (uint amountA, uint amountB) {
         {
         address pair = NimbusLibrary.pairFor(factory, tokenA, tokenB);
-        INimbusPair(pair).transferFrom(msg.sender, pair, liquidity); // send liquidity to pair
+        require(INimbusPair(pair).transferFrom(msg.sender, pair, liquidity), "NimbusRouter: Error on transfering"); // send liquidity to pair
         (uint amount0, uint amount1) = INimbusPair(pair).burn(to);
         (address token0,) = NimbusLibrary.sortTokens(tokenA, tokenB);
         (amountA, amountB) = tokenA == token0 ? (amount0, amount1) : (amount1, amount0);

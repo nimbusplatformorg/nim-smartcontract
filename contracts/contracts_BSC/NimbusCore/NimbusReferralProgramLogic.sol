@@ -76,7 +76,6 @@ contract NimbusReferralProgramLogic is Ownable {
     uint public minTokenAmountForCheck;
 
     mapping(address => mapping(uint => uint)) private _undistributedFees;
-    mapping(uint => bool) private _networkBonus;
     mapping(address => uint) private _recordedBalances;
 
 

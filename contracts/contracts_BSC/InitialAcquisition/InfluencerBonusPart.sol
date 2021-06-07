@@ -107,7 +107,7 @@ contract NBUInfluencerBonusPart is Ownable {
         path[1] = address(NBU);
         uint minNbuAmountForBonus = swapRouter.getAmountsOut(swapTokenAmountForBonusThreshold, path)[1];
         require (amount >= minNbuAmountForBonus, "NBUInfluencerBonusPart: Bonus threshold not met");
-        NBU.transfer(msg.sender, nbuBonusAmount);
+        require(NBU.transfer(msg.sender, nbuBonusAmount), "NBUInfluencerBonusPart: Error while transfer");
         processedUsers[msg.sender][user] = true;
         emit ProcessInfluencerBonus(msg.sender, user, amount, nbuBonusAmount);
     }

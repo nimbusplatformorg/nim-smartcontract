@@ -183,6 +183,7 @@ contract LockStakingRewards is ILockStakingRewards, ReentrancyGuard, Ownable {
         address _stakingToken,
         uint _lockDuration
     ) {
+        require(_rewardsToken != address(0) && _stakingToken != address(0), "LockStakingRewards: Zero address(es)");
         rewardsToken = IBEP20(_rewardsToken);
         stakingToken = IBEP20(_stakingToken);
         require(IBEP20(_rewardsToken).decimals() == 18 && IBEP20(_stakingToken).decimals() == 18, "LockStakingRewards: Unsopported decimals");
@@ -285,7 +286,7 @@ contract LockStakingRewards is ILockStakingRewards, ReentrancyGuard, Ownable {
         }
     }
 
-    function withdrawAndGetReward(uint256 nonce) public override {
+    function withdrawAndGetReward(uint256 nonce) external override {
         withdraw(nonce);
         getReward();
     }

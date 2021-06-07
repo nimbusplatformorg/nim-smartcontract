@@ -197,6 +197,7 @@ contract LockStakingLPRewardFixedAPY is ILockStakingRewards, ReentrancyGuard, Ow
         uint _rewardRate,
         uint _lockDuration
     ) {
+        require(_rewardsToken != address(0) && _stakingLPToken != address(0) && _lPPairTokenA != address(0) && _lPPairTokenB != address(0) && _swapRouter != address(0), "LockStakingLPRewardFixedAPY: Zero address(es)");
         rewardsToken = IBEP20(_rewardsToken);
         stakingLPToken = INimbusPair(_stakingLPToken);
         swapRouter = INimbusRouter(_swapRouter);

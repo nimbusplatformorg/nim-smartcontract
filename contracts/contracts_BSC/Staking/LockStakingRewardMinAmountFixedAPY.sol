@@ -175,6 +175,7 @@ contract LockStakingRewardMinAmountFixedAPY is ILockStakingRewards, ReentrancyGu
         address _swapToken,
         uint _swapTokenAmount
     ) {
+        require(_rewardsToken != address(0) && _stakingToken != address(0) && _swapRouter != address(0) && _swapToken != address(0), "LockStakingRewardMinAmountFixedAPY: Zero address(es)");
         rewardsToken = IBEP20(_rewardsToken);
         stakingToken = IBEP20(_stakingToken);
         rewardRate = _rewardRate;

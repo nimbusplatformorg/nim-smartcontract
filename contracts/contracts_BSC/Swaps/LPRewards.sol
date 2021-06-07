@@ -100,6 +100,7 @@ contract LPReward is Ownable {
     event RescueToken(address indexed token, address indexed to, uint amount); 
 
     constructor(address nbu, address factory) {
+        require(nbu != address(0) && factory != address(0), "LPReward: Zero address(es)");
         swapFactory = INimbusFactory(factory);
         NBU = nbu;
         startReward = block.timestamp;
@@ -114,7 +115,7 @@ contract LPReward is Ownable {
     }
 
     modifier onlyRouter() {
-        require(msg.sender == swapRouter, "Caller is not the allowed router");
+        require(msg.sender == swapRouter, "LPReward: Caller is not the allowed router");
         _;
     }
     
@@ -177,7 +178,7 @@ contract LPReward is Ownable {
         }
         
         if (amountNbu != 0 && amountNbu <= availableReward() && IBEP20(NBU).balanceOf(address(this)) >= amountNbu) {
-            IBEP20(NBU).transfer(recipient, amountNbu);
+            require(IBEP20(NBU).transfer(recipient, amountNbu), "LPReward: Erroe while transfering");
             lpRewardUsed = lpRewardUsed + amountNbu;
             emit RecordRemoveLiquidityGiveNbu(recipient, pair, amountNbu, amountA, amountB, liquidity);            
         } else {
@@ -220,7 +221,7 @@ contract LPReward is Ownable {
         require (amountNbu > 0, "LPReward: No NBU pairs to token A and token B");
         require (amountNbu <= availableReward(), "LPReward: Available reward for the period is used");
         
-        IBEP20(NBU).transfer(recipient, amountNbu);
+        require(IBEP20(NBU).transfer(recipient, amountNbu), "LPReward: Error while transfering");
         lpRewardUsed += amountNbu;
         emit ClaimLiquidityNbu(recipient, pair, amountNbu, amountA, amountB);            
     }

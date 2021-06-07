@@ -182,6 +182,7 @@ contract StakingRewards is IStakingRewards, RewardsDistributionRecipient, Reentr
         address _rewardsToken,
         address _stakingToken
     ) {
+        require(_rewardsDistribution != address(0) && _rewardsToken != address(0) && _stakingToken != address(0), "StakingRewards: Zero address(es)");
         rewardsToken = IBEP20(_rewardsToken);
         stakingToken = IBEP20(_stakingToken);
         require(IBEP20(_rewardsToken).decimals() == 18 && IBEP20(_stakingToken).decimals() == 18, "StakingRewards: Unsopported decimals");
@@ -329,7 +330,7 @@ contract StakingRewardsFactory is Ownable {
 
     // deploy a staking reward contract for the staking token, and store the reward amount
     // the reward will be distributed to the staking reward contract no sooner than the genesis
-    function deploy(address stakingToken, uint rewardAmount) public onlyOwner {
+    function deploy(address stakingToken, uint rewardAmount) external onlyOwner {
         StakingRewardsInfo storage info = stakingRewardsInfoByStakingToken[stakingToken];
         require(info.stakingRewards == address(0), 'StakingRewardsFactory::deploy: already deployed');
 
@@ -341,7 +342,7 @@ contract StakingRewardsFactory is Ownable {
     ///// permissionless functions
 
     // call notifyRewardAmount for all staking tokens.
-    function notifyRewardAmounts() public {
+    function notifyRewardAmounts() external {
         require(stakingTokens.length > 0, 'StakingRewardsFactory::notifyRewardAmounts: called before any deploys');
         for (uint i = 0; i < stakingTokens.length; i++) {
             notifyRewardAmount(stakingTokens[i]);

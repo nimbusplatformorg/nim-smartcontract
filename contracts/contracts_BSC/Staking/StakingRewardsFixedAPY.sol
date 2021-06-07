@@ -168,6 +168,7 @@ contract StakingRewardFixedAPY is IStakingRewards, ReentrancyGuard, Ownable {
         address _swapRouter,
         uint _rewardRate
     ) {
+        require(_rewardsToken != address(0) && _stakingToken != address(0) && _swapRouter != address(0), "StakingRewardFixedAPY: Zero address(es)");
         rewardsToken = IBEP20(_rewardsToken);
         stakingToken = IBEP20(_stakingToken);
         swapRouter = INimbusRouter(_swapRouter);
