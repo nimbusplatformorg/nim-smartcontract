@@ -197,7 +197,7 @@ contract GNBU is Ownable, Pausable {
         for (uint32 i = 1; i <= _vestingNonces[user]; i++) {
             if (_vestingAmounts[user][i] == _unvestedAmounts[user][i]) continue;
             if (_vestingReleaseStartDates[user][i] > block.timestamp) break;
-            uint toUnvest = mul96((block.timestamp - _vestingReleaseStartDates[user][i]), (_vestingAmounts[user][i])) / vestingSecondPeriod;
+            uint toUnvest = (block.timestamp - _vestingReleaseStartDates[user][i]) * _vestingAmounts[user][i] / vestingSecondPeriod;
             if (toUnvest > _vestingAmounts[user][i]) {
                 toUnvest = _vestingAmounts[user][i];
             } 
@@ -257,21 +257,22 @@ contract GNBU is Ownable, Pausable {
         return _delegate(signatory, delegatee);
     }
 
-    function unvest() external whenNotPaused returns (uint96 unvested) {
+    function unvest() external whenNotPaused returns (uint unvested) {
         require (_vestingNonces[msg.sender] > 0, "GNBU::unvest:No vested amount");
         for (uint32 i = 1; i <= _vestingNonces[msg.sender]; i++) {
             if (_vestingAmounts[msg.sender][i] == _unvestedAmounts[msg.sender][i]) continue;
             if (_vestingReleaseStartDates[msg.sender][i] > block.timestamp) break;
-            uint96 toUnvest = mul96((block.timestamp - _vestingReleaseStartDates[msg.sender][i]), _vestingAmounts[msg.sender][i]) / vestingSecondPeriod;
+            uint toUnvest = (block.timestamp - _vestingReleaseStartDates[msg.sender][i]) * _vestingAmounts[msg.sender][i] / vestingSecondPeriod;
             if (toUnvest > _vestingAmounts[msg.sender][i]) {
                 toUnvest = _vestingAmounts[msg.sender][i];
             } 
-            uint96 totalUnvestedForNonce = toUnvest;
-            toUnvest = sub96(toUnvest, _unvestedAmounts[msg.sender][i], "GNBU::unvest: already unvested amount exceeds toUnvest");
-            unvested = add96(unvested, toUnvest, "GNBU::unvest: adding overflow");
-            _unvestedAmounts[msg.sender][i] = totalUnvestedForNonce;
+            uint totalUnvestedForNonce = toUnvest;
+            require(toUnvest >= _unvestedAmounts[msg.sender][i], "GNBU::unvest: already unvested amount exceeds toUnvest");
+            toUnvest -= _unvestedAmounts[msg.sender][i];
+            unvested += toUnvest;
+            _unvestedAmounts[msg.sender][i] = safe96(totalUnvestedForNonce, "GNBU::unvest: amount exceeds 96 bits");
         }
-        _unfrozenBalances[msg.sender] = add96(_unfrozenBalances[msg.sender], unvested, "GNBU::unvest: adding overflow");
+        _unfrozenBalances[msg.sender] = add96(_unfrozenBalances[msg.sender], safe96(unvested, "GNBU::unvest: amount exceeds 96 bits"), "GNBU::unvest: adding overflow");
         emit Unvest(msg.sender, unvested);
     }
     
