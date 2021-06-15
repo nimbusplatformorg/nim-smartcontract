@@ -30,7 +30,7 @@ const {
 contract("LockStakingLPRewardFixedAPY", (accounts) => {
   const [owner, client, notAllowAccount] = accounts;
   const clientAllowance = MAX_UINT256;
-  const _lockDuration = new BN(86400); // 1 day
+  const _lockDuration = new BN(86400); 
   const _rewardRate = new BN(100);
   const _rewardDuration = DAY.muln(365);
   const stakeAmount = new BN("2000");
@@ -399,9 +399,9 @@ contract("LockStakingLPRewardFixedAPY", (accounts) => {
           await this.contract.stakeAmountsRewardEquivalent(owner, nonce)
         ).to.be.bignumber.equal(equivalent);
 
-        // expect(
-        //   await this.contract.stakeLocks(owner, nonce)
-        // ).to.be.bignumber.equal(timeStamp.add(_lockDuration));
+        expect(
+          await this.contract.stakeLocks(owner, nonce)
+        ).to.be.bignumber.equal(timeStamp.add(_lockDuration));
 
         expect(
           await this.contract.weightedStakeDate(owner)
@@ -453,9 +453,9 @@ contract("LockStakingLPRewardFixedAPY", (accounts) => {
           await this.contract.stakeAmountsRewardEquivalent(client, nonce)
         ).to.be.bignumber.equal(equivalent);
 
-        // expect(
-        //   await this.contract.stakeLocks(client, nonce)
-        // ).to.be.bignumber.equal(timeStamp.add(_lockDuration));
+        expect(
+          await this.contract.stakeLocks(client, nonce)
+        ).to.be.bignumber.equal(timeStamp.add(_lockDuration));
 
         expect(
           await this.contract.weightedStakeDate(client)

@@ -4,21 +4,14 @@ const {
   constants,
   expectEvent,
   expectRevert,
-  time,
 } = require("@openzeppelin/test-helpers");
 const { expect } = require("chai");
 const { ZERO_ADDRESS, MAX_UINT256 } = constants;
 const timeHelper = require("../utils/timeHelpers");
 const DAY = new BN("86400");
 const { utils } = require("ethers");
-const {
-  bigNumberify,
-  hexlify,
-  keccak256,
-  defaultAbiCoder,
-  toUtf8Bytes,
-} = utils;
-// const { getApprovalDigest } = require("../utils/permits");
+const { keccak256, defaultAbiCoder, toUtf8Bytes } = utils;
+
 contract("NBU", (accounts) => {
   const [initialHolder, recipient, anotherAccount] = accounts;
 
@@ -71,8 +64,7 @@ contract("NBU", (accounts) => {
     });
 
     it("DOMAIN_SEPARATOR", async function () {
-      const chainId = await web3.eth.net.getId();
-      console.log(chainId);
+      const chainId = await web3.eth.getChainId();
       expect(await this.token.DOMAIN_SEPARATOR()).to.eq(
         keccak256(
           defaultAbiCoder.encode(
@@ -197,7 +189,7 @@ contract("NBU", (accounts) => {
                 this.token.transferFrom(tokenOwner, to, amount, {
                   from: spender,
                 }),
-                `NBU::_transfer: transfer amount exceeds balance`
+                `NBU::_transfer: amount exceeds available for transfer balance`
               );
             });
           });
@@ -231,7 +223,7 @@ contract("NBU", (accounts) => {
                 this.token.transferFrom(tokenOwner, to, amount, {
                   from: spender,
                 }),
-                `NBU::_transfer: transfer amount exceeds balance`
+                `NBU::_transfer: amount exceeds available for transfer balance`
               );
             });
           });
@@ -567,7 +559,7 @@ contract("NBU", (accounts) => {
           this.token.vest(client, initialSupply.addn(1), {
             from: vester,
           }),
-          "SafeMath: subtraction overflow"
+          "revert"
         );
       });
 
@@ -704,7 +696,7 @@ contract("NBU", (accounts) => {
         this.token.multivest(users, values, {
           from: initialHolder,
         }),
-        "NBU::multivest: transfer amount exceeds balance"
+        "revert"
       );
     });
 
@@ -777,7 +769,7 @@ contract("NBU", (accounts) => {
         this.token.multisend(users, values, {
           from: initialHolder,
         }),
-        "NBU::multisend: transfer amount exceeds balance"
+        "revert"
       );
     });
 
@@ -815,7 +807,7 @@ function shouldBehaveLikeERC20Transfer(
       it("reverts", async function () {
         await expectRevert(
           transfer.call(this, from, to, amount),
-          `${errorPrefix}: transfer amount exceeds balance`
+          `${errorPrefix}: amount exceeds available for transfer balance`
         );
       });
     });

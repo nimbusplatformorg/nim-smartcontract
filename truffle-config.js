@@ -48,7 +48,7 @@ module.exports = {
       network_id: "*", // Any network (default: none)'
       gasPrice: 0x1,
       gas: 0x1fffffffffffff,
-      defaultEtherBalance: constants.MAX_UINT256.toString(),
+      defaultEtherBalance: constants.MAX_INT256.toString(),
     },
     develop: {
       host: "127.0.0.1", // Localhost (default: none)
@@ -56,7 +56,7 @@ module.exports = {
       network_id: "*", // Any network (default: none)
       gasPrice: 0x1,
       gas: 0x1fffffffffffff,
-      defaultEtherBalance: constants.MAX_UINT256.toString(),
+      defaultEtherBalance: constants.MAX_INT256.toString(),
     },
     // Another network with more advanced options...
     //advanced: {

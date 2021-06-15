@@ -20,7 +20,7 @@ contract("StakingRewardsSameTokenFixedAPY", (accounts) => {
   const [owner, client, notAllowAccount] = accounts;
   const clientAllowance = MAX_UINT256;
   const stakeAmount = new BN("200");
-  const _defaultPeriod = new BN(86400); // 1 day
+  const _defaultPeriod = new BN(86400); 
   const _rewardRate = new BN(100);
   const _rewardDuration = DAY.muln(365);
 
@@ -320,7 +320,7 @@ contract("StakingRewardsSameTokenFixedAPY", (accounts) => {
     it("doesn't stake before", async function () {
       await expectRevert(
         this.contract.withdraw(100, { from: client }),
-        "SafeMath: subtraction overflow"
+        "revert"
       );
     });
 
@@ -526,6 +526,7 @@ contract("StakingRewardsSameTokenFixedAPY", (accounts) => {
         });
 
         it("success rescue token", async function () {
+          await this.swapToken.transfer(this.contract.address, value);
           const { logs } = await this.contract.rescue(
             owner,
             this.swapToken.address,
