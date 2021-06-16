@@ -193,6 +193,8 @@ contract NimbusReferralProgramUsers is INimbusReferralProgram, Ownable {
         require(userAddress != address(0), "Nimbus Referral: Address is zero");
         require(_userSponsor[id] > 1000000000, "Nimbus Referral: No such user");
         require(userIdByAddress[userAddress] == 0, "Nimbus Referral: Address is already in the system");
+        address previousAddress = userAddressById[id];
+        if (previousAddress != address(0)) userIdByAddress[previousAddress] = 0;
         userIdByAddress[userAddress] = id;
         userAddressById[id] = userAddress;
     }
@@ -217,6 +219,8 @@ contract NimbusReferralProgramUsers is INimbusReferralProgram, Ownable {
         
         address recoveredAddress = ecrecover(digest, v, r, s);
         require(recoveredAddress != address(0) && recoveredAddress == migrator, 'Nimbus Referral: Invalid signature');
+        address previousAddress = userAddressById[id];
+        if (previousAddress != address(0)) userIdByAddress[previousAddress] = 0;
         userIdByAddress[userAddress] = id;
         userAddressById[id] = userAddress;
         emit MigrateUserBySign(recoveredAddress, id, userAddress, nonce);
@@ -252,6 +256,8 @@ contract NimbusReferralProgramUsers is INimbusReferralProgram, Ownable {
         
         address recoveredAddress = ecrecover(digest, v, r, s);
         require(recoveredAddress != address(0) && recoveredAddress == migrator, 'Nimbus Referral: Invalid signature');
+        address previousAddress = userAddressById[id];
+        if (previousAddress != address(0)) userIdByAddress[previousAddress] = 0;
         userIdByAddress[userAddress] = id;
         userAddressById[id] = userAddress;
         _userReferrals[id] = referrals;
@@ -271,6 +277,8 @@ contract NimbusReferralProgramUsers is INimbusReferralProgram, Ownable {
         
         address recoveredAddress = ecrecover(digest, v, r, s);
         require(recoveredAddress != address(0) && recoveredAddress == migrator, 'Nimbus Referral: Invalid signature');
+        address previousAddress = userAddressById[id];
+        if (previousAddress != address(0)) userIdByAddress[previousAddress] = 0;
         userIdByAddress[userAddress] = id;
         userAddressById[id] = userAddress;
         for (uint i; i < referrals.length; i++) {

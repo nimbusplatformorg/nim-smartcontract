@@ -346,10 +346,10 @@ contract ProtocolSettings is State, ProtocolSettingsEvents {
             protocolTokenHeld = tokenBalance
                 .sub(withdrawAmount);
 
-            IERC20(nbuTokenAddress).transfer(
+            require(IERC20(nbuTokenAddress).transfer(
                 receiver,
                 withdrawAmount
-            );
+            ), "ProtocolSettings: Error transferring");
         }
     }
 
@@ -361,11 +361,11 @@ contract ProtocolSettings is State, ProtocolSettingsEvents {
         protocolTokenHeld = protocolTokenHeld
             .add(amount);
 
-        IERC20(nbuTokenAddress).transferFrom(
+        require(IERC20(nbuTokenAddress).transferFrom(
             msg.sender,
             address(this),
             amount
-        );
+        ), "ProtocolSettings: Error transferring");
     }
 
     function updateProtocolTokenHeld()
@@ -398,11 +398,11 @@ contract ProtocolSettings is State, ProtocolSettingsEvents {
         }
 
         if (totalAmount != 0) {
-            IERC20(nbuTokenAddress).transferFrom(
+            require(IERC20(nbuTokenAddress).transferFrom(
                 msg.sender,
                 address(this),
                 totalAmount
-            );
+            ), "ProtocolSettings: Error transferring");
         }
     }
 

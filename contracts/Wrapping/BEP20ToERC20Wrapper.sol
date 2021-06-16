@@ -96,17 +96,29 @@ contract BEP20ToERC20Wrapper is Ownable {
     function unwrap(uint amount) external {
         require(amount >= minUnwrapAmount, "BEP20ToERC20Wrapper: Value too small");
         
-        NBU.transferFrom(msg.sender, address(this), amount);
+        require(NBU.transferFrom(msg.sender, address(this), amount), "BEP20ToERC20Wrapper: Error transferring");
         uint userUnwrapNonce = ++userUnwrapNonces[msg.sender];
         unwraps[msg.sender][userUnwrapNonce] = amount;
         emit Unwrap(msg.sender, userUnwrapNonce, amount);
     }
 
+    function wrapBatch(address[] memory users, uint[] memory amounts, uint[] memory fees, uint[] memory ethNonces) external onlyOwner {
+        require(users.length == amounts.length && users.length == fees.length && users.length == ethNonces.length, "BEP20ToERC20Wrapper: wrong lengths");
+        for (uint256 i = 0; i < users.length; i++) {
+            _wrap(users[i], amounts[i], fees[i], ethNonces[i]);
+        }
+    }
+
     function wrap(address user, uint amount, uint fee, uint ethNonce) external onlyOwner {
+        _wrap(user, amount, fee, ethNonce);
+    }
+
+    function _wrap(address user, uint amount, uint fee, uint ethNonce) private {
         require(user != address(0), "BEP20ToERC20Wrapper: Can't be zero address");
         require(ethToBscWrapNonces[user][ethNonce] == 0, "BEP20ToERC20Wrapper: Already processed");
+        require(amount >= fee, "BEP20ToERC20Wrapper: Fee ig greater than amount");
         
-        NBU.transfer(user, amount - fee);
+        require(NBU.transfer(user, amount - fee), "BEP20ToERC20Wrapper: Error transferring");
         uint wrapNonce = ++userWrapNonces[user];
         ethToBscWrapNonces[user][ethNonce] = wrapNonce;
         wraps[user][wrapNonce].amount = amount;
