@@ -420,10 +420,10 @@ contract LoanMaintenance is State, LoanMaintenanceEvents, VaultController, Inter
             protocolTokenPaid = protocolTokenPaid
                 .add(claimAmount);
 
-            IERC20(nbuTokenAddress).transfer(
+            require(IERC20(nbuTokenAddress).transfer(
                 receiver,
                 claimAmount
-            );
+            ), "error while transferring");
 
             emit ClaimReward(
                 msg.sender,
