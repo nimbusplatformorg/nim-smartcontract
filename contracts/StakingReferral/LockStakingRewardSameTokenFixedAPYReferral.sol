@@ -131,6 +131,10 @@ interface INimbusReferralProgram {
     function userSponsorAddressByAddress(address user) external view returns (address);
 }
 
+interface INimbusReferralProgramMarketing {
+    function updateReferralStakingAmount(address user, address token, uint amount) external;
+}
+
 contract LockStakingRewardSameTokenFixedAPYReferral is ILockStakingRewards, ReentrancyGuard, Ownable {
     using SafeERC20 for IERC20;
 
@@ -140,7 +144,10 @@ contract LockStakingRewardSameTokenFixedAPYReferral is ILockStakingRewards, Reen
     uint256 public referralRewardRate;
     uint256 public withdrawalCashbackRate;
     uint256 public stakingCashbackRate;
+
     INimbusReferralProgram public referralProgram;
+    INimbusReferralProgramMarketing public referralProgramMarketing;
+
     uint256 public immutable lockDuration; 
     uint256 public constant rewardDuration = 365 days; 
 
@@ -164,6 +171,7 @@ contract LockStakingRewardSameTokenFixedAPYReferral is ILockStakingRewards, Reen
     constructor(
         address _token,
         address _referralProgram,
+        address _referralProgramMarketing,
         uint _rewardRate,
         uint _referralRewardRate,
         uint _stakingCashbackRate,
@@ -173,6 +181,7 @@ contract LockStakingRewardSameTokenFixedAPYReferral is ILockStakingRewards, Reen
         token = IERC20(_token);
         stakingToken = IERC20(_token);
         referralProgram = INimbusReferralProgram(_referralProgram);
+        referralProgramMarketing = INimbusReferralProgramMarketing(_referralProgramMarketing);
         rewardRate = _rewardRate;
         referralRewardRate = _referralRewardRate;
         stakingCashbackRate = _stakingCashbackRate;
@@ -204,6 +213,7 @@ contract LockStakingRewardSameTokenFixedAPYReferral is ILockStakingRewards, Reen
         uint stakeNonce = stakeNonces[msg.sender]++;
         stakeLocks[msg.sender][stakeNonce] = block.timestamp + lockDuration;
         stakeAmounts[msg.sender][stakeNonce] = amount;
+        referralProgramMarketing.updateReferralStakingAmount(msg.sender, address(token), amount);
         emit Staked(msg.sender, amount);
     }
 
@@ -219,6 +229,7 @@ contract LockStakingRewardSameTokenFixedAPYReferral is ILockStakingRewards, Reen
         uint stakeNonce = stakeNonces[msg.sender]++;
         stakeLocks[msg.sender][stakeNonce] = block.timestamp + lockDuration;
         stakeAmounts[msg.sender][stakeNonce] = amount;
+        referralProgramMarketing.updateReferralStakingAmount(msg.sender, address(token), amount);
         emit Staked(msg.sender, amount);
     }
 
@@ -235,6 +246,7 @@ contract LockStakingRewardSameTokenFixedAPYReferral is ILockStakingRewards, Reen
         uint stakeNonce = stakeNonces[user]++;
         stakeLocks[user][stakeNonce] = block.timestamp + lockDuration;
         stakeAmounts[user][stakeNonce] = amount;
+        referralProgramMarketing.updateReferralStakingAmount(user, address(token), amount);
         emit Staked(user, amount);
     }
 
@@ -323,6 +335,11 @@ contract LockStakingRewardSameTokenFixedAPYReferral is ILockStakingRewards, Reen
     function updateReferralProgram(address _referralProgram) external onlyOwner {
         require(_referralProgram != address(0), "LockStakingRewardSameTokenFixedAPYReferral: Referral program address can't be equal to address(0)");
         referralProgram = INimbusReferralProgram(_referralProgram);
+    }
+
+    function updateReferralProgramMarketing(address _referralProgramMarketing) external onlyOwner {
+        require(_referralProgramMarketing != address(0), "LockStakingRewardFixedAPYReferral: Referral program marketing address can't be equal to address(0)");
+        referralProgramMarketing = INimbusReferralProgramMarketing(_referralProgramMarketing);
     }
 
     function _sendWithdrawalCashback(address account, uint _withdrawalAmount) internal {

@@ -135,6 +135,10 @@ interface INimbusReferralProgram {
     function userSponsorAddressByAddress(address user) external view returns (address);
 }
 
+interface INimbusReferralProgramMarketing {
+    function updateReferralStakingAmount(address user, address token, uint amount) external;
+}
+
 contract LockStakingRewardMinAmountFixedAPYReferral is ILockStakingRewards, ReentrancyGuard, Ownable {
     using SafeERC20 for IERC20;
 
@@ -147,7 +151,9 @@ contract LockStakingRewardMinAmountFixedAPYReferral is ILockStakingRewards, Reen
     uint256 public immutable lockDuration; 
     uint256 public constant rewardDuration = 365 days; 
     
-    INimbusReferralProgram public referralProgram; 
+    INimbusReferralProgram public referralProgram;
+    INimbusReferralProgramMarketing public referralProgramMarketing;
+     
     INimbusRouter public swapRouter;
     address public swapToken;                       
     uint public swapTokenAmountThresholdForStaking;
@@ -176,6 +182,7 @@ contract LockStakingRewardMinAmountFixedAPYReferral is ILockStakingRewards, Reen
         address _rewardsToken,
         address _stakingToken,
         address _referralProgram,
+        address _referralProgramMarketing,
         uint _rewardRate,
         uint _referralRewardRate,
         uint _stakingCashbackRate,
@@ -188,6 +195,7 @@ contract LockStakingRewardMinAmountFixedAPYReferral is ILockStakingRewards, Reen
         rewardsToken = IERC20(_rewardsToken);
         stakingToken = IERC20(_stakingToken);
         referralProgram = INimbusReferralProgram(_referralProgram);
+        referralProgramMarketing = INimbusReferralProgramMarketing(_referralProgramMarketing);
         rewardRate = _rewardRate;
         referralRewardRate = _referralRewardRate;
         stakingCashbackRate = _stakingCashbackRate;
@@ -267,6 +275,7 @@ contract LockStakingRewardMinAmountFixedAPYReferral is ILockStakingRewards, Reen
         
         stakeAmountsRewardEquivalent[user][stakeNonce] = amountRewardEquivalent;
         _balancesRewardEquivalent[user] += amountRewardEquivalent;
+        referralProgramMarketing.updateReferralStakingAmount(user, address(stakingToken), amount);
         emit Staked(user, amount);
     }
 
@@ -365,6 +374,11 @@ contract LockStakingRewardMinAmountFixedAPYReferral is ILockStakingRewards, Reen
     function updateReferralProgram(address _referralProgram) external onlyOwner {
         require(_referralProgram != address(0), "LockStakingRewardMinAmountFixedAPYReferral: Referral program address can't be equal to address(0)");
         referralProgram = INimbusReferralProgram(_referralProgram);
+    }
+
+    function updateReferralProgramMarketing(address _referralProgramMarketing) external onlyOwner {
+        require(_referralProgramMarketing != address(0), "LockStakingRewardFixedAPYReferral: Referral program marketing address can't be equal to address(0)");
+        referralProgramMarketing = INimbusReferralProgramMarketing(_referralProgramMarketing);
     }
 
     function rescue(address to, address token, uint256 amount) external onlyOwner {

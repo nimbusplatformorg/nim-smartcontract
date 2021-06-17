@@ -135,6 +135,10 @@ interface INimbusReferralProgram {
     function userSponsorAddressByAddress(address user) external view returns (address);
 }
 
+interface INimbusReferralProgramMarketing {
+    function updateReferralStakingAmount(address user, address token, uint amount) external;
+}
+
 contract LockStakingRewardFixedAPYReferral is ILockStakingRewards, ReentrancyGuard, Ownable {
     using SafeERC20 for IERC20;
 
@@ -145,7 +149,10 @@ contract LockStakingRewardFixedAPYReferral is ILockStakingRewards, ReentrancyGua
     uint256 public referralRewardRate;
     uint256 public withdrawalCashbackRate;
     uint256 public stakingCashbackRate;
-    INimbusReferralProgram public referralProgram; 
+
+    INimbusReferralProgram public referralProgram;
+    INimbusReferralProgramMarketing public referralProgramMarketing;
+
     uint256 public immutable lockDuration; 
     uint256 public constant rewardDuration = 365 days; 
 
@@ -174,6 +181,7 @@ contract LockStakingRewardFixedAPYReferral is ILockStakingRewards, ReentrancyGua
         address _stakingToken,
         address _swapRouter,
         address _referralProgram,
+        address _referralProgramMarketing,
         uint _rewardRate,
         uint _referralRewardRate,
         uint _stakingCashbackRate,
@@ -184,6 +192,7 @@ contract LockStakingRewardFixedAPYReferral is ILockStakingRewards, ReentrancyGua
         stakingToken = IERC20(_stakingToken);
         swapRouter = INimbusRouter(_swapRouter);
         referralProgram = INimbusReferralProgram(_referralProgram);
+        referralProgramMarketing = INimbusReferralProgramMarketing(_referralProgramMarketing);
         rewardRate = _rewardRate;
         referralRewardRate = _referralRewardRate;
         stakingCashbackRate = _stakingCashbackRate;
@@ -336,6 +345,11 @@ contract LockStakingRewardFixedAPYReferral is ILockStakingRewards, ReentrancyGua
         require(_referralProgram != address(0), "LockStakingRewardFixedAPYReferral: Referral program address can't be equal to address(0)");
         referralProgram = INimbusReferralProgram(_referralProgram);
     }
+
+    function updateReferralProgramMarketing(address _referralProgramMarketing) external onlyOwner {
+        require(_referralProgramMarketing != address(0), "LockStakingRewardFixedAPYReferral: Referral program marketing address can't be equal to address(0)");
+        referralProgramMarketing = INimbusReferralProgramMarketing(_referralProgramMarketing);
+    }
     
     function _sendWithdrawalCashback(address account, uint _withdrawalAmount) internal {
         if(address(referralProgram) != address(0) && referralProgram.userIdByAddress(account) != 0) {
@@ -370,6 +384,7 @@ contract LockStakingRewardFixedAPYReferral is ILockStakingRewards, ReentrancyGua
         
         stakeAmountsRewardEquivalent[user][stakeNonce] = amountRewardEquivalent;
         _balancesRewardEquivalent[user] += amountRewardEquivalent;
+        referralProgramMarketing.updateReferralStakingAmount(user, address(stakingToken), amount);
         emit Staked(user, amount);
     }
 }
