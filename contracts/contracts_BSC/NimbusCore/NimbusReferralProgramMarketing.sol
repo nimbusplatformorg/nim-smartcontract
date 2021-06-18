@@ -54,7 +54,7 @@ contract Ownable {
     }
 }
 
-contract NimbusReferralMarketing is Ownable {
+contract NimbusReferralProgramMarketing is Ownable {
 
     struct StakingAmount {
         uint NBU;
@@ -71,6 +71,15 @@ contract NimbusReferralMarketing is Ownable {
     mapping(address => address) public userLeader;
     mapping(address => address) public userManager;
 
+    mapping(address => uint) managerRegistrationTimestamp;
+    mapping(address => uint) leaderRegistrationTimestamp;
+    
+    mapping(address => uint) managerCurrenPeriodTimestamp;
+    mapping(address => uint) leaderCurrenPeriodTimestamp;
+
+    mapping(address => mapping(uint => StakingAmount)) managerStakingAmountForPeriod;
+    mapping(address => mapping(uint => StakingAmount)) leaderStakingAmountForPeriod;
+ 
     mapping(address => StakingAmount) public leaderTotalStakingAmount;
     mapping(address => StakingAmount) public managerTotalStakingAmount;
 
@@ -83,23 +92,29 @@ contract NimbusReferralMarketing is Ownable {
     }
 
     modifier onlyAllowedContract() {
-        require(isAllowedContract[msg.sender] == true, "NimbusReferralProgram: Provided address is not an allowed contract");
+        require(isAllowedContract[msg.sender] == true, "NimbusReferralProgramMarketing: Provided address is not an allowed contract");
         _;
     }
    
     function updateAllowedContract(address _contract, bool isAllowed) external onlyOwner {
-        require(_isContract(_contract), "NimbusReferralProgram: Provided address is not a contract.");
+        require(_isContract(_contract), "NimbusReferralProgramMarketing: Provided address is not a contract.");
         isAllowedContract[_contract] = isAllowed;
     }
 
     function updateLeader(address user, bool _isLeader) external onlyOwner {
-        require(rpUsers.userIdByAddress(user) != 0, "NimbusReferralProgram: User is not registered.");
+        require(rpUsers.userIdByAddress(user) != 0, "NimbusReferralProgramMarketing: User is not registered.");
+
+        if(_isLeader == true) {
+            leaderRegistrationTimestamp[user] = block.timestamp;
+            leaderCurrenPeriodTimestamp[user] = block.timestamp;
+        }
+
         isLeader[user] = _isLeader;
     }
 
     function updateLeaderForUser(address user, address leader) public {
-        require(user != address(0), "NimbusReferralProgram: User address is equal to 0");
-        require(leader != address(0), "NimbusReferralProgram: Leader address is equal to 0");
+        require(user != address(0), "NimbusReferralProgramMarketing: User address is equal to 0");
+        require(leader != address(0), "NimbusReferralProgramMarketing: Leader address is equal to 0");
 
         userLeader[user] = leader;
     }
@@ -111,20 +126,26 @@ contract NimbusReferralMarketing is Ownable {
     }
     
     function updateLeadersForUsers(address[] memory leaders, address[] memory users) external onlyOwner {
-        require(leaders.length == users.length, "NimbusReferralProgram: Leaders and users arrays length are not equal.");
+        require(leaders.length == users.length, "NimbusReferralProgramMarketing: Leaders and users arrays length are not equal.");
         for(uint i = 0; i < users.length; i++) {
             updateLeaderForUser(users[i], leaders[i]);
         }
     }
 
     function updateManager(address user, bool _isManager) external onlyOwner {
-        require(rpUsers.userIdByAddress(user) != 0, "NimbusReferralProgram: User is not registered.");
+        require(rpUsers.userIdByAddress(user) != 0, "NimbusReferralProgramMarketing: User is not registered.");
+
+        if(_isManager == true) {
+            managerRegistrationTimestamp[user] = block.timestamp;
+            managerCurrenPeriodTimestamp[user] = block.timestamp;
+        }
+
         isManager[user] = _isManager;
     }
 
     function updateManagerForUser(address user, address manager) public {
-        require(user != address(0), "NimbusReferralProgram: User address is equal to 0");
-        require(manager != address(0), "NimbusReferralProgram: Manager address is equal to 0");
+        require(user != address(0), "NimbusReferralProgramMarketing: User address is equal to 0");
+        require(manager != address(0), "NimbusReferralProgramMarketing: Manager address is equal to 0");
 
         userManager[user] = manager;
     }
@@ -136,7 +157,7 @@ contract NimbusReferralMarketing is Ownable {
     }
 
     function updateManagerssForUsers(address[] memory managers, address[] memory users) external onlyOwner {
-        require(managers.length == users.length, "NimbusReferralProgram: Managers and users arrays length are not equal.");
+        require(managers.length == users.length, "NimbusReferralProgramMarketing: Managers and users arrays length are not equal.");
         for(uint i = 0; i < users.length; i++) {
             updateManagerForUser(users[i], managers[i]);
         }
@@ -157,8 +178,8 @@ contract NimbusReferralMarketing is Ownable {
     }
 
     function updateReferralStakingAmount(address user, address token, uint amount) external onlyAllowedContract {
-        require(rpUsers.userIdByAddress(user) != 0, "NimbusReferralProgram: User is not a part of referral program.");
-        require(token == address(NBU) || token == address(GNBU), "NimbusReferralProgram: Invalid staking token.");
+        require(rpUsers.userIdByAddress(user) != 0, "NimbusReferralProgramMarketing: User is not a part of referral program.");
+        require(token == address(NBU) || token == address(GNBU), "NimbusReferralProgramMarketing: Invalid staking token.");
 
         _updateTokenStakingAmount(userLeader[user], token, amount);
     }
@@ -172,20 +193,35 @@ contract NimbusReferralMarketing is Ownable {
     }
 
     function _updateTokenStakingAmount(address leader, address token, uint amount) internal {
-        require(isLeader[leader] == true, "NimbusReferralProgram: User is not leader.");
-        require(userManager[leader] != address(0), "NimbusReferralProgram: Leader has no manager.");
-        
+        require(isLeader[leader] == true, "NimbusReferralProgramMarketing: User is not leader.");
+        require(userManager[leader] != address(0), "NimbusReferralProgramMarketing: Leader has no manager.");
+
+        address manager = userManager[leader];
+
+        _updateCurrentPeriodTimestamp(leader, leaderCurrenPeriodTimestamp);
+        _updateCurrentPeriodTimestamp(manager, managerCurrenPeriodTimestamp);
+
         if(token == address(NBU)) {
             leaderTotalStakingAmount[leader].NBU += amount;
             managerTotalStakingAmount[userManager[leader]].NBU += amount;
+            
+            leaderStakingAmountForPeriod[leader][leaderCurrenPeriodTimestamp[leader]].NBU += amount;
+            managerStakingAmountForPeriod[manager][managerCurrenPeriodTimestamp[manager]].NBU += amount;
         }
 
         if(token == address(GNBU)) {
             leaderTotalStakingAmount[leader].GNBU += amount;
             managerTotalStakingAmount[userManager[leader]].GNBU += amount;
+
+            leaderStakingAmountForPeriod[leader][leaderCurrenPeriodTimestamp[leader]].GNBU += amount;
+            managerStakingAmountForPeriod[manager][managerCurrenPeriodTimestamp[manager]].GNBU += amount;
         }
     }
 
-    
-
+    function _updateCurrentPeriodTimestamp(address user, mapping(address => uint) storage currentPeriod) internal {
+        if(currentPeriod[user] + 30 days < block.timestamp) {
+            uint difference = (currentPeriod[user] - block.timestamp ) / 30 days;
+            currentPeriod[user] = currentPeriod[user] + difference * 30 days;
+        }
+    }
 }
