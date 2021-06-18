@@ -17,14 +17,8 @@ interface IBEP20 {
 interface INimbusReferralProgramUsers {
     function userSponsor(uint user) external view returns (uint);
     function registerUser(address user, uint category) external returns (uint); //public
-}
-
-interface INimbusReferralProgram {
-    function userSponsor(uint user) external view returns (uint);
-    function userSponsorByAddress(address user) external view returns (uint);
     function userIdByAddress(address user) external view returns (uint);
     function userAddressById(uint id) external view returns (address);
-    function userSponsorAddressByAddress(address user) external view returns (address);
 }
 
 contract Ownable {
@@ -67,7 +61,6 @@ contract NimbusReferralMarketing is Ownable {
         uint GNBU;
     }
 
-    INimbusReferralProgram rp;
     INimbusReferralProgramUsers rpUsers;
     IBEP20 NBU;
     IBEP20 GNBU;
@@ -83,10 +76,9 @@ contract NimbusReferralMarketing is Ownable {
 
     mapping(address => bool) public isAllowedContract;
 
-    constructor(address _nbu, address _gnbu, address _rp, address _rpUsers) {
+    constructor(address _nbu, address _gnbu, address _rpUsers) {
         NBU = IBEP20(_nbu);
         GNBU = IBEP20(_gnbu);
-        rp = INimbusReferralProgram(_rp);
         rpUsers = INimbusReferralProgramUsers(_rpUsers);
     }
 
@@ -101,7 +93,7 @@ contract NimbusReferralMarketing is Ownable {
     }
 
     function updateLeader(address user, bool _isLeader) external onlyOwner {
-        require(rp.userIdByAddress(user) != 0, "NimbusReferralProgram: User is not registered.");
+        require(rpUsers.userIdByAddress(user) != 0, "NimbusReferralProgram: User is not registered.");
         isLeader[user] = _isLeader;
     }
 
@@ -126,7 +118,7 @@ contract NimbusReferralMarketing is Ownable {
     }
 
     function updateManager(address user, bool _isManager) external onlyOwner {
-        require(rp.userIdByAddress(user) != 0, "NimbusReferralProgram: User is not registered.");
+        require(rpUsers.userIdByAddress(user) != 0, "NimbusReferralProgram: User is not registered.");
         isManager[user] = _isManager;
     }
 
@@ -151,7 +143,7 @@ contract NimbusReferralMarketing is Ownable {
     }
 
     function registerUser(address user, uint sponsorId) external returns(uint userId){
-        address sponsorAddress = rp.userAddressById(sponsorId);
+        address sponsorAddress = rpUsers.userAddressById(sponsorId);
 
         if (isLeader[sponsorAddress] == true) {
             updateLeaderForUser(user, sponsorAddress);
@@ -165,7 +157,7 @@ contract NimbusReferralMarketing is Ownable {
     }
 
     function updateReferralStakingAmount(address user, address token, uint amount) external onlyAllowedContract {
-        require(rp.userIdByAddress(user) != 0, "NimbusReferralProgram: User is not a part of referral program.");
+        require(rpUsers.userIdByAddress(user) != 0, "NimbusReferralProgram: User is not a part of referral program.");
         require(token == address(NBU) || token == address(GNBU), "NimbusReferralProgram: Invalid staking token.");
 
         _updateTokenStakingAmount(userLeader[user], token, amount);

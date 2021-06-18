@@ -129,10 +129,8 @@ interface IERC20Permit {
     function permit(address owner, address spender, uint value, uint deadline, uint8 v, bytes32 r, bytes32 s) external;
 }
 
-interface INimbusReferralProgram {
-    function userSponsorByAddress(address user) external view returns (uint);
+interface INimbusReferralProgramUsers {
     function userIdByAddress(address user) external view returns (uint);
-    function userSponsorAddressByAddress(address user) external view returns (address);
 }
 
 interface INimbusReferralProgramMarketing {
@@ -151,7 +149,7 @@ contract LockStakingRewardMinAmountFixedAPYReferral is ILockStakingRewards, Reen
     uint256 public immutable lockDuration; 
     uint256 public constant rewardDuration = 365 days; 
     
-    INimbusReferralProgram public referralProgram;
+    INimbusReferralProgramUsers public referralProgramUsers;
     INimbusReferralProgramMarketing public referralProgramMarketing;
      
     INimbusRouter public swapRouter;
@@ -181,7 +179,7 @@ contract LockStakingRewardMinAmountFixedAPYReferral is ILockStakingRewards, Reen
     constructor(
         address _rewardsToken,
         address _stakingToken,
-        address _referralProgram,
+        address _referralProgramUsers,
         address _referralProgramMarketing,
         uint _rewardRate,
         uint _referralRewardRate,
@@ -194,7 +192,7 @@ contract LockStakingRewardMinAmountFixedAPYReferral is ILockStakingRewards, Reen
     ) {
         rewardsToken = IERC20(_rewardsToken);
         stakingToken = IERC20(_stakingToken);
-        referralProgram = INimbusReferralProgram(_referralProgram);
+        referralProgramUsers = INimbusReferralProgramUsers(_referralProgramUsers);
         referralProgramMarketing = INimbusReferralProgramMarketing(_referralProgramMarketing);
         rewardRate = _rewardRate;
         referralRewardRate = _referralRewardRate;
@@ -223,7 +221,7 @@ contract LockStakingRewardMinAmountFixedAPYReferral is ILockStakingRewards, Reen
     }
 
     function earned(address account) public view override returns (uint256) {
-        if(address(referralProgram) == address(0) || referralProgram.userIdByAddress(account) == 0) {
+        if(address(referralProgramUsers) == address(0) || referralProgramUsers.userIdByAddress(account) == 0) {
             return (_balancesRewardEquivalent[account] * (block.timestamp - weightedStakeDate[account]) * rewardRate) / (100 * rewardDuration);
         } else {
             return (_balancesRewardEquivalent[account] * (block.timestamp - weightedStakeDate[account]) * referralRewardRate) / (100 * rewardDuration);
@@ -347,8 +345,8 @@ contract LockStakingRewardMinAmountFixedAPYReferral is ILockStakingRewards, Reen
     }
 
     function getUserReferralId(address account) external view returns (uint256 id) {
-        require(address(referralProgram) != address(0), "LockStakingRewardSameTokenFixedAPYReferral: Referral Program was not added.");
-        return referralProgram.userIdByAddress(account);
+        require(address(referralProgramUsers) != address(0), "LockStakingRewardSameTokenFixedAPYReferral: Referral Program was not added.");
+        return referralProgramUsers.userIdByAddress(account);
     }
 
     function updateRewardRate(uint256 _rewardRate) external onlyOwner {
@@ -371,9 +369,9 @@ contract LockStakingRewardMinAmountFixedAPYReferral is ILockStakingRewards, Reen
         withdrawalCashbackRate = _withdrawalCashbackRate;
     }
     
-    function updateReferralProgram(address _referralProgram) external onlyOwner {
-        require(_referralProgram != address(0), "LockStakingRewardMinAmountFixedAPYReferral: Referral program address can't be equal to address(0)");
-        referralProgram = INimbusReferralProgram(_referralProgram);
+    function updateReferralProgramUsers(address _referralProgramUsers) external onlyOwner {
+        require(_referralProgramUsers != address(0), "LockStakingRewardMinAmountFixedAPYReferral: Referral program users address can't be equal to address(0)");
+        referralProgramUsers = INimbusReferralProgramUsers(_referralProgramUsers);
     }
 
     function updateReferralProgramMarketing(address _referralProgramMarketing) external onlyOwner {
@@ -400,7 +398,7 @@ contract LockStakingRewardMinAmountFixedAPYReferral is ILockStakingRewards, Reen
     }
 
     function _sendWithdrawalCashback(address account, uint _withdrawalAmount) internal {
-        if(address(referralProgram) != address(0) && referralProgram.userIdByAddress(account) != 0) {
+        if(address(referralProgramUsers) != address(0) && referralProgramUsers.userIdByAddress(account) != 0) {
             uint256 cashbackAmount = (_withdrawalAmount * withdrawalCashbackRate) / 100;
             stakingToken.safeTransfer(account, cashbackAmount);
             emit WithdrawalCashbackSent(account, _withdrawalAmount, cashbackAmount);
@@ -408,7 +406,7 @@ contract LockStakingRewardMinAmountFixedAPYReferral is ILockStakingRewards, Reen
     }
     
     function _sendStakingCashback(address account, uint _stakingAmount) internal {
-        if(address(referralProgram) != address(0) && referralProgram.userIdByAddress(account) != 0) {
+        if(address(referralProgramUsers) != address(0) && referralProgramUsers.userIdByAddress(account) != 0) {
             uint256 cashbackAmount = (_stakingAmount * stakingCashbackRate) / 100;
             stakingToken.safeTransfer(account, cashbackAmount);
             emit StakingCashbackSent(account, _stakingAmount, cashbackAmount);
