@@ -19,6 +19,7 @@ interface INimbusReferralProgramUsers {
     function registerUser(address user, uint category) external returns (uint); //public
     function userIdByAddress(address user) external view returns (uint);
     function userAddressById(uint id) external view returns (address);
+    function userSponsorAddressByAddress(address user) external view returns (address);
 }
 
 contract Ownable {
@@ -65,6 +66,10 @@ contract NimbusReferralProgramMarketing is Ownable {
     IBEP20 NBU;
     IBEP20 GNBU;
 
+    uint lastLeaderReferralLine = 6;
+
+    mapping(address => uint) public userLine;
+
     mapping(address => bool) public isManager;
     mapping(address => bool) public isLeader;
 
@@ -77,23 +82,29 @@ contract NimbusReferralProgramMarketing is Ownable {
     mapping(address => uint) managerCurrenPeriodTimestamp;
     mapping(address => uint) leaderCurrenPeriodTimestamp;
 
-    mapping(address => mapping(uint => StakingAmount)) managerStakingAmountForPeriod;
-    mapping(address => mapping(uint => StakingAmount)) leaderStakingAmountForPeriod;
+    mapping(address => mapping(uint => StakingAmount)) managerProfitAmountForPeriod;
+    mapping(address => mapping(uint => StakingAmount)) leaderProfitAmountForPeriod;
  
-    mapping(address => StakingAmount) public leaderTotalStakingAmount;
-    mapping(address => StakingAmount) public managerTotalStakingAmount;
+    mapping(address => StakingAmount) public leaderTotalProfitAmount;
+    mapping(address => StakingAmount) public managerTotalProfitAmount;
 
     mapping(address => bool) public isAllowedContract;
 
-    constructor(address _nbu, address _gnbu, address _rpUsers) {
+    constructor(address _nbu, address _gnbu, address _rpUsers, uint _lastLeaderReferralLine) {
         NBU = IBEP20(_nbu);
         GNBU = IBEP20(_gnbu);
         rpUsers = INimbusReferralProgramUsers(_rpUsers);
+        lastLeaderReferralLine = _lastLeaderReferralLine;
     }
 
     modifier onlyAllowedContract() {
         require(isAllowedContract[msg.sender] == true, "NimbusReferralProgramMarketing: Provided address is not an allowed contract");
         _;
+    }
+
+    function updateLastLeaderReferralLine(uint _lastLeaderReferralLine) external onlyOwner {
+        require(_lastLeaderReferralLine > 0, "NimbusReferralProgramMarketing: Last leader referral line can't be lower than one.");
+        lastLeaderReferralLine = _lastLeaderReferralLine;
     }
    
     function updateAllowedContract(address _contract, bool isAllowed) external onlyOwner {
@@ -181,7 +192,7 @@ contract NimbusReferralProgramMarketing is Ownable {
         require(rpUsers.userIdByAddress(user) != 0, "NimbusReferralProgramMarketing: User is not a part of referral program.");
         require(token == address(NBU) || token == address(GNBU), "NimbusReferralProgramMarketing: Invalid staking token.");
 
-        _updateTokenStakingAmount(userLeader[user], token, amount);
+        _updateTokenStakingAmount(user, userLeader[user], token, amount);
     }
     
     function _isContract(address _contract) internal view returns (bool isContract){
@@ -192,7 +203,7 @@ contract NimbusReferralProgramMarketing is Ownable {
         return (size > 0);
     }
 
-    function _updateTokenStakingAmount(address leader, address token, uint amount) internal {
+    function _updateTokenStakingAmount(address user, address leader, address token, uint amount) internal {
         require(isLeader[leader] == true, "NimbusReferralProgramMarketing: User is not leader.");
         require(userManager[leader] != address(0), "NimbusReferralProgramMarketing: Leader has no manager.");
 
@@ -202,19 +213,24 @@ contract NimbusReferralProgramMarketing is Ownable {
         _updateCurrentPeriodTimestamp(manager, managerCurrenPeriodTimestamp);
 
         if(token == address(NBU)) {
-            leaderTotalStakingAmount[leader].NBU += amount;
-            managerTotalStakingAmount[userManager[leader]].NBU += amount;
-            
-            leaderStakingAmountForPeriod[leader][leaderCurrenPeriodTimestamp[leader]].NBU += amount;
-            managerStakingAmountForPeriod[manager][managerCurrenPeriodTimestamp[manager]].NBU += amount;
+            if(userLine[user] <= 6) {
+                leaderTotalProfitAmount[leader].NBU += amount;
+                leaderProfitAmountForPeriod[leader][leaderCurrenPeriodTimestamp[leader]].NBU += amount;
+            }
+
+            managerTotalProfitAmount[userManager[leader]].NBU += amount;
+            managerProfitAmountForPeriod[manager][managerCurrenPeriodTimestamp[manager]].NBU += amount;
         }
 
         if(token == address(GNBU)) {
-            leaderTotalStakingAmount[leader].GNBU += amount;
-            managerTotalStakingAmount[userManager[leader]].GNBU += amount;
 
-            leaderStakingAmountForPeriod[leader][leaderCurrenPeriodTimestamp[leader]].GNBU += amount;
-            managerStakingAmountForPeriod[manager][managerCurrenPeriodTimestamp[manager]].GNBU += amount;
+            if(userLine[user] <= 6) {
+                leaderTotalProfitAmount[leader].GNBU += amount;
+                leaderProfitAmountForPeriod[leader][leaderCurrenPeriodTimestamp[leader]].GNBU += amount;
+            }
+
+            managerTotalProfitAmount[userManager[leader]].GNBU += amount;
+            managerProfitAmountForPeriod[manager][managerCurrenPeriodTimestamp[manager]].GNBU += amount;
         }
     }
 
@@ -222,6 +238,24 @@ contract NimbusReferralProgramMarketing is Ownable {
         if(currentPeriod[user] + 30 days < block.timestamp) {
             uint difference = (currentPeriod[user] - block.timestamp ) / 30 days;
             currentPeriod[user] = currentPeriod[user] + difference * 30 days;
+        }
+    }
+
+    function _setUserReferralLine(address user) internal {
+        address sponsorAddress = rpUsers.userSponsorAddressByAddress(user);
+
+        if(sponsorAddress != address(0)) {
+
+            if(isLeader[sponsorAddress]) {
+                userLine[user] = 1;
+            } else if(isManager[sponsorAddress]) {
+                userLine[user] = 0;
+            } else {
+                userLine[user] += userLine[sponsorAddress];
+            }
+
+        } else {
+            userLine[user] = 0;
         }
     }
 }
