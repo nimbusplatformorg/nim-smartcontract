@@ -110,14 +110,14 @@ interface INimbusRouter {
     function getAmountsOut(uint amountIn, address[] calldata path) external view returns (uint[] memory amounts);
 }
 
-
-
 contract NimbusInitialAcquisition is Ownable, Pausable {
     INBU public immutable NBU;
     address public immutable NBU_WBNB;
     INimbusReferralProgram public referralProgram;
-    INimbusStakingPool[] public stakingPools;   //staking pools for checking sponsor balances
-    INimbusStakingPool public stakePool;        //staking pool for staking purchased assets
+    INimbusStakingPool[] public stakingPoolsSponsor;   //staking pools for checking sponsor balances
+
+    mapping(uint => INimbusStakingPool) public stakingPools;
+
     address public recipient;                      
    
     INimbusRouter public swapRouter;                
@@ -141,13 +141,12 @@ contract NimbusInitialAcquisition is Ownable, Pausable {
     event Rescue(address indexed to, uint amount);
     event RescueToken(address indexed token, address indexed to, uint amount); 
 
-    constructor (address nbu, address router, address nbuWbnb, address pool) {
+    constructor (address nbu, address router, address nbuWbnb) {
         NBU = INBU(nbu);
         NBU_WBNB = nbuWbnb;
         sponsorBonus = 10;
         swapRouter = INimbusRouter(router);
         recipient = address(this);
-        stakePool = INimbusStakingPool(pool);
     }
 
     function availableInitialSupply() external view returns (uint) {
@@ -188,12 +187,8 @@ contract NimbusInitialAcquisition is Ownable, Pausable {
         return INBU(token).balanceOf(address(this));
     }
 
-
-    
-
-
-    function _buyNbu(address token, uint tokenAmount, uint nbuAmount, address nbuRecipient) private {
-        stakePool.stakeFor(nbuAmount, nbuRecipient);
+    function _buyNbu(address token, uint tokenAmount, uint nbuAmount, address nbuRecipient, uint stakingPoolId) private {
+        stakingPools[stakingPoolId].stakeFor(nbuAmount, nbuRecipient);
         emit BuyNbuForToken(token, tokenAmount, nbuAmount, nbuRecipient);
         _processSponsor(nbuAmount);
     }
@@ -204,9 +199,9 @@ contract NimbusInitialAcquisition is Ownable, Pausable {
             uint minNbuAmountForBonus = getNbuAmountForToken(swapToken, swapTokenAmountForBonusThreshold);
             if (nbuAmount > minNbuAmountForBonus) {
                 uint sponsorAmount = NBU.balanceOf(sponsorAddress);
-                for (uint i; i < stakingPools.length; i++) {
+                for (uint i; i < stakingPoolsSponsor.length; i++) {
                     if (sponsorAmount > minNbuAmountForBonus) break;
-                    sponsorAmount += stakingPools[i].balanceOf(sponsorAddress);
+                    sponsorAmount += stakingPoolsSponsor[i].balanceOf(sponsorAddress);
                 }
                 
                 if (sponsorAmount > minNbuAmountForBonus) {
@@ -237,34 +232,38 @@ contract NimbusInitialAcquisition is Ownable, Pausable {
         } 
     }
     
-    function buyExactNbuForTokens(address token, uint nbuAmount, address nbuRecipient) external whenNotPaused {
+    function buyExactNbuForTokens(address token, uint nbuAmount, address nbuRecipient, uint stakingPoolId) external whenNotPaused {
+        require(address(stakingPools[stakingPoolId]) != address(0), "NimbusInitialAcquisition: No staking pool with provided id.");
         require(allowedTokens[token], "NimbusInitialAcquisition: Not allowed token");
         uint tokenAmount = getTokenAmountForNbu(token, nbuAmount);
         TransferHelper.safeTransferFrom(token, msg.sender, recipient, tokenAmount);
-        _buyNbu(token, tokenAmount, nbuAmount, nbuRecipient);
+        _buyNbu(token, tokenAmount, nbuAmount, nbuRecipient, stakingPoolId);
     }
 
-    function buyNbuForExactTokens(address token, uint tokenAmount, address nbuRecipient) external whenNotPaused {
+    function buyNbuForExactTokens(address token, uint tokenAmount, address nbuRecipient, uint stakingPoolId) external whenNotPaused {
+        require(address(stakingPools[stakingPoolId]) != address(0), "NimbusInitialAcquisition: No staking pool with provided id.");
         require(allowedTokens[token], "NimbusInitialAcquisition: Not allowed token");
         uint nbuAmount = getNbuAmountForToken(token, tokenAmount);
         TransferHelper.safeTransferFrom(token, msg.sender, recipient, tokenAmount);
-        _buyNbu(token, tokenAmount, nbuAmount, nbuRecipient);
+        _buyNbu(token, tokenAmount, nbuAmount, nbuRecipient, stakingPoolId);
     }
 
-    function buyNbuForExactBnb(address nbuRecipient) payable external whenNotPaused {
+    function buyNbuForExactBnb(address nbuRecipient, uint stakingPoolId) payable external whenNotPaused {
+        require(address(stakingPools[stakingPoolId]) != address(0), "NimbusInitialAcquisition: No staking pool with provided id.");
         require(allowedTokens[NBU_WBNB], "NimbusInitialAcquisition: Not allowed purchase for BNB");
         uint nbuAmount = getNbuAmountForBnb(msg.value);
         INBU_WBNB(NBU_WBNB).deposit{value: msg.value}();
-        _buyNbu(NBU_WBNB, msg.value, nbuAmount, nbuRecipient);
+        _buyNbu(NBU_WBNB, msg.value, nbuAmount, nbuRecipient, stakingPoolId);
     }
 
-    function buyExactNbuForBnb(uint nbuAmount, address nbuRecipient) payable external whenNotPaused {
+    function buyExactNbuForBnb(uint nbuAmount, address nbuRecipient, uint stakingPoolId) payable external whenNotPaused {
+        require(address(stakingPools[stakingPoolId]) != address(0), "NimbusInitialAcquisition: No staking pool with provided id.");
         require(allowedTokens[NBU_WBNB], "NimbusInitialAcquisition: Not allowed purchase for BNB");
         uint nbuAmountMax = getNbuAmountForBnb(msg.value);
         require(nbuAmountMax >= nbuAmount, "NimbusInitialAcquisition: Not enough BNB");
         uint bnbAmount = nbuAmountMax == nbuAmount ? msg.value : getBnbAmountForNbu(nbuAmount);
         INBU_WBNB(NBU_WBNB).deposit{value: bnbAmount}();
-        _buyNbu(NBU_WBNB, bnbAmount, nbuAmount, nbuRecipient);
+        _buyNbu(NBU_WBNB, bnbAmount, nbuAmount, nbuRecipient, stakingPoolId);
         // refund dust bnb, if any
         if (nbuAmountMax > nbuAmount) TransferHelper.safeTransferBNB(msg.sender, msg.value - bnbAmount);
     }
@@ -286,9 +285,9 @@ contract NimbusInitialAcquisition is Ownable, Pausable {
         require (bonusBase >= minNbuAmountForBonus, "NimbusInitialAcquisition: Bonus threshold not met");
 
         uint sponsorAmount = NBU.balanceOf(msg.sender);
-        for (uint i; i < stakingPools.length; i++) {
+        for (uint i; i < stakingPoolsSponsor.length; i++) {
             if (sponsorAmount > minNbuAmountForBonus) break;
-            sponsorAmount += stakingPools[i].balanceOf(msg.sender);
+            sponsorAmount += stakingPoolsSponsor[i].balanceOf(msg.sender);
         }
         
         require (sponsorAmount > minNbuAmountForBonus, "NimbusInitialAcquisition: Sponsor balance threshold for bonus not met");
@@ -315,6 +314,22 @@ contract NimbusInitialAcquisition is Ownable, Pausable {
         emit RescueToken(token, to, amount);
     }
 
+    function updateStakingPool(uint id, address stakingPool) public onlyOwner {
+        require(id != 0, "NimbusInitialAcquisition: Staking pool id cant be equal to 0.");
+        require(stakingPool != address(0), "NimbusInitialAcquisition: Staking pool address cant be equal to address(0).");
+
+        stakingPools[id] = INimbusStakingPool(stakingPool);
+        require(NBU.approve(stakingPool, type(uint256).max), "NimbusInitialAcquisition: Error on approving");
+    }
+
+    function updateStakingPool(uint[] memory ids, address[] memory _stakingPools) external onlyOwner {
+        require(ids.length == _stakingPools.length, "NimbusInitialAcquisition: Ids and staking pools arrays have different size.");
+        
+        for(uint i = 0; i < ids.length; i++) {
+            updateStakingPool(ids[i], _stakingPools[i]);
+        }
+    }
+
     function updateAllowedTokens(address token, bool isAllowed) external onlyOwner {
         require (token != address(0), "NimbusInitialAcquisition: Wrong addresses");
         allowedTokens[token] = isAllowed;
@@ -334,26 +349,19 @@ contract NimbusInitialAcquisition is Ownable, Pausable {
         referralProgram = INimbusReferralProgram(newReferralProgramContract);
     }
 
-    function updateStakePool(address newStakingPool) external onlyOwner {
-        require(newStakingPool != address(0), "NimbusInitialAcquisition: Address is zero");
-        if (address(stakePool) != address(0)) require(NBU.approve(address(stakePool), 0), "NimbusInitialAcquisition: Error on approving");
-        stakePool = INimbusStakingPool(newStakingPool);
-        require(NBU.approve(newStakingPool, type(uint256).max), "NimbusInitialAcquisition: Error on approving");
-    }
-
     function updateStakingPoolAdd(address newStakingPool) external onlyOwner {
         INimbusStakingPool pool = INimbusStakingPool(newStakingPool);
         require (pool.stakingToken() == NBU, "NimbusInitialAcquisition: Wrong pool staking tokens");
 
-        for (uint i; i < stakingPools.length; i++) {
-            require (address(stakingPools[i]) != newStakingPool, "NimbusInitialAcquisition: Pool exists");
+        for (uint i; i < stakingPoolsSponsor.length; i++) {
+            require (address(stakingPoolsSponsor[i]) != newStakingPool, "NimbusInitialAcquisition: Pool exists");
         }
-        stakingPools.push(pool);
+        stakingPoolsSponsor.push(pool);
     }
 
     function updateStakingPoolRemove(uint poolIndex) external onlyOwner {
-        stakingPools[poolIndex] = stakingPools[stakingPools.length - 1];
-        stakingPools.pop();
+        stakingPoolsSponsor[poolIndex] = stakingPoolsSponsor[stakingPoolsSponsor.length - 1];
+        stakingPoolsSponsor.pop();
     }
 
     function updateSwapRouter(address newSwapRouter) external onlyOwner {
