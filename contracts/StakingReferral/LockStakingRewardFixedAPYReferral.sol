@@ -152,7 +152,10 @@ contract LockStakingRewardFixedAPYReferral is ILockStakingRewards, ReentrancyGua
     INimbusReferralProgramMarketing public referralProgramMarketing;
 
     uint256 public immutable lockDuration; 
-    uint256 public constant rewardDuration = 365 days; 
+    uint256 public constant rewardDuration = 365 days;
+
+    bool public onlyAllowedAddresses;
+    mapping(address => bool) allowedAddresses;
 
     mapping(address => uint256) public weightedStakeDate;
     mapping(address => mapping(uint256 => uint256)) public stakeLocks;
@@ -216,6 +219,11 @@ contract LockStakingRewardFixedAPYReferral is ILockStakingRewards, ReentrancyGua
 
     function stakeWithPermit(uint256 amount, uint deadline, uint8 v, bytes32 r, bytes32 s) external nonReentrant {
         require(amount > 0, "LockStakingRewardFixedAPYReferral: Cannot stake 0");
+
+        if(onlyAllowedAddresses) {
+            require(allowedAddresses[msg.sender], "LockStakingRewardFixedAPYReferral: Only allowed addresses.");
+        }
+        
         // permit
         IERC20Permit(address(stakingToken)).permit(msg.sender, address(this), amount, deadline, v, r, s);
         _stake(amount, msg.sender);
@@ -223,18 +231,45 @@ contract LockStakingRewardFixedAPYReferral is ILockStakingRewards, ReentrancyGua
 
     function stake(uint256 amount) external override nonReentrant {
         require(amount > 0, "LockStakingRewardFixedAPYReferral: Cannot stake 0");
+
+        if(onlyAllowedAddresses) {
+            require(allowedAddresses[msg.sender], "LockStakingRewardFixedAPYReferral: Only allowed addresses.");
+        }
+
         _stake(amount, msg.sender);
     }
 
     function stakeFor(uint256 amount, address user) external override nonReentrant {
         require(amount > 0, "LockStakingRewardFixedAPYReferral: Cannot stake 0");
         require(user != address(0), "LockStakingRewardFixedAPYReferral: Cannot stake for zero address");
+
+        if(onlyAllowedAddresses) {
+            require(allowedAddresses[user], "LockStakingRewardFixedAPYReferral: Only allowed addresses.");
+        }
+
         _stake(amount, user);
     }
 
     function withdrawAndGetReward(uint256 nonce) external override {
         getReward();
         withdraw(nonce);
+    }
+
+    function updateOnlyAllowedAddresses(bool allowance) external onlyOwner {
+        onlyAllowedAddresses = allowance;
+    }
+
+    function updateAllowedAddress(address _address, bool allowance) public onlyOwner {
+        require(_address != address(0), "LockStakingRewardFixedAPYReferral: allowed address can't be equal to address(0)");
+        allowedAddresses[_address] = allowance;
+    }
+
+    function updateAllowedAddresses(address[] memory addresses, bool[] memory allowances) external onlyOwner {
+        require(addresses.length == allowances.length, "LockStakingRewardFixedAPYReferral: Addresses and allowances arrays have different size.");
+
+        for(uint i = 0; i < addresses.length; i++) {
+            updateAllowedAddress(addresses[i], allowances[i]);
+        }
     }
 
     function updateRewardAmount(uint256 reward) external onlyOwner {
