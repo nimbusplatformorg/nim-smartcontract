@@ -373,7 +373,7 @@ contract NimbusReferralProgramMarketing is Ownable {
             managerTotalTurnover[leaderManager].GNBU += amount;
         }
 
-        uint swapTokenEquivalentAmount = _getEquivalentSwapTokenAmount(address(GNBU), amount);
+        uint swapTokenEquivalentAmount = _getEquivalentSwapTokenAmount(token, amount);
         leaderTurnoverForPeriod[leader][leaderCurrenPeriodTimestamp[leader]].SwapToken += swapTokenEquivalentAmount;
         managerTotalTurnover[leaderManager].SwapToken += swapTokenEquivalentAmount;
     }

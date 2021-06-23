@@ -15,6 +15,29 @@ interface INimbusRouter {
     function getAmountsOut(uint amountIn, address[] calldata path) external view returns (uint[] memory amounts);
 }
 
+interface ILockStakingRewards {
+    function earned(address account) external view returns (uint256);
+    function totalSupply() external view returns (uint256);
+    function balanceOf(address account) external view returns (uint256);
+    function stake(uint256 amount) external;
+    function stakeFor(uint256 amount, address user) external;
+    function getReward() external;
+    function withdraw(uint256 nonce) external;
+    function withdrawAndGetReward(uint256 nonce) external;
+}
+
+interface IERC20Permit {
+    function permit(address owner, address spender, uint value, uint deadline, uint8 v, bytes32 r, bytes32 s) external;
+}
+
+interface INimbusReferralProgramUsers {
+    function userIdByAddress(address user) external view returns (uint);
+}
+
+interface INimbusReferralProgramMarketing {
+    function updateReferralProfitAmount(address user, address token, uint amount) external;
+}
+
 contract Ownable {
     address public owner;
     address public newOwner;
@@ -41,6 +64,24 @@ contract Ownable {
         emit OwnershipTransferred(owner, newOwner);
         owner = newOwner;
         newOwner = address(0);
+    }
+}
+
+contract ReentrancyGuard {
+    /// @dev counter to allow mutex lock with only one SSTORE operation
+    uint256 private _guardCounter;
+
+    constructor () {
+        // The counter starts at one to prevent changing it from zero to a non-zero
+        // value, which is a more expensive operation.
+        _guardCounter = 1;
+    }
+
+    modifier nonReentrant() {
+        _guardCounter += 1;
+        uint256 localCounter = _guardCounter;
+        _;
+        require(localCounter == _guardCounter, "ReentrancyGuard: reentrant call");
     }
 }
 
@@ -96,47 +137,6 @@ library SafeERC20 {
     }
 }
 
-contract ReentrancyGuard {
-    /// @dev counter to allow mutex lock with only one SSTORE operation
-    uint256 private _guardCounter;
-
-    constructor () {
-        // The counter starts at one to prevent changing it from zero to a non-zero
-        // value, which is a more expensive operation.
-        _guardCounter = 1;
-    }
-
-    modifier nonReentrant() {
-        _guardCounter += 1;
-        uint256 localCounter = _guardCounter;
-        _;
-        require(localCounter == _guardCounter, "ReentrancyGuard: reentrant call");
-    }
-}
-
-interface ILockStakingRewards {
-    function earned(address account) external view returns (uint256);
-    function totalSupply() external view returns (uint256);
-    function balanceOf(address account) external view returns (uint256);
-    function stake(uint256 amount) external;
-    function stakeFor(uint256 amount, address user) external;
-    function getReward() external;
-    function withdraw(uint256 nonce) external;
-    function withdrawAndGetReward(uint256 nonce) external;
-}
-
-interface IERC20Permit {
-    function permit(address owner, address spender, uint value, uint deadline, uint8 v, bytes32 r, bytes32 s) external;
-}
-
-interface INimbusReferralProgramUsers {
-    function userIdByAddress(address user) external view returns (uint);
-}
-
-interface INimbusReferralProgramMarketing {
-    function updateReferralStakingAmount(address user, address token, uint amount) external;
-}
-
 contract LockStakingRewardMinAmountFixedAPYReferral is ILockStakingRewards, ReentrancyGuard, Ownable {
     using SafeERC20 for IERC20;
 
@@ -157,7 +157,7 @@ contract LockStakingRewardMinAmountFixedAPYReferral is ILockStakingRewards, Reen
     uint public swapTokenAmountThresholdForStaking;
 
     bool public onlyAllowedAddresses;
-    mapping(address => bool) allowedAddresses;
+    mapping(address => bool) public allowedAddresses;
 
     mapping(address => uint256) public weightedStakeDate;
     mapping(address => mapping(uint256 => uint256)) public stakeLocks;
@@ -276,7 +276,7 @@ contract LockStakingRewardMinAmountFixedAPYReferral is ILockStakingRewards, Reen
         require(isAmountMeetsMinThreshold(amount), "LockStakingRewardMinAmountFixedAPYReferral: Amount is less than min stake");
         stakingToken.safeTransferFrom(msg.sender, address(this), amount);
         uint amountRewardEquivalent = getEquivalentAmount(amount);
-        _sendStakingCashback(user, amount);
+        _sendStakingCashback(user, amountRewardEquivalent);
 
         _totalSupply += amount;
         _totalSupplyRewardEquivalent += amountRewardEquivalent;
@@ -291,7 +291,7 @@ contract LockStakingRewardMinAmountFixedAPYReferral is ILockStakingRewards, Reen
         
         stakeAmountsRewardEquivalent[user][stakeNonce] = amountRewardEquivalent;
         _balancesRewardEquivalent[user] += amountRewardEquivalent;
-        referralProgramMarketing.updateReferralStakingAmount(user, address(stakingToken), amount);
+        referralProgramMarketing.updateReferralProfitAmount(user, address(stakingToken), amount);
         emit Staked(user, amount);
     }
 
@@ -307,7 +307,7 @@ contract LockStakingRewardMinAmountFixedAPYReferral is ILockStakingRewards, Reen
         _balances[msg.sender] -= amount;
         _balancesRewardEquivalent[msg.sender] -= amountRewardEquivalent;
         stakingToken.safeTransfer(msg.sender, amount);
-        _sendWithdrawalCashback(msg.sender, amount);
+        _sendWithdrawalCashback(msg.sender, amountRewardEquivalent);
         stakeAmounts[msg.sender][nonce] = 0;
         stakeAmountsRewardEquivalent[msg.sender][nonce] = 0;
         emit Withdrawn(msg.sender, amount);
@@ -340,6 +340,11 @@ contract LockStakingRewardMinAmountFixedAPYReferral is ILockStakingRewards, Reen
         }
         
         return equivalent;
+    }
+
+    function getUserReferralId(address account) external view returns (uint256 id) {
+        require(address(referralProgramUsers) != address(0), "LockStakingRewardSameTokenFixedAPYReferral: Referral Program was not added.");
+        return referralProgramUsers.userIdByAddress(account);
     }
 
     function updateOnlyAllowedAddresses(bool allowance) external onlyOwner {
@@ -378,28 +383,25 @@ contract LockStakingRewardMinAmountFixedAPYReferral is ILockStakingRewards, Reen
         swapTokenAmountThresholdForStaking = threshold;
     }
 
-    function getUserReferralId(address account) external view returns (uint256 id) {
-        require(address(referralProgramUsers) != address(0), "LockStakingRewardSameTokenFixedAPYReferral: Referral Program was not added.");
-        return referralProgramUsers.userIdByAddress(account);
-    }
-
     function updateRewardRate(uint256 _rewardRate) external onlyOwner {
-        require(_rewardRate >= 0, "LockStakingRewardFixedAPYReferral: Reward rate must be grater than 0");
+        require(_rewardRate > 0, "LockStakingRewardFixedAPYReferral: Reward rate must be grater than 0");
         rewardRate = _rewardRate;
     }
     
     function updateReferralRewardRate(uint256 _referralRewardRate) external onlyOwner {
-        require(_referralRewardRate >= 0, "LockStakingRewardMinAmountFixedAPYReferral: Referral reward rate must be grater than 0");
+        require(_referralRewardRate >= rewardRate, "LockStakingRewardMinAmountFixedAPYReferral: Referral reward rate can't be lower than reward rate");
         referralRewardRate = _referralRewardRate;
     }
     
     function updateStakingCashbackRate(uint256 _stakingCashbackRate) external onlyOwner {
-        require(_stakingCashbackRate >= 0, "LockStakingRewardMinAmountFixedAPYReferral: Staking cashback rate must be grater than 0");
+        //Staking cahsback can be equal to 0
+        require(_stakingCashbackRate >= 0, "LockStakingRewardMinAmountFixedAPYReferral: Staking cashback rate can't be lower than 0");
         stakingCashbackRate = _stakingCashbackRate;
     }
     
     function updateWithdrawalCashbackRate(uint256 _withdrawalCashbackRate) external onlyOwner {
-        require(_withdrawalCashbackRate >= 0, "LockStakingRewardMinAmountFixedAPYReferral: Withdrawal cashback rate must be grater than 0");
+        //Withdrawal cahsback can be equal to 0
+        require(_withdrawalCashbackRate >= 0, "LockStakingRewardMinAmountFixedAPYReferral: Withdrawal cashback rate can't be lower than 0");
         withdrawalCashbackRate = _withdrawalCashbackRate;
     }
     
@@ -434,7 +436,7 @@ contract LockStakingRewardMinAmountFixedAPYReferral is ILockStakingRewards, Reen
     function _sendWithdrawalCashback(address account, uint _withdrawalAmount) internal {
         if(address(referralProgramUsers) != address(0) && referralProgramUsers.userIdByAddress(account) != 0) {
             uint256 cashbackAmount = (_withdrawalAmount * withdrawalCashbackRate) / 100;
-            stakingToken.safeTransfer(account, cashbackAmount);
+            rewardsToken.safeTransfer(account, cashbackAmount);
             emit WithdrawalCashbackSent(account, _withdrawalAmount, cashbackAmount);
         }
     }
@@ -442,7 +444,7 @@ contract LockStakingRewardMinAmountFixedAPYReferral is ILockStakingRewards, Reen
     function _sendStakingCashback(address account, uint _stakingAmount) internal {
         if(address(referralProgramUsers) != address(0) && referralProgramUsers.userIdByAddress(account) != 0) {
             uint256 cashbackAmount = (_stakingAmount * stakingCashbackRate) / 100;
-            stakingToken.safeTransfer(account, cashbackAmount);
+            rewardsToken.safeTransfer(account, cashbackAmount);
             emit StakingCashbackSent(account, _stakingAmount, cashbackAmount);
         }
     }

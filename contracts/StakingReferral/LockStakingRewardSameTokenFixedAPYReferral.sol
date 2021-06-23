@@ -11,6 +11,29 @@ interface IERC20 {
     event Approval(address indexed owner, address indexed spender, uint256 value);
 }
 
+interface ILockStakingRewards {
+    function earned(address account) external view returns (uint256);
+    function totalSupply() external view returns (uint256);
+    function balanceOf(address account) external view returns (uint256);
+    function stake(uint256 amount) external;
+    function stakeFor(uint256 amount, address user) external;
+    function getReward() external;
+    function withdraw(uint256 nonce) external;
+    function withdrawAndGetReward(uint256 nonce) external;
+}
+
+interface IERC20Permit {
+    function permit(address owner, address spender, uint value, uint deadline, uint8 v, bytes32 r, bytes32 s) external;
+}
+
+interface INimbusReferralProgramUsers {
+    function userIdByAddress(address user) external view returns (uint);
+}
+
+interface INimbusReferralProgramMarketing {
+    function updateReferralProfitAmount(address user, address token, uint amount) external;
+}
+
 contract Ownable {
     address public owner;
     address public newOwner;
@@ -37,6 +60,24 @@ contract Ownable {
         emit OwnershipTransferred(owner, newOwner);
         owner = newOwner;
         newOwner = address(0);
+    }
+}
+
+contract ReentrancyGuard {
+    /// @dev counter to allow mutex lock with only one SSTORE operation
+    uint256 private _guardCounter;
+
+    constructor () {
+        // The counter starts at one to prevent changing it from zero to a non-zero
+        // value, which is a more expensive operation.
+        _guardCounter = 1;
+    }
+
+    modifier nonReentrant() {
+        _guardCounter += 1;
+        uint256 localCounter = _guardCounter;
+        _;
+        require(localCounter == _guardCounter, "ReentrancyGuard: reentrant call");
     }
 }
 
@@ -90,47 +131,6 @@ library SafeERC20 {
             require(abi.decode(returndata, (bool)), "SafeERC20: ERC20 operation did not succeed");
         }
     }
-}
-
-contract ReentrancyGuard {
-    /// @dev counter to allow mutex lock with only one SSTORE operation
-    uint256 private _guardCounter;
-
-    constructor () {
-        // The counter starts at one to prevent changing it from zero to a non-zero
-        // value, which is a more expensive operation.
-        _guardCounter = 1;
-    }
-
-    modifier nonReentrant() {
-        _guardCounter += 1;
-        uint256 localCounter = _guardCounter;
-        _;
-        require(localCounter == _guardCounter, "ReentrancyGuard: reentrant call");
-    }
-}
-
-interface ILockStakingRewards {
-    function earned(address account) external view returns (uint256);
-    function totalSupply() external view returns (uint256);
-    function balanceOf(address account) external view returns (uint256);
-    function stake(uint256 amount) external;
-    function stakeFor(uint256 amount, address user) external;
-    function getReward() external;
-    function withdraw(uint256 nonce) external;
-    function withdrawAndGetReward(uint256 nonce) external;
-}
-
-interface IERC20Permit {
-    function permit(address owner, address spender, uint value, uint deadline, uint8 v, bytes32 r, bytes32 s) external;
-}
-
-interface INimbusReferralProgramUsers {
-    function userIdByAddress(address user) external view returns (uint);
-}
-
-interface INimbusReferralProgramMarketing {
-    function updateReferralStakingAmount(address user, address token, uint amount) external;
 }
 
 contract LockStakingRewardSameTokenFixedAPYReferral is ILockStakingRewards, ReentrancyGuard, Ownable {
@@ -219,7 +219,7 @@ contract LockStakingRewardSameTokenFixedAPYReferral is ILockStakingRewards, Reen
         uint stakeNonce = stakeNonces[msg.sender]++;
         stakeLocks[msg.sender][stakeNonce] = block.timestamp + lockDuration;
         stakeAmounts[msg.sender][stakeNonce] = amount;
-        referralProgramMarketing.updateReferralStakingAmount(msg.sender, address(token), amount);
+        referralProgramMarketing.updateReferralProfitAmount(msg.sender, address(token), amount);
         emit Staked(msg.sender, amount);
     }
 
@@ -240,7 +240,7 @@ contract LockStakingRewardSameTokenFixedAPYReferral is ILockStakingRewards, Reen
         uint stakeNonce = stakeNonces[msg.sender]++;
         stakeLocks[msg.sender][stakeNonce] = block.timestamp + lockDuration;
         stakeAmounts[msg.sender][stakeNonce] = amount;
-        referralProgramMarketing.updateReferralStakingAmount(msg.sender, address(token), amount);
+        referralProgramMarketing.updateReferralProfitAmount(msg.sender, address(token), amount);
         emit Staked(msg.sender, amount);
     }
 
@@ -262,35 +262,13 @@ contract LockStakingRewardSameTokenFixedAPYReferral is ILockStakingRewards, Reen
         uint stakeNonce = stakeNonces[user]++;
         stakeLocks[user][stakeNonce] = block.timestamp + lockDuration;
         stakeAmounts[user][stakeNonce] = amount;
-        referralProgramMarketing.updateReferralStakingAmount(user, address(token), amount);
+        referralProgramMarketing.updateReferralProfitAmount(user, address(token), amount);
         emit Staked(user, amount);
     }
 
     function withdrawAndGetReward(uint256 nonce) external override {
         getReward();
         withdraw(nonce);
-    }
-
-    function updateRewardAmount(uint256 reward) external onlyOwner {
-        rewardRate = reward;
-        emit RewardUpdated(reward);
-    }
-
-    function rescue(address to, address tokenAddress, uint256 amount) external onlyOwner {
-        require(to != address(0), "LockStakingRewardSameTokenFixedAPYReferral: Cannot rescue to the zero address");
-        require(amount > 0, "LockStakingRewardSameTokenFixedAPYReferral: Cannot rescue 0");
-        require(tokenAddress != address(token), "LockStakingRewardSameTokenFixedAPYReferral: Cannot rescue staking/reward token");
-
-        IERC20(tokenAddress).safeTransfer(to, amount);
-        emit RescueToken(to, address(tokenAddress), amount);
-    }
-
-    function rescue(address payable to, uint256 amount) external onlyOwner {
-        require(to != address(0), "LockStakingRewardSameTokenFixedAPYReferral: Cannot rescue to the zero address");
-        require(amount > 0, "LockStakingRewardSameTokenFixedAPYReferral: Cannot rescue 0");
-
-        to.transfer(amount);
-        emit Rescue(to, amount);
     }
     
     function earned(address account) public view override returns (uint256) {
@@ -322,6 +300,33 @@ contract LockStakingRewardSameTokenFixedAPYReferral is ILockStakingRewards, Reen
             emit RewardPaid(msg.sender, reward);
         }
     }
+        
+    function getUserReferralId(address account) external view returns (uint256) {
+        require(address(referralProgramUsers) != address(0), "LockStakingRewardSameTokenFixedAPYReferral: Referral Program was not added.");
+        return referralProgramUsers.userIdByAddress(account);
+    }
+
+        function updateRewardAmount(uint256 reward) external onlyOwner {
+        rewardRate = reward;
+        emit RewardUpdated(reward);
+    }
+
+    function rescue(address to, address tokenAddress, uint256 amount) external onlyOwner {
+        require(to != address(0), "LockStakingRewardSameTokenFixedAPYReferral: Cannot rescue to the zero address");
+        require(amount > 0, "LockStakingRewardSameTokenFixedAPYReferral: Cannot rescue 0");
+        require(tokenAddress != address(token), "LockStakingRewardSameTokenFixedAPYReferral: Cannot rescue staking/reward token");
+
+        IERC20(tokenAddress).safeTransfer(to, amount);
+        emit RescueToken(to, address(tokenAddress), amount);
+    }
+
+    function rescue(address payable to, uint256 amount) external onlyOwner {
+        require(to != address(0), "LockStakingRewardSameTokenFixedAPYReferral: Cannot rescue to the zero address");
+        require(amount > 0, "LockStakingRewardSameTokenFixedAPYReferral: Cannot rescue 0");
+
+        to.transfer(amount);
+        emit Rescue(to, amount);
+    }
 
     function updateOnlyAllowedAddresses(bool allowance) external onlyOwner {
         onlyAllowedAddresses = allowance;
@@ -339,29 +344,26 @@ contract LockStakingRewardSameTokenFixedAPYReferral is ILockStakingRewards, Reen
             updateAllowedAddress(addresses[i], allowances[i]);
         }
     }
-        
-    function getUserReferralId(address account) external view returns (uint256) {
-        require(address(referralProgramUsers) != address(0), "LockStakingRewardSameTokenFixedAPYReferral: Referral Program was not added.");
-        return referralProgramUsers.userIdByAddress(account);
-    }
 
     function updateRewardRate(uint256 _rewardRate) external onlyOwner {
-        require(_rewardRate >= 0, "LockStakingRewardSameTokenFixedAPYReferral: Reward rate must be grater than 0");
+        require(_rewardRate > 0, "LockStakingRewardSameTokenFixedAPYReferral: Reward rate must be grater than 0");
         rewardRate = _rewardRate;
     }
     
     function updateReferralRewardRate(uint256 _referralRewardRate) external onlyOwner {
-        require(_referralRewardRate >= 0, "LockStakingRewardSameTokenFixedAPYReferral: Referral reward rate must be grater than 0");
+        require(_referralRewardRate >= rewardRate, "LockStakingRewardSameTokenFixedAPYReferral: Referral reward rate can't be lower than reward rate");
         referralRewardRate = _referralRewardRate;
     }
     
     function updateStakingCashbackRate(uint256 _stakingCashbackRate) external onlyOwner {
-        require(_stakingCashbackRate >= 0, "LockStakingRewardSameTokenFixedAPYReferral: Staking cashback rate must be grater than 0");
+        //Staking cahsback can be equal to 0
+        require(_stakingCashbackRate >= 0, "LockStakingRewardSameTokenFixedAPYReferral: Staking cashback rate can't be lower than 0");
         stakingCashbackRate = _stakingCashbackRate;
     }
     
     function updateWithdrawalCashbackRate(uint256 _withdrawalCashbackRate) external onlyOwner {
-        require(_withdrawalCashbackRate >= 0, "LockStakingRewardSameTokenFixedAPYReferral: Withdrawal cashback rate must be grater than 0");
+        //Withdrawal cahsback can be equal to 0
+        require(_withdrawalCashbackRate >= 0, "LockStakingRewardSameTokenFixedAPYReferral: Withdrawal cashback rate can't be lower than 0");
         withdrawalCashbackRate = _withdrawalCashbackRate;
     }
     

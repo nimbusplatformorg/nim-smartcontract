@@ -233,7 +233,7 @@ contract NimbusInitialAcquisition is Ownable, Pausable {
     }
     
     function buyExactNbuForTokens(address token, uint nbuAmount, address nbuRecipient, uint stakingPoolId) external whenNotPaused {
-        require(address(stakingPools[stakingPoolId]) != address(0), "NimbusInitialAcquisition: No staking pool with provided id.");
+        require(address(stakingPools[stakingPoolId]) != address(0), "NimbusInitialAcquisition: No staking pool with provided id");
         require(allowedTokens[token], "NimbusInitialAcquisition: Not allowed token");
         uint tokenAmount = getTokenAmountForNbu(token, nbuAmount);
         TransferHelper.safeTransferFrom(token, msg.sender, recipient, tokenAmount);
@@ -241,7 +241,7 @@ contract NimbusInitialAcquisition is Ownable, Pausable {
     }
 
     function buyNbuForExactTokens(address token, uint tokenAmount, address nbuRecipient, uint stakingPoolId) external whenNotPaused {
-        require(address(stakingPools[stakingPoolId]) != address(0), "NimbusInitialAcquisition: No staking pool with provided id.");
+        require(address(stakingPools[stakingPoolId]) != address(0), "NimbusInitialAcquisition: No staking pool with provided id");
         require(allowedTokens[token], "NimbusInitialAcquisition: Not allowed token");
         uint nbuAmount = getNbuAmountForToken(token, tokenAmount);
         TransferHelper.safeTransferFrom(token, msg.sender, recipient, tokenAmount);
@@ -249,7 +249,7 @@ contract NimbusInitialAcquisition is Ownable, Pausable {
     }
 
     function buyNbuForExactBnb(address nbuRecipient, uint stakingPoolId) payable external whenNotPaused {
-        require(address(stakingPools[stakingPoolId]) != address(0), "NimbusInitialAcquisition: No staking pool with provided id.");
+        require(address(stakingPools[stakingPoolId]) != address(0), "NimbusInitialAcquisition: No staking pool with provided id");
         require(allowedTokens[NBU_WBNB], "NimbusInitialAcquisition: Not allowed purchase for BNB");
         uint nbuAmount = getNbuAmountForBnb(msg.value);
         INBU_WBNB(NBU_WBNB).deposit{value: msg.value}();
@@ -257,7 +257,7 @@ contract NimbusInitialAcquisition is Ownable, Pausable {
     }
 
     function buyExactNbuForBnb(uint nbuAmount, address nbuRecipient, uint stakingPoolId) payable external whenNotPaused {
-        require(address(stakingPools[stakingPoolId]) != address(0), "NimbusInitialAcquisition: No staking pool with provided id.");
+        require(address(stakingPools[stakingPoolId]) != address(0), "NimbusInitialAcquisition: No staking pool with provided id");
         require(allowedTokens[NBU_WBNB], "NimbusInitialAcquisition: Not allowed purchase for BNB");
         uint nbuAmountMax = getNbuAmountForBnb(msg.value);
         require(nbuAmountMax >= nbuAmount, "NimbusInitialAcquisition: Not enough BNB");
@@ -315,18 +315,14 @@ contract NimbusInitialAcquisition is Ownable, Pausable {
     }
 
     function updateStakingPool(uint id, address stakingPool) public onlyOwner {
-        require(id != 0, "NimbusInitialAcquisition: Staking pool id cant be equal to 0.");
-        require(stakingPool != address(0), "NimbusInitialAcquisition: Staking pool address cant be equal to address(0).");
-
-        stakingPools[id] = INimbusStakingPool(stakingPool);
-        require(NBU.approve(stakingPool, type(uint256).max), "NimbusInitialAcquisition: Error on approving");
+        _updateStakingPool(id, stakingPool);
     }
 
     function updateStakingPool(uint[] memory ids, address[] memory _stakingPools) external onlyOwner {
         require(ids.length == _stakingPools.length, "NimbusInitialAcquisition: Ids and staking pools arrays have different size.");
         
         for(uint i = 0; i < ids.length; i++) {
-            updateStakingPool(ids[i], _stakingPools[i]);
+            _updateStakingPool(ids[i], _stakingPools[i]);
         }
     }
 
@@ -386,6 +382,14 @@ contract NimbusInitialAcquisition is Ownable, Pausable {
     function toggleUseWeightedRates() external onlyOwner {
         useWeightedRates = !useWeightedRates;
         emit ToggleUseWeightedRates(useWeightedRates);
+    }
+
+    function _updateStakingPool(uint id, address stakingPool) private {
+        require(id != 0, "NimbusInitialAcquisition: Staking pool id cant be equal to 0.");
+        require(stakingPool != address(0), "NimbusInitialAcquisition: Staking pool address cant be equal to address(0).");
+
+        stakingPools[id] = INimbusStakingPool(stakingPool);
+        require(NBU.approve(stakingPool, type(uint256).max), "NimbusInitialAcquisition: Error on approving");
     }
 }
 
