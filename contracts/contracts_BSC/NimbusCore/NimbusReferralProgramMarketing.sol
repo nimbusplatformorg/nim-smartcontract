@@ -67,11 +67,20 @@ contract Ownable {
     }
 }
 
+library Address {
+    function isContract(address account) internal view returns (bool) {
+        uint256 size;
+        assembly { size := extcodesize(account) }
+        return size > 0;
+    }
+}
+
 contract NimbusReferralProgramMarketing is Ownable {
 
     struct ProfitAmount {
         uint NBU;
         uint GNBU;
+        uint SwapToken;
     }
 
     struct Qualification {
@@ -81,13 +90,19 @@ contract NimbusReferralProgramMarketing is Ownable {
         uint FreePaymentAmount;
     }
 
+    uint constant month = 30 days;
+
     INimbusReferralProgramUsers rpUsers;
     INimbusRouter swapRouter;
     IBEP20 NBU;
     IBEP20 GNBU;
     IBEP20 swapToken; 
 
-    uint lastLeaderReferralLine = 6;
+    uint public lastLeaderReferralLine;
+    uint public qualificationsCount;
+    uint public managerRewardPercent;
+    bool public allowLeaderlessPurchases;
+
     mapping(address => uint) public userLine;
 
     mapping(address => bool) public isManager;
@@ -96,42 +111,44 @@ contract NimbusReferralProgramMarketing is Ownable {
     mapping(address => address) public userLeader;
     mapping(address => address) public userManager;
 
-    mapping(address => uint) managerRegistrationTimestamp;
-    mapping(address => uint) leaderRegistrationTimestamp;
+    mapping(address => bool) public canClaimReward;
     
     mapping(address => uint) managerCurrenPeriodTimestamp;
     mapping(address => uint) leaderCurrenPeriodTimestamp;
 
-    mapping(address => uint[]) leaderCheckpoints;
-    mapping(address => uint[]) managerCheckpoints;
+    mapping(address => uint[]) public leaderCheckpoints;
 
-    mapping(address => mapping(uint => ProfitAmount)) managerTurnoverForPeriod;
     mapping(address => mapping(uint => ProfitAmount)) leaderTurnoverForPeriod;
  
-    mapping(address => ProfitAmount) public leaderTotalTurnover;
     mapping(address => ProfitAmount) public managerTotalTurnover;
 
     mapping(uint => Qualification) public qualifications;
 
-    uint qualificationsCount;
-
     mapping(address => uint) public leaderQualificationLevel;
-    mapping(address => uint) public leaderFreePaymentReward;
-    mapping(address => uint) public leaderVestingReward;
-    mapping(address => uint) public leaderClaimedReward;
+    mapping(address => mapping(uint => uint)) public leaderFreePaymentReward;
+    mapping(address => mapping(uint => uint)) public leaderVestingReward;
+    mapping(address => mapping(uint => uint)) public leaderClaimedReward;
+
+    mapping(address => uint) public managerClaimedReward;
 
     mapping(address => bool) public isAllowedContract;
 
-    event QualificationUpdated(address user, uint qualificationNumber);
-    event RewardClaimed(address leader, uint rewardAmount);
+    mapping(address => uint) public leaderLastWithdrawalAmount;
 
-    constructor(address _nbu, address _gnbu, address _rpUsers, uint _lastLeaderReferralLine, address _swapRouter, address _swapToken) {
+    mapping(address => bool) public registrators;
+
+    event QualificationUpdated(address indexed user, uint indexed qualificationNumber);
+    event LeaderRewardClaimed(address indexed leader, uint rewardAmount, uint previousQualification, uint currentQualification);
+    event ManagerRewardClaimed(address indexed manager, uint rewardAmount);
+    event UserRegistered(address user, uint sponsorId);
+
+    constructor(address _nbu, address _gnbu, address _rpUsers, address _swapRouter, address _swapToken) {
         NBU = IBEP20(_nbu);
         GNBU = IBEP20(_gnbu);
         rpUsers = INimbusReferralProgramUsers(_rpUsers);
-        lastLeaderReferralLine = _lastLeaderReferralLine;
         swapRouter = INimbusRouter(_swapRouter);
         swapToken = IBEP20(_swapToken);
+        lastLeaderReferralLine = 6;
     }
 
     modifier onlyAllowedContract() {
@@ -139,8 +156,110 @@ contract NimbusReferralProgramMarketing is Ownable {
         _;
     }
 
+    modifier onlyRegistrators() {
+        require(registrators[msg.sender] == true, "NimbusReferralProgramMarketing: Provided address is not a registrator");
+        _;
+    }
+
+    function claimLeaderRewardForPeriod(uint checkpoint) public {
+        require(isLeader[msg.sender], "NimbusReferralProgramMarketing: User is not a leader");
+
+        uint previousQualificationLevel = leaderQualificationLevel[msg.sender];
+        _updateLeaderQualification(msg.sender);
+        uint currentQualificationLevel = leaderQualificationLevel[msg.sender];
+
+        uint leaderFreePaymentRewardForPeriod = leaderFreePaymentReward[msg.sender][checkpoint];
+        require(leaderFreePaymentRewardForPeriod != 0, "NimbusReferralProgramMarketing: Leader has no free payment reward");
+
+        NBU.transfer(msg.sender, leaderFreePaymentRewardForPeriod);
+        leaderClaimedReward[msg.sender][checkpoint] += leaderFreePaymentRewardForPeriod;
+        leaderFreePaymentRewardForPeriod = 0;
+        emit LeaderRewardClaimed(msg.sender, leaderFreePaymentRewardForPeriod, previousQualificationLevel, currentQualificationLevel);
+    }
+
+    function claimManagerReward() public {
+        require(isManager[msg.sender], "NimbusReferralProgramMarketing: User is not a manager");
+        uint rewardAmount = (managerTotalTurnover[msg.sender].NBU * managerRewardPercent) / 100;
+
+        if(managerClaimedReward[msg.sender] > 0) {
+            rewardAmount -= managerClaimedReward[msg.sender];
+        }
+
+        NBU.transfer(msg.sender, rewardAmount);
+        managerClaimedReward[msg.sender] += rewardAmount;
+        ManagerRewardClaimed(msg.sender, rewardAmount);
+
+    }
+
+    function canQualificationBeUpgraded(address leader) public view returns(bool) {
+        if(getTurnoverQualification(leader) > leaderQualificationLevel[leader]) {
+            return true;
+        } else {
+            return false;
+        }
+    }
+
+    function getTurnoverQualification(address leader) public view returns(uint turnoverQualification) {
+        uint turnover = leaderTotalTurnover(leader, address(swapToken));
+        return _getUserQualificationLevel(turnover);
+    }
+
+    function register(uint sponsorId) external returns(uint userId) {
+        return _register(msg.sender, sponsorId);
+    }
+
+    function registerUser(address user, uint sponsorId) external onlyRegistrators returns(uint userId) {
+        return _register(user, sponsorId);
+    }
+
+    function updateReferralProfitAmount(address user, address token, uint amount) external onlyAllowedContract {
+        require(rpUsers.userIdByAddress(user) != 0, "NimbusReferralProgramMarketing: User is not a part of referral program");
+        require(token == address(NBU) || token == address(GNBU), "NimbusReferralProgramMarketing: Invalid staking token");
+
+        _updateTokenProfitAmount(user, token, amount);
+    }
+
+    function leaderTotalTurnover(address leader, address token) public view returns (uint turnover) {
+        require(token == address(NBU) || token == address(GNBU) || token == address(swapToken), "NimbusReferralProgramMarketing: Invalid token");
+        require(isLeader[leader], "NimbusReferralProgramMarketing: User is not leader");
+
+        if(token == address(NBU)) {
+            for(uint i = 0; i < leaderCheckpoints[leader].length; i++) {
+                turnover += leaderTurnoverForPeriod[leader][leaderCheckpoints[leader][i]].NBU;
+            }
+        } else if(token == address(GNBU)) {
+            for(uint i = 0; i < leaderCheckpoints[leader].length; i++) {
+                turnover += leaderTurnoverForPeriod[leader][leaderCheckpoints[leader][i]].GNBU;
+            }
+        } else if(token == address(swapToken)) {
+            for(uint i = 0; i < leaderCheckpoints[leader].length; i++) {
+                turnover += leaderTurnoverForPeriod[leader][leaderCheckpoints[leader][i]].SwapToken;
+            }
+        }
+    }
+
+    function updateManagerRewardPercent(uint percent) external onlyOwner {
+        require(percent > 0, "NimbusReferralProgramMarketing: reward percent must be grater then 0");
+        managerRewardPercent = percent;
+    }
+
+    function updateLeaderlessPurchasesAllowance(bool allowance) external onlyOwner {
+        allowLeaderlessPurchases = allowance;
+    }
+
+    function updateRegistrator(address registrator, bool isActive) external onlyOwner {
+        require(registrator != address(0), "NimbusReferralProgramMarketing: Registrator address is equal to 0");
+
+        registrators[registrator] = isActive;
+    }
+
+    function updateAllowanceforClamingReward(address user, bool allowance) external onlyOwner {
+        require(isLeader[user] || isManager[user], "NimbusReferralProgramMarketing: user is not a leader or a manager");
+        canClaimReward[user] = allowance;
+    }
+
     function updateQualifications(uint[] memory totalTurnoverAmounts, uint[] memory vestingAmounts, uint[] memory freePaymentAmounts) external onlyOwner {
-        require(totalTurnoverAmounts.length == vestingAmounts.length && totalTurnoverAmounts.length == freePaymentAmounts.length, "NimbusReferralProgramMarketing: Arrays length are not equal.");
+        require(totalTurnoverAmounts.length == vestingAmounts.length && totalTurnoverAmounts.length == freePaymentAmounts.length, "NimbusReferralProgramMarketing: Arrays length are not equal");
 
         for(uint i = 0; i < totalTurnoverAmounts.length; i++) {
             _updateQualification(totalTurnoverAmounts[i], vestingAmounts[i], freePaymentAmounts[i]);
@@ -148,27 +267,25 @@ contract NimbusReferralProgramMarketing is Ownable {
     }
 
     function updateLastLeaderReferralLine(uint _lastLeaderReferralLine) external onlyOwner {
-        require(_lastLeaderReferralLine > 0, "NimbusReferralProgramMarketing: Last leader referral line can't be lower than one.");
+        require(_lastLeaderReferralLine > 0, "NimbusReferralProgramMarketing: Last leader referral line can't be lower than one");
         lastLeaderReferralLine = _lastLeaderReferralLine;
     }
    
-    function updateAllowedContract(address _contract, bool isAllowed) external onlyOwner {
-        require(_isContract(_contract), "NimbusReferralProgramMarketing: Provided address is not a contract.");
-        isAllowedContract[_contract] = isAllowed;
+    function updateAllowedContract(address _contract, bool _isAllowed) external onlyOwner {
+        require(Address.isContract(_contract), "NimbusReferralProgramMarketing: Provided address is not a contract");
+        isAllowedContract[_contract] = _isAllowed;
     }
 
     function updateLeader(address user, bool _isLeader) external onlyOwner {
-        require(rpUsers.userIdByAddress(user) != 0, "NimbusReferralProgramMarketing: User is not registered.");
+        require(rpUsers.userIdByAddress(user) != 0, "NimbusReferralProgramMarketing: User is not registered");
 
-        if(_isLeader == true) {
-            leaderRegistrationTimestamp[user] = block.timestamp;
+        if(_isLeader) {
             leaderCurrenPeriodTimestamp[user] = block.timestamp;
             leaderCheckpoints[user].push(block.timestamp);
-            uint swapTokenAmount = qualifications[0].VestingAmount * swapToken.decimals();
-            leaderQualificationLevel[user] = 0;
+            uint swapTokenAmount = qualifications[0].VestingAmount;
             uint nbuAmount = _getEquivalentMainTokenAmount(address(NBU), swapTokenAmount);
             NBU.vest(user, nbuAmount);
-            leaderVestingReward[user] += qualifications[0].VestingAmount * swapToken.decimals();
+            leaderVestingReward[user][block.timestamp] += swapTokenAmount;
 
             emit QualificationUpdated(user, leaderQualificationLevel[user]);
         }
@@ -176,130 +293,99 @@ contract NimbusReferralProgramMarketing is Ownable {
         isLeader[user] = _isLeader;
     }
 
-    function updateLeaderForUser(address user, address leader) public onlyOwner {
-        require(user != address(0), "NimbusReferralProgramMarketing: User address is equal to 0");
-        require(leader != address(0), "NimbusReferralProgramMarketing: Leader address is equal to 0");
-
-        userLeader[user] = leader;
-    }
-
     function updateLeaderForUsers(address leader, address[] memory users) external onlyOwner {
         for(uint i = 0; i < users.length; i++) {
-            updateLeaderForUser(users[i], leader);
+            _updateLeaderForUser(users[i], leader);
         }
     }
     
     function updateLeadersForUsers(address[] memory leaders, address[] memory users) external onlyOwner {
-        require(leaders.length == users.length, "NimbusReferralProgramMarketing: Leaders and users arrays length are not equal.");
+        require(leaders.length == users.length, "NimbusReferralProgramMarketing: Leaders and users arrays length are not equal");
         for(uint i = 0; i < users.length; i++) {
-            updateLeaderForUser(users[i], leaders[i]);
+            _updateLeaderForUser(users[i], leaders[i]);
         }
     }
 
     function updateManager(address user, bool _isManager) external onlyOwner {
-        require(rpUsers.userIdByAddress(user) != 0, "NimbusReferralProgramMarketing: User is not registered.");
+        require(rpUsers.userIdByAddress(user) != 0, "NimbusReferralProgramMarketing: User is not registered");
 
         if(_isManager == true) {
-            managerRegistrationTimestamp[user] = block.timestamp;
             managerCurrenPeriodTimestamp[user] = block.timestamp;
-            managerCheckpoints[user].push(block.timestamp);
         }
 
         isManager[user] = _isManager;
     }
 
-    function updateManagerForUser(address user, address manager) public onlyOwner {
-        require(user != address(0), "NimbusReferralProgramMarketing: User address is equal to 0");
-        require(manager != address(0), "NimbusReferralProgramMarketing: Manager address is equal to 0");
-
-        userManager[user] = manager;
-    }
-
     function updateManagerForUsers(address manager, address[] memory users) external onlyOwner {
         for(uint i = 0; i < users.length; i++) {
-            updateManagerForUser(users[i], manager);
+            _updateManagerForUser(users[i], manager);
         }
     }
 
-    function updateManagerssForUsers(address[] memory managers, address[] memory users) external onlyOwner {
+    function updateManagersForUsers(address[] memory managers, address[] memory users) external onlyOwner {
         require(managers.length == users.length, "NimbusReferralProgramMarketing: Managers and users arrays length are not equal.");
         for(uint i = 0; i < users.length; i++) {
-            updateManagerForUser(users[i], managers[i]);
+            _updateManagerForUser(users[i], managers[i]);
         }
     }
 
-    function registerUser(address user, uint sponsorId) external returns(uint userId){
-        address sponsorAddress = rpUsers.userAddressById(sponsorId);
+    function updateManagerForUser(address user, address manager) public onlyOwner {
+        _updateManagerForUser(user, manager);
+    }
 
-        if (isLeader[sponsorAddress] == true) {
-            updateLeaderForUser(user, sponsorAddress);
-            updateManagerForUser(user, userManager[sponsorAddress]);
-            return rpUsers.registerUser(user, sponsorId);
+    function updateLeaderForUser(address user, address leader) public onlyOwner {
+        _updateLeaderForUser(user, leader);
+    }
+
+    function _updateQualification(uint totalTurnoverAmount, uint vestingAmount, uint freePaymentAmount) internal onlyOwner {
+        require(totalTurnoverAmount > 0, "NimbusReferralProgramMarketing: Total turnover amount can't be lower then one");
+        qualificationsCount = ++qualificationsCount;
+        qualifications[qualificationsCount] = Qualification(qualificationsCount, totalTurnoverAmount, vestingAmount, freePaymentAmount);
+    }
+
+    function _updateTokenProfitAmount(address user, address token, uint amount) internal {
+        address leader = userLeader[user];
+
+        if(allowLeaderlessPurchases) {
+            return;
         } else {
-            updateLeaderForUser(user, userLeader[sponsorAddress]);
-            updateManagerForUser(user, userManager[userLeader[sponsorAddress]]);
-            return rpUsers.registerUser(user, sponsorId);
+            require(leader != address(0), "NimbusReferralProgramMarketing: User leader address is equal to 0");
         }
-    }
 
-    function updateReferralProfitAmount(address user, address token, uint amount) external onlyAllowedContract {
-        require(rpUsers.userIdByAddress(user) != 0, "NimbusReferralProgramMarketing: User is not a part of referral program.");
-        require(token == address(NBU) || token == address(GNBU), "NimbusReferralProgramMarketing: Invalid staking token.");
+        require(isLeader[leader], "NimbusReferralProgramMarketing: User is not leader");
+        require(userManager[leader] != address(0), "NimbusReferralProgramMarketing: Leader has no manager");
 
-        _updateTokenProfitAmount(user, userLeader[user], token, amount);
-    }
-    
-    function _isContract(address _contract) internal view returns (bool isContract){
-        uint32 size;
-        assembly {
-            size := extcodesize(_contract)
-        }
-        return (size > 0);
-    }
+        address leaderManager = userManager[leader];
 
-    function _updateTokenProfitAmount(address user, address leader, address token, uint amount) internal {
-        require(isLeader[leader] == true, "NimbusReferralProgramMarketing: User is not leader.");
-        require(userManager[leader] != address(0), "NimbusReferralProgramMarketing: Leader has no manager.");
-
-        address manager = userManager[leader];
-
-        _updateCurrentPeriodTimestamp(leader, leaderCurrenPeriodTimestamp);
-        _updateCurrentPeriodTimestamp(manager, managerCurrenPeriodTimestamp);
+        _updateCurrentPeriodTimestampIfNeeded(leader, leaderCurrenPeriodTimestamp);
 
         if(token == address(NBU)) {
             if(userLine[user] <= lastLeaderReferralLine) {
-                leaderTotalTurnover[leader].NBU += amount;
                 leaderTurnoverForPeriod[leader][leaderCurrenPeriodTimestamp[leader]].NBU += amount;
-                uint totalTurnover = leaderTurnoverForPeriod[leader][leaderCurrenPeriodTimestamp[leader]].NBU;
-                _updateLeaderQualification(leader, address(NBU), totalTurnover);
             }
 
-            managerTotalTurnover[userManager[leader]].NBU += amount;
-            managerTurnoverForPeriod[manager][managerCurrenPeriodTimestamp[manager]].NBU += amount;
+            managerTotalTurnover[leaderManager].NBU += amount;
         } else if(token == address(GNBU)) {
-
             if(userLine[user] <= lastLeaderReferralLine) {
-                leaderTotalTurnover[leader].GNBU += amount;
                 leaderTurnoverForPeriod[leader][leaderCurrenPeriodTimestamp[leader]].GNBU += amount;
-                uint totalTurnover = leaderTurnoverForPeriod[leader][leaderCurrenPeriodTimestamp[leader]].GNBU;
-                _updateLeaderQualification(leader, address(GNBU), totalTurnover);
             }
 
-            managerTotalTurnover[userManager[leader]].GNBU += amount;
-            managerTurnoverForPeriod[manager][managerCurrenPeriodTimestamp[manager]].GNBU += amount;
+            managerTotalTurnover[leaderManager].GNBU += amount;
         }
+
+        uint swapTokenEquivalentAmount = _getEquivalentSwapTokenAmount(address(GNBU), amount);
+        leaderTurnoverForPeriod[leader][leaderCurrenPeriodTimestamp[leader]].SwapToken += swapTokenEquivalentAmount;
+        managerTotalTurnover[leaderManager].SwapToken += swapTokenEquivalentAmount;
     }
 
-    function _updateCurrentPeriodTimestamp(address user, mapping(address => uint) storage currentPeriod) internal {
-        if(currentPeriod[user] + 30 days < block.timestamp) {
-            uint difference = (currentPeriod[user] - block.timestamp ) / 30 days;
-            currentPeriod[user] = currentPeriod[user] + difference * 30 days;
+    function _updateCurrentPeriodTimestampIfNeeded(address user, mapping(address => uint) storage currentPeriod) internal {
+        if(currentPeriod[user] + month < block.timestamp) {
+            uint passedperiods = (block.timestamp - currentPeriod[user]) / month;
+            currentPeriod[user] = currentPeriod[user] + passedperiods * month;
 
             if(isLeader[user]) {
                 leaderCheckpoints[user].push(currentPeriod[user]);
                 leaderQualificationLevel[user] = 0;
-            } else if(isManager[user]) {
-                managerCheckpoints[user].push(currentPeriod[user]);
             }
         }
     }
@@ -307,102 +393,112 @@ contract NimbusReferralProgramMarketing is Ownable {
     function _setUserReferralLine(address user) internal {
         address sponsorAddress = rpUsers.userSponsorAddressByAddress(user);
 
-        if(sponsorAddress != address(0)) {
+        if(isLeader[sponsorAddress]) {
+            userLine[user] = 1;
+        } else if(isManager[sponsorAddress]) {
+            userLine[user] = 0;
+        } else {
+            userLine[user] = ++userLine[sponsorAddress];
+        }
+    }
 
-            if(isLeader[sponsorAddress]) {
-                userLine[user] = 1;
-            } else if(isManager[sponsorAddress]) {
-                userLine[user] = 0;
-            } else {
-                userLine[user] += userLine[sponsorAddress];
+    function _updateLeaderQualification(address leader) internal {
+        uint totalTurnoverEquivalent = leaderTotalTurnover(leader, address(swapToken));
+        uint actualQualificationLevel = _getUserQualificationLevel(totalTurnoverEquivalent);
+
+        if(canQualificationBeUpgraded(leader)) {
+            while(leaderQualificationLevel[leader] < actualQualificationLevel) {
+                uint storedQualificationLevel = leaderQualificationLevel[leader];
+                _setLeaderReward(leader, ++storedQualificationLevel);
+                leaderQualificationLevel[leader] =storedQualificationLevel;
             }
 
-        } else {
-            userLine[user] = 0;
-        }
-    }
-
-    function _getEquivalentSwapTokenAmount(address token, uint mainTokenAmount) internal view returns (uint swapTokenAmount) {
-        address pairAddress = swapRouter.pairFor(token, address(swapToken));
-        INimbusPair pair = INimbusPair(pairAddress);
-
-        uint mainTokenReserve = 0;
-        uint swapTokenReserve = 0;
-        
-        if(token == pair.token0()) {
-            (mainTokenReserve, swapTokenReserve, ) = pair.getReserves();
-        } else {
-            (swapTokenReserve, mainTokenReserve, ) = pair.getReserves();
-        }
-
-        swapTokenAmount = (mainTokenAmount * swapTokenReserve) / mainTokenReserve;
-    }
-
-    function _getEquivalentMainTokenAmount(address token, uint swapTokenAmount) internal view returns (uint mainTokenAmount) {
-        address pairAddress = swapRouter.pairFor(token, address(swapToken));
-        INimbusPair pair = INimbusPair(pairAddress);
-
-        uint mainTokenReserve = 0;
-        uint swapTokenReserve = 0;
-        
-        if(token == pair.token0()) {
-            (mainTokenReserve, swapTokenReserve, ) = pair.getReserves();
-        } else {
-            (swapTokenReserve, mainTokenReserve, ) = pair.getReserves();
-        }
-
-        mainTokenAmount = (swapTokenAmount * mainTokenReserve) / swapTokenReserve;
-    }
-
-    function _updateQualification(uint totalTurnoverAmount, uint vestingAmount, uint freePaymentAmount) internal onlyOwner returns(Qualification memory qualification) {
-        require(totalTurnoverAmount > 0, "NimbusReferralProgramMarketing: Total turnover amount can't be lower then one.");
-        qualificationsCount = ++qualificationsCount;
-
-        qualifications[qualificationsCount] = Qualification(qualificationsCount, totalTurnoverAmount, vestingAmount, freePaymentAmount);
-
-        return qualifications[qualificationsCount];
-    }
-
-    function _updateLeaderQualification(address leader, address token, uint totalTurnover) internal {
-        uint totalTurnoverEquivalent = _getEquivalentSwapTokenAmount(token, totalTurnover);
-
-        uint qualificationLevel = _getUserQualificationLevel(totalTurnoverEquivalent);
-
-        if(leaderQualificationLevel[leader] < qualificationLevel) {
-            leaderQualificationLevel[leader] = qualificationLevel;
-            _setLeaderReward(leader, leaderQualificationLevel[leader]);
+            leaderQualificationLevel[leader] = actualQualificationLevel;
             emit QualificationUpdated(leader, leaderQualificationLevel[leader]);
         }
     }
 
     function _setLeaderReward(address leader, uint qualificationLevel) internal {
         if(qualifications[qualificationLevel].VestingAmount > 0) {
-            uint swapTokenAmount = qualifications[qualificationLevel].VestingAmount * swapToken.decimals();
+            uint swapTokenAmount = qualifications[qualificationLevel].VestingAmount;
             uint nbuAmount = _getEquivalentMainTokenAmount(address(NBU), swapTokenAmount);
             NBU.vest(leader, nbuAmount);
-            leaderVestingReward[leader] += qualifications[qualificationLevel].VestingAmount * swapToken.decimals();
+            leaderVestingReward[leader][leaderCurrenPeriodTimestamp[leader]] += swapTokenAmount;
         }
 
         if(qualifications[qualificationLevel].FreePaymentAmount > 0) {
-            leaderFreePaymentReward[leader] += qualifications[qualificationLevel].FreePaymentAmount * swapToken.decimals();
+            leaderFreePaymentReward[leader][leaderCurrenPeriodTimestamp[leader]] += qualifications[qualificationLevel].FreePaymentAmount;
         }   
     }
 
-    function _getUserQualificationLevel(uint totalTurnover) internal view returns(uint qualificationNumber){
+    function _getUserQualificationLevel(uint totalTurnover) internal view returns(uint qualificationNumber) {
         for(uint i = 0; i < qualificationsCount; i++) {
-            if(qualifications[i].TotalTurnover < totalTurnover) {
-                return i - 1;
+            if(qualifications[i+1].TotalTurnover < totalTurnover) {
+                return i;
             }
         }
     }
 
-    function claimReward() external {
-        require(isLeader[msg.sender], "NimbusReferralProgramMarketing: User is not a leader.");
-        require(leaderFreePaymentReward[msg.sender] != 0, "NimbusReferralProgramMarketing: Leader has no free payment reward");
+    function _getEquivalentSwapTokenAmount(address token, uint mainTokenAmount) internal view returns (uint swapTokenAmount) {
+        (uint mainTokenReserve, uint swapTokenReserve) = _getPairReserves(token);
 
-        swapToken.transfer(msg.sender, leaderFreePaymentReward[msg.sender]);
-        leaderClaimedReward[msg.sender] += leaderFreePaymentReward[msg.sender];
-        leaderFreePaymentReward[msg.sender] = 0;
-        emit RewardClaimed(msg.sender, leaderFreePaymentReward[msg.sender]);
+        if(mainTokenReserve != 0 && swapTokenReserve != 0) {
+            swapTokenAmount = (mainTokenAmount * swapTokenReserve) / mainTokenReserve;
+        } else {
+            return 0;
+        }
+    }
+
+    function _getEquivalentMainTokenAmount(address token, uint swapTokenAmount) internal view returns (uint mainTokenAmount) {
+        (uint mainTokenReserve, uint swapTokenReserve) = _getPairReserves(token);
+
+        if(mainTokenReserve != 0 && swapTokenReserve != 0) {
+            mainTokenAmount = (swapTokenAmount * mainTokenReserve) / swapTokenReserve;
+        } else {
+            return 0;
+        }
+    }
+
+    function _getPairReserves(address token) private view returns(uint mainTokenReserve, uint swapTokenReserve){
+        address pairAddress = swapRouter.pairFor(token, address(swapToken));
+        INimbusPair pair = INimbusPair(pairAddress);
+        
+        if(token == pair.token0()) {
+            (mainTokenReserve, swapTokenReserve, ) = pair.getReserves();
+        } else {
+            (swapTokenReserve, mainTokenReserve, ) = pair.getReserves();
+        }
+    }
+
+    function _updateLeaderForUser(address user, address leader) private { 
+        require(user != address(0), "NimbusReferralProgramMarketing: User address is equal to 0");
+        require(leader != address(0), "NimbusReferralProgramMarketing: Leader address is equal to 0");
+
+        userLeader[user] = leader;
+    }
+
+    function _updateManagerForUser(address user, address manager) private { 
+        require(user != address(0), "NimbusReferralProgramMarketing: User address is equal to 0");
+        require(manager != address(0), "NimbusReferralProgramMarketing: Manager address is equal to 0");
+
+        userManager[user] = manager;
+    }
+
+    function _register(address user, uint sponsorId) private returns(uint userId) {
+        require(rpUsers.userIdByAddress(user) == 0, "NimbusReferralProgramMarketing: User already registered");
+        address sponsorAddress = rpUsers.userAddressById(sponsorId);
+        require(sponsorAddress != address(0), "NimbusReferralProgramMarketing: User sponsor address is equal to 0");
+
+        if (isLeader[sponsorAddress] == true) {
+            updateLeaderForUser(user, sponsorAddress);
+            updateManagerForUser(user, userManager[sponsorAddress]);
+        } else {
+            updateLeaderForUser(user, userLeader[sponsorAddress]);
+            updateManagerForUser(user, userManager[userLeader[sponsorAddress]]);
+        }
+
+        _setUserReferralLine(user);
+        emit UserRegistered(user, sponsorId);   
+        return rpUsers.registerUser(user, sponsorId);
     }
 }
