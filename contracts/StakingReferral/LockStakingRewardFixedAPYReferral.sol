@@ -140,6 +140,20 @@ library SafeERC20 {
 contract LockStakingRewardFixedAPYReferral is ILockStakingRewards, ReentrancyGuard, Ownable {
     using SafeERC20 for IERC20;
 
+    struct StakeInfo {
+        uint rewardRate;
+        bool isReferral;
+        uint stakeAmount;
+        uint stakeAmountRewardEquivalent;
+        uint stakeLock;
+    }
+
+    struct StakingUserInfo {
+        uint weightedStakeDate;
+        uint balance;
+        uint balanceRewardEquivalent;
+    }
+
     IERC20 public immutable rewardsToken;
     IERC20 public immutable stakingToken;
     INimbusRouter public swapRouter;
@@ -157,16 +171,13 @@ contract LockStakingRewardFixedAPYReferral is ILockStakingRewards, ReentrancyGua
     bool public onlyAllowedAddresses;
     mapping(address => bool) public allowedAddresses;
 
-    mapping(address => uint256) public weightedStakeDate;
-    mapping(address => mapping(uint256 => uint256)) public stakeLocks;
-    mapping(address => mapping(uint256 => uint256)) public stakeAmounts;
-    mapping(address => mapping(uint256 => uint256)) public stakeAmountsRewardEquivalent;
     mapping(address => uint256) public stakeNonces;
+
+    mapping(address => mapping(uint => StakeInfo)) public stakeInfo;
+    mapping(address => StakingUserInfo) public userStakingInfo;
 
     uint256 private _totalSupply;
     uint256 private _totalSupplyRewardEquivalent;
-    mapping(address => uint256) private _balances;
-    mapping(address => uint256) private _balancesRewardEquivalent;
 
     event RewardUpdated(uint256 reward);
     event Staked(address indexed user, uint256 amount);
@@ -209,12 +220,24 @@ contract LockStakingRewardFixedAPYReferral is ILockStakingRewards, ReentrancyGua
         return _totalSupplyRewardEquivalent;
     }
 
-    function balanceOf(address account) external view override returns (uint256) {
-        return _balances[account];
+    function balanceOf(address account) public view override returns (uint256) {
+        return userStakingInfo[account].balance;
+    }
+
+    function getRate(address user) public view returns(uint totalRate) {
+        uint totalStakingAmount = balanceOf(user);
+
+        for(uint i = stakeNonces[user] - 1; i >= 0; i--) {
+            uint stakeAmount = stakeInfo[user][i].stakeAmount;
+
+            if(stakeAmount != 0) {
+                totalRate += stakeInfo[user][i].rewardRate * (stakeAmount / totalStakingAmount);
+            }
+        }
     }
     
     function balanceOfRewardEquivalent(address account) external view returns (uint256) {
-        return _balancesRewardEquivalent[account];
+        return userStakingInfo[account].balanceRewardEquivalent;
     }
 
     function stakeWithPermit(uint256 amount, uint deadline, uint8 v, bytes32 r, bytes32 s) external nonReentrant {
@@ -256,34 +279,30 @@ contract LockStakingRewardFixedAPYReferral is ILockStakingRewards, ReentrancyGua
     }
 
     function earned(address account) public view override returns (uint256) {
-        if(address(referralProgramUsers) == address(0) || referralProgramUsers.userIdByAddress(account) == 0) {
-            return (_balancesRewardEquivalent[account] * (block.timestamp - weightedStakeDate[account]) * rewardRate) / (100 * rewardDuration);
-        } else {
-            return (_balancesRewardEquivalent[account] * (block.timestamp - weightedStakeDate[account]) * referralRewardRate) / (100 * rewardDuration);
-        }
+        return (userStakingInfo[account].balanceRewardEquivalent * (block.timestamp - userStakingInfo[account].weightedStakeDate) * getRate(account)) / (100 * rewardDuration);
     }
 
     //A user can withdraw its staking tokens even if there is no rewards tokens on the contract account
     function withdraw(uint256 nonce) public override nonReentrant {
-        require(stakeAmounts[msg.sender][nonce] > 0, "LockStakingRewardFixedAPYReferral: This stake nonce was withdrawn");
-        require(stakeLocks[msg.sender][nonce] < block.timestamp, "LockStakingRewardFixedAPYReferral: Locked");
-        uint amount = stakeAmounts[msg.sender][nonce];
-        uint amountRewardEquivalent = stakeAmountsRewardEquivalent[msg.sender][nonce];
+        require(stakeInfo[msg.sender][nonce].stakeAmount > 0, "LockStakingRewardFixedAPYReferral: This stake nonce was withdrawn");
+        require(stakeInfo[msg.sender][nonce].stakeLock < block.timestamp, "LockStakingRewardFixedAPYReferral: Locked");
+        uint amount = stakeInfo[msg.sender][nonce].stakeAmount;
+        uint amountRewardEquivalent = stakeInfo[msg.sender][nonce].stakeAmountRewardEquivalent;
         _totalSupply -= amount;
         _totalSupplyRewardEquivalent -= amountRewardEquivalent;
-        _balances[msg.sender] -= amount;
-        _balancesRewardEquivalent[msg.sender] -= amountRewardEquivalent;
+        userStakingInfo[msg.sender].balance -= amount;
+        userStakingInfo[msg.sender].balanceRewardEquivalent -= amountRewardEquivalent;
         stakingToken.safeTransfer(msg.sender, amount);
         _sendWithdrawalCashback(msg.sender, amountRewardEquivalent);
-        stakeAmounts[msg.sender][nonce] = 0;
-        stakeAmountsRewardEquivalent[msg.sender][nonce] = 0;
+        stakeInfo[msg.sender][nonce].stakeAmount = 0;
+        stakeInfo[msg.sender][nonce].stakeAmountRewardEquivalent = 0;
         emit Withdrawn(msg.sender, amount);
     }
 
     function getReward() public override nonReentrant {
         uint256 reward = earned(msg.sender);
         if (reward > 0) {
-            weightedStakeDate[msg.sender] = block.timestamp;
+            userStakingInfo[msg.sender].weightedStakeDate = block.timestamp;
             rewardsToken.safeTransfer(msg.sender, reward);
             emit RewardPaid(msg.sender, reward);
         }
@@ -404,22 +423,29 @@ contract LockStakingRewardFixedAPYReferral is ILockStakingRewards, ReentrancyGua
 
     function _stake(uint256 amount, address user) private {
         stakingToken.safeTransferFrom(msg.sender, address(this), amount);
-        uint amountRewardEquivalent = getEquivalentAmount(amount);
+        uint id = referralProgramUsers.userIdByAddress(user);
+        bool isReferral = id != 0 ? true : false;
+        uint stakeLock = block.timestamp + lockDuration;
+        uint rate = isReferral ? referralRewardRate : rewardRate;
+        uint amountRewardEquivalent = getEquivalentAmount(amount);      
         _sendStakingCashback(user, amountRewardEquivalent);
         _totalSupply += amount;
         _totalSupplyRewardEquivalent += amountRewardEquivalent;
-        uint previousAmount = _balances[user];
+        uint previousAmount = userStakingInfo[user].balance;
         uint newAmount = previousAmount + amount;
-        weightedStakeDate[user] = (weightedStakeDate[user] * (previousAmount) / newAmount) + (block.timestamp * amount / newAmount);
-        _balances[user] = newAmount;
+        userStakingInfo[user].weightedStakeDate = (userStakingInfo[user].weightedStakeDate * (previousAmount) / newAmount) + (block.timestamp * amount / newAmount);
+        userStakingInfo[user].balance = newAmount;
 
         uint stakeNonce = stakeNonces[user]++;
-        stakeAmounts[user][stakeNonce] = amount;
-        stakeLocks[user][stakeNonce] = block.timestamp + lockDuration;
+        stakeInfo[user][stakeNonce].rewardRate = rate;
+        stakeInfo[user][stakeNonce].isReferral = isReferral;
+        stakeInfo[user][stakeNonce].stakeAmount = amount;
+        stakeInfo[user][stakeNonce].stakeLock = stakeLock;
         
-        stakeAmountsRewardEquivalent[user][stakeNonce] = amountRewardEquivalent;
-        _balancesRewardEquivalent[user] += amountRewardEquivalent;
+        stakeInfo[user][stakeNonce].stakeAmountRewardEquivalent = amountRewardEquivalent;
+        userStakingInfo[user].balanceRewardEquivalent += amountRewardEquivalent;
         referralProgramMarketing.updateReferralProfitAmount(user, address(stakingToken), amount);
+        
         emit Staked(user, amount);
     }
 }
