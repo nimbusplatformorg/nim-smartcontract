@@ -17,6 +17,7 @@
   },
   "homepage": "https://github.com/nimbusplatformorg/nim-smartcontract#readme",
   "dependencies": {
+    "@truffle/hdwallet-provider": "^1.4.1",
     "ethers": "^5.1.4",
     "truffle": "^5.3.2"
   },

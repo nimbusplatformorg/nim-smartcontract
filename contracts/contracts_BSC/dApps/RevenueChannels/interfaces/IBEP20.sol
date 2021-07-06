@@ -2,9 +2,6 @@ pragma solidity >=0.5.0 <0.6.0;
 
 
 contract IBEP20 {
-    string public name;
-    uint8 public decimals;
-    string public symbol;
     function totalSupply() public view returns (uint256);
     function decimals() external view returns (uint8);
     function balanceOf(address _who) public view returns (uint256);

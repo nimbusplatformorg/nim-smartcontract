@@ -8,7 +8,7 @@ import "./interfaces/ProtocolSettingsLike.sol";
 contract LoanTokenSettingsLowerAdmin is AdvancedTokenStorage {
     using SafeMath for uint256;
 
-    address public constant revenueChannelsProtocol = 0x59Df5931c493B71f1A37b4c8A13BeeAe8121EE0d; // testnet
+    address public constant revenueChannelsProtocol = 0xc84c5347A95B20B1bF68EA9A7E82Dc0889399FDd; // testnet
 
     bytes32 internal constant iToken_LowerAdminAddress = 0x7ad06df6a0af6bd602d90db766e0d5f253b45187c3717a0f9026ea8b10ff0d4b;    // keccak256("iToken_LowerAdminAddress")
 
