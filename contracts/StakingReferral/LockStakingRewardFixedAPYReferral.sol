@@ -168,6 +168,7 @@ contract LockStakingRewardFixedAPYReferral is ILockStakingRewards, ReentrancyGua
     uint256 public immutable lockDuration; 
     uint256 public constant rewardDuration = 365 days;
 
+    bool public allowAccuralMarketingReward;
     bool public onlyAllowedAddresses;
     mapping(address => bool) public allowedAddresses;
 
@@ -328,6 +329,10 @@ contract LockStakingRewardFixedAPYReferral is ILockStakingRewards, ReentrancyGua
         return referralProgramUsers.userIdByAddress(account);
     }
 
+    function updateAccuralMarketingRewardAllowance(bool isAllowed) external onlyOwner {
+        allowAccuralMarketingReward = isAllowed;
+    }
+
     function updateRewardRate(uint256 _rewardRate) external onlyOwner {
         require(_rewardRate > 0, "LockStakingRewardFixedAPYReferral: Reward rate must be grater than 0");
         rewardRate = _rewardRate;
@@ -444,7 +449,10 @@ contract LockStakingRewardFixedAPYReferral is ILockStakingRewards, ReentrancyGua
         
         stakeInfo[user][stakeNonce].stakeAmountRewardEquivalent = amountRewardEquivalent;
         userStakingInfo[user].balanceRewardEquivalent += amountRewardEquivalent;
-        referralProgramMarketing.updateReferralProfitAmount(user, address(stakingToken), amount);
+
+        if(allowAccuralMarketingReward) {
+            referralProgramMarketing.updateReferralProfitAmount(user, address(stakingToken), amount);
+        }
         
         emit Staked(user, amount);
     }

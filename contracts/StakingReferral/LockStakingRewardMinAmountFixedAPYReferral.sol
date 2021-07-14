@@ -170,6 +170,7 @@ contract LockStakingRewardMinAmountFixedAPYReferral is ILockStakingRewards, Reen
     address public swapToken;                       
     uint public swapTokenAmountThresholdForStaking;
 
+    bool public allowAccuralMarketingReward;
     bool public onlyAllowedAddresses;
     mapping(address => bool) public allowedAddresses;
 
@@ -316,7 +317,11 @@ contract LockStakingRewardMinAmountFixedAPYReferral is ILockStakingRewards, Reen
         
         stakeInfo[user][stakeNonce].stakeAmountRewardEquivalent = amountRewardEquivalent;
         userStakingInfo[user].balanceRewardEquivalent += amountRewardEquivalent;
-        referralProgramMarketing.updateReferralProfitAmount(user, address(stakingToken), amount);
+
+        if(allowAccuralMarketingReward) {
+            referralProgramMarketing.updateReferralProfitAmount(user, address(stakingToken), amount);
+        }
+        
         emit Staked(user, amount);
     }
 
@@ -374,6 +379,10 @@ contract LockStakingRewardMinAmountFixedAPYReferral is ILockStakingRewards, Reen
 
     function updateOnlyAllowedAddresses(bool allowance) external onlyOwner {
         onlyAllowedAddresses = allowance;
+    }
+
+    function updateAccuralMarketingRewardAllowance(bool isAllowed) external onlyOwner {
+        allowAccuralMarketingReward = isAllowed;
     }
 
     function updateAllowedAddress(address _address, bool allowance) public onlyOwner {

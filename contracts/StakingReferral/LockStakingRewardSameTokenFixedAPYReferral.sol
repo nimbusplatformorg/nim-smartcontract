@@ -163,6 +163,7 @@ contract LockStakingRewardSameTokenFixedAPYReferral is ILockStakingRewards, Reen
     uint256 public immutable lockDuration; 
     uint256 public constant rewardDuration = 365 days;
 
+    bool public allowAccuralMarketingReward;
     bool public onlyAllowedAddresses;
     mapping(address => bool) allowedAddresses; 
 
@@ -240,7 +241,10 @@ contract LockStakingRewardSameTokenFixedAPYReferral is ILockStakingRewards, Reen
         stakeInfo[msg.sender][stakeNonce].stakeAmount = amount;
         stakeInfo[msg.sender][stakeNonce].stakeLock = stakeLock;
 
-        referralProgramMarketing.updateReferralProfitAmount(msg.sender, address(token), amount);
+        if(allowAccuralMarketingReward) {
+            referralProgramMarketing.updateReferralProfitAmount(msg.sender, address(token), amount);
+        }
+
         emit Staked(msg.sender, amount);
     }
 
@@ -269,7 +273,11 @@ contract LockStakingRewardSameTokenFixedAPYReferral is ILockStakingRewards, Reen
         stakeInfo[msg.sender][stakeNonce].isReferral = isReferral;
         stakeInfo[msg.sender][stakeNonce].stakeAmount = amount;
         stakeInfo[msg.sender][stakeNonce].stakeLock = stakeLock;
-        referralProgramMarketing.updateReferralProfitAmount(msg.sender, address(token), amount);
+
+        if(allowAccuralMarketingReward) {
+            referralProgramMarketing.updateReferralProfitAmount(msg.sender, address(token), amount);
+        }
+
         emit Staked(msg.sender, amount);
     }
 
@@ -299,7 +307,11 @@ contract LockStakingRewardSameTokenFixedAPYReferral is ILockStakingRewards, Reen
         stakeInfo[msg.sender][stakeNonce].isReferral = isReferral;
         stakeInfo[msg.sender][stakeNonce].stakeAmount = amount;
         stakeInfo[msg.sender][stakeNonce].stakeLock = stakeLock;
-        referralProgramMarketing.updateReferralProfitAmount(user, address(token), amount);
+
+        if(allowAccuralMarketingReward) {
+            referralProgramMarketing.updateReferralProfitAmount(user, address(token), amount);
+        }
+        
         emit Staked(user, amount);
     }
 
@@ -375,6 +387,10 @@ contract LockStakingRewardSameTokenFixedAPYReferral is ILockStakingRewards, Reen
 
     function updateOnlyAllowedAddresses(bool allowance) external onlyOwner {
         onlyAllowedAddresses = allowance;
+    }
+
+    function updateAccuralMarketingRewardAllowance(bool isAllowed) external onlyOwner {
+        allowAccuralMarketingReward = isAllowed;
     }
 
     function updateAllowedAddress(address _address, bool allowance) public onlyOwner {
