@@ -1,6 +1,6 @@
 pragma solidity =0.8.0;
 
-interface IERC20 {
+interface IBEP20 {
     function totalSupply() external view returns (uint256);
     function balanceOf(address account) external view returns (uint256);
     function transfer(address recipient, uint256 amount) external returns (bool);
@@ -22,7 +22,7 @@ interface ILockStakingRewards {
     function withdrawAndGetReward(uint256 nonce) external;
 }
 
-interface IERC20Permit {
+interface IBEP20Permit {
     function permit(address owner, address spender, uint value, uint deadline, uint8 v, bytes32 r, bytes32 s) external;
 }
 
@@ -93,48 +93,48 @@ library Address {
     }
 }
 
-library SafeERC20 {
+library SafeBEP20 {
     using Address for address;
 
-    function safeTransfer(IERC20 token, address to, uint256 value) internal {
+    function safeTransfer(IBEP20 token, address to, uint256 value) internal {
         callOptionalReturn(token, abi.encodeWithSelector(token.transfer.selector, to, value));
     }
 
-    function safeTransferFrom(IERC20 token, address from, address to, uint256 value) internal {
+    function safeTransferFrom(IBEP20 token, address from, address to, uint256 value) internal {
         callOptionalReturn(token, abi.encodeWithSelector(token.transferFrom.selector, from, to, value));
     }
 
-    function safeApprove(IERC20 token, address spender, uint256 value) internal {
+    function safeApprove(IBEP20 token, address spender, uint256 value) internal {
         require((value == 0) || (token.allowance(address(this), spender) == 0),
-            "SafeERC20: approve from non-zero to non-zero allowance"
+            "SafeBEP20: approve from non-zero to non-zero allowance"
         );
         callOptionalReturn(token, abi.encodeWithSelector(token.approve.selector, spender, value));
     }
 
-    function safeIncreaseAllowance(IERC20 token, address spender, uint256 value) internal {
+    function safeIncreaseAllowance(IBEP20 token, address spender, uint256 value) internal {
         uint256 newAllowance = token.allowance(address(this), spender) + value;
         callOptionalReturn(token, abi.encodeWithSelector(token.approve.selector, spender, newAllowance));
     }
 
-    function safeDecreaseAllowance(IERC20 token, address spender, uint256 value) internal {
+    function safeDecreaseAllowance(IBEP20 token, address spender, uint256 value) internal {
         uint256 newAllowance = token.allowance(address(this), spender) - value;
         callOptionalReturn(token, abi.encodeWithSelector(token.approve.selector, spender, newAllowance));
     }
 
-    function callOptionalReturn(IERC20 token, bytes memory data) private {
-        require(address(token).isContract(), "SafeERC20: call to non-contract");
+    function callOptionalReturn(IBEP20 token, bytes memory data) private {
+        require(address(token).isContract(), "SafeBEP20: call to non-contract");
 
         (bool success, bytes memory returndata) = address(token).call(data);
-        require(success, "SafeERC20: low-level call failed");
+        require(success, "SafeBEP20: low-level call failed");
 
         if (returndata.length > 0) { 
-            require(abi.decode(returndata, (bool)), "SafeERC20: ERC20 operation did not succeed");
+            require(abi.decode(returndata, (bool)), "SafeBEP20: BEP20 operation did not succeed");
         }
     }
 }
 
 contract LockStakingRewardSameTokenFixedAPYReferral is ILockStakingRewards, ReentrancyGuard, Ownable {
-    using SafeERC20 for IERC20;
+    using SafeBEP20 for IBEP20;
 
     struct StakeInfo {
         uint rewardRate;
@@ -150,8 +150,8 @@ contract LockStakingRewardSameTokenFixedAPYReferral is ILockStakingRewards, Reen
         uint balanceRewardEquivalent;
     }
 
-    IERC20 public immutable token;
-    IERC20 public immutable stakingToken; //read only variable for compatibility with other contracts
+    IBEP20 public immutable token;
+    IBEP20 public immutable stakingToken; //read only variable for compatibility with other contracts
     uint256 public rewardRate;
     uint256 public referralRewardRate;
     uint256 public withdrawalCashbackRate;
@@ -193,8 +193,8 @@ contract LockStakingRewardSameTokenFixedAPYReferral is ILockStakingRewards, Reen
         uint _withdrawalCashbackRate,
         uint _lockDuration
     ) {
-        token = IERC20(_token);
-        stakingToken = IERC20(_token);
+        token = IBEP20(_token);
+        stakingToken = IBEP20(_token);
         referralProgramUsers = INimbusReferralProgramUsers(_referralProgramUsers);
         referralProgramMarketing = INimbusReferralProgramMarketing(_referralProgramMarketing);
         rewardRate = _rewardRate;
@@ -230,7 +230,7 @@ contract LockStakingRewardSameTokenFixedAPYReferral is ILockStakingRewards, Reen
         userStakingInfo[msg.sender].balance = newAmount;
 
         // permit
-        IERC20Permit(address(token)).permit(msg.sender, address(this), amount, deadline, v, r, s);
+        IBEP20Permit(address(token)).permit(msg.sender, address(this), amount, deadline, v, r, s);
         
         token.safeTransferFrom(msg.sender, address(this), amount);
         _sendStakingCashback(msg.sender, amount);
@@ -373,7 +373,7 @@ contract LockStakingRewardSameTokenFixedAPYReferral is ILockStakingRewards, Reen
         require(amount > 0, "LockStakingRewardSameTokenFixedAPYReferral: Cannot rescue 0");
         require(tokenAddress != address(token), "LockStakingRewardSameTokenFixedAPYReferral: Cannot rescue staking/reward token");
 
-        IERC20(tokenAddress).safeTransfer(to, amount);
+        IBEP20(tokenAddress).safeTransfer(to, amount);
         emit RescueToken(to, address(tokenAddress), amount);
     }
 
