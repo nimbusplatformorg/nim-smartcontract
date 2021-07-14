@@ -82,6 +82,7 @@ contract NimbusReferralProgramMarketing is Ownable {
         uint NBU;
         uint GNBU;
         uint SwapToken;
+        uint TotalNBU;
     }
 
     struct Qualification {
@@ -165,7 +166,7 @@ contract NimbusReferralProgramMarketing is Ownable {
         _;
     }
 
-    function canQualificationBeUpgraded(address leader) public view returns(bool) {
+    function canQualificationBeUpgraded(address leader) public view returns (bool) {
         if(getTurnoverQualification(leader) > leaderQualificationLevel[leader]) {
             return true;
         } else {
@@ -173,25 +174,25 @@ contract NimbusReferralProgramMarketing is Ownable {
         }
     }
 
-    function getTurnoverQualification(address leader) public view returns(uint turnoverQualification) {
+    function getTurnoverQualification(address leader) public view returns (uint turnoverQualification) {
         uint turnover = leaderTurnoverForPeriod[leader][leaderCurrentPeriodTimestamp[leader]].SwapToken;
         return _getUserActualQualificationLevel(turnover);
     }
 
-    function register(uint sponsorId) external returns(uint userId) {
+    function register(uint sponsorId) external returns (uint userId) {
         return _register(msg.sender, sponsorId);
     }
 
-    function registerUser(address user, uint sponsorId) external onlyRegistrators returns(uint userId) {
+    function registerUser(address user, uint sponsorId) external onlyRegistrators returns (uint userId) {
         return _register(user, sponsorId);
     }
 
-    function registerBySponsorAddress(address sponsor) external returns(uint userId) {
+    function registerBySponsorAddress(address sponsor) external returns (uint userId) {
         uint sponsorId = rpUsers.userIdByAddress(sponsor);
         return _register(msg.sender, sponsorId);
     }
 
-    function registerUserBySponsorAddress(address user, address sponsor) external onlyRegistrators returns(uint userId) {
+    function registerUserBySponsorAddress(address user, address sponsor) external onlyRegistrators returns (uint userId) {
         uint sponsorId = rpUsers.userIdByAddress(sponsor);
         return _register(user, sponsorId);
     }
@@ -234,7 +235,7 @@ contract NimbusReferralProgramMarketing is Ownable {
     }
 
     function managerRewardAmount(address manager) view public returns (uint rewardAmount) {
-        rewardAmount = (managerTotalTurnover[manager].NBU * managerRewardPercent) / PERCENTAGE_PRECISION;
+        rewardAmount = (managerTotalTurnover[manager].TotalNBU * managerRewardPercent) / PERCENTAGE_PRECISION;
     }
 
     function updateReferralProfitAmount(address user, address token, uint amount) external onlyAllowedContract {
@@ -355,8 +356,11 @@ contract NimbusReferralProgramMarketing is Ownable {
             if(allowLeaderlessPurchases) {
                 if(token == address(NBU)) {
                     managerTotalTurnover[manager].NBU += amount;
+                    managerTotalTurnover[manager].TotalNBU += amount;
                 } else if(token == address(GNBU)) {
                     managerTotalTurnover[manager].GNBU += amount;
+                    uint nbuEquivalent = _getEquivalentNBUAmount(amount);
+                    managerTotalTurnover[manager].TotalNBU += nbuEquivalent;
                 }
 
                 uint swapTokenEquivalentAmount = _getEquivalentSwapTokenAmount(token, amount);
@@ -372,15 +376,21 @@ contract NimbusReferralProgramMarketing is Ownable {
             if(token == address(NBU)) {
                 if(userLine[user] <= lastLeaderReferralLine) {
                     leaderTurnoverForPeriod[leader][leaderCurrentPeriodTimestamp[leader]].NBU += amount;
+                    leaderTurnoverForPeriod[leader][leaderCurrentPeriodTimestamp[leader]].TotalNBU += amount;
                 }
 
                 managerTotalTurnover[manager].NBU += amount;
+                managerTotalTurnover[manager].TotalNBU += amount;
             } else if(token == address(GNBU)) {
+                uint nbuEquivalent = _getEquivalentNBUAmount(amount);
+
                 if(userLine[user] <= lastLeaderReferralLine) {
                     leaderTurnoverForPeriod[leader][leaderCurrentPeriodTimestamp[leader]].GNBU += amount;
+                    leaderTurnoverForPeriod[leader][leaderCurrentPeriodTimestamp[leader]].TotalNBU += nbuEquivalent;
                 }
 
                 managerTotalTurnover[manager].GNBU += amount;
+                managerTotalTurnover[manager].TotalNBU += nbuEquivalent;
             }
 
             uint swapTokenEquivalentAmount = _getEquivalentSwapTokenAmount(token, amount);
@@ -434,7 +444,7 @@ contract NimbusReferralProgramMarketing is Ownable {
         }   
     }
 
-    function _getUserActualQualificationLevel(uint totalTurnover) internal view returns(uint qualificationNumber) {
+    function _getUserActualQualificationLevel(uint totalTurnover) internal view returns (uint qualificationNumber) {
         if(totalTurnover < qualifications[1].TotalTurnover) {
             return 0;
         }
@@ -443,6 +453,16 @@ contract NimbusReferralProgramMarketing is Ownable {
             if(qualifications[i+1].TotalTurnover > totalTurnover) {
                 return i;
             }
+        }
+    }
+
+    function _getEquivalentNBUAmount(uint gnbuAmount) internal view returns (uint nbuAmount) {
+        (uint nbuReserve, uint gnbuReserve) = _getPairReservesForStakingTokens();
+
+        if(nbuReserve != 0 && gnbuReserve != 0) {
+            nbuAmount = (gnbuAmount * nbuReserve) / gnbuReserve;
+        } else {
+            return 0;
         }
     }
 
@@ -466,7 +486,20 @@ contract NimbusReferralProgramMarketing is Ownable {
         }
     }
 
-    function _getPairReserves(address token) private view returns(uint mainTokenReserve, uint swapTokenReserve){
+    function _getPairReservesForStakingTokens() private view returns (uint nbuReserve, uint gnbuReserve) {
+        address nbuToken = address(NBU);
+        address gnbuToken = address(GNBU);
+        address pairAddress = swapRouter.pairFor(nbuToken, gnbuToken);
+        INimbusPair pair = INimbusPair(pairAddress);
+        
+        if(nbuToken == pair.token0()) {
+            (nbuReserve, gnbuReserve, ) = pair.getReserves();
+        } else {
+            (gnbuReserve, nbuReserve, ) = pair.getReserves();
+        }
+    }
+
+    function _getPairReserves(address token) private view returns (uint mainTokenReserve, uint swapTokenReserve) {
         address pairAddress = swapRouter.pairFor(token, address(swapToken));
         INimbusPair pair = INimbusPair(pairAddress);
         
@@ -491,7 +524,7 @@ contract NimbusReferralProgramMarketing is Ownable {
         userManager[user] = manager;
     }
 
-    function _register(address user, uint sponsorId) private returns(uint userId) {
+    function _register(address user, uint sponsorId) private returns (uint userId) {
         require(rpUsers.userIdByAddress(user) == 0, "NimbusReferralProgramMarketing: User already registered");
         address sponsor = rpUsers.userAddressById(sponsorId);
         require(sponsor != address(0), "NimbusReferralProgramMarketing: User sponsor address is equal to 0");
