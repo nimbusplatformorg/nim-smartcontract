@@ -296,6 +296,14 @@ contract BEP20 is IBEP20, Ownable {
         return _decimals;
     }
 
+    function name() public view returns (string memory) {
+        return _name;
+    }
+
+    function symbol() public view returns (string memory) {
+        return _symbol;
+    }
+
     /**
      * @dev Returns the amount of tokens in existence.
      */

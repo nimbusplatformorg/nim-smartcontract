@@ -22,7 +22,7 @@ contract LoanTokenLogicStandard is AdvancedToken, GasTokenUser {
     address internal constant arbitraryCaller = 0x0000000000000000000000000000000000000000; //Turned off so far
 
     address public constant revenueChannelsProtocol = 0xc84c5347A95B20B1bF68EA9A7E82Dc0889399FDd; // testnet 
-    address public constant wbnbToken = 0xA2CA18FC541B7B101c64E64bBc2834B05066248b; // testnet and mainnet
+    address public constant wbnbToken = 0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c; //mainnet
 
     bytes32 internal constant iToken_ProfitSoFar = 0x37aa2b7d583612f016e4a4de4292cb015139b3d7762663d06a53964912ea2fb6;          // keccak256("iToken_ProfitSoFar")
     bytes32 internal constant iToken_LowerAdminAddress = 0x7ad06df6a0af6bd602d90db766e0d5f253b45187c3717a0f9026ea8b10ff0d4b;    // keccak256("iToken_LowerAdminAddress")

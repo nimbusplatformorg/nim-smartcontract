@@ -21,6 +21,7 @@
 const HDWalletProvider = require('@truffle/hdwallet-provider');
 const fs = require('fs');
 const mnemonic = fs.readFileSync(".secret").toString().trim()
+const projectId = "";
 
 const { constants } = require("@openzeppelin/test-helpers");
 module.exports = {
@@ -41,21 +42,46 @@ module.exports = {
     // tab if you use this network and you must also set the `host`, `port` and `network_id`
     // options below to some value.
     //
-    testnet: {
-      provider: () => new HDWalletProvider(mnemonic, `https://data-seed-prebsc-1-s1.binance.org:8545`),
-      network_id: 97,
-      confirmations: 10,
+    ethereum: {
+      provider: () => new HDWalletProvider(mnemonic, `https://mainnet.infura.io/v3/${projectId}`),
+      network_id: 1,
+      confirmations: 3,
+      timeoutBlocks: 200,
+      skipDryRun: true,
+      gas: 7900000,
+      gasPrice: 27000000000
+    },
+    ropsten: {
+      provider: () => new HDWalletProvider(mnemonic, `https://ropsten.infura.io/v3/${projectId}`),
+      network_id: 3,
+      confirmations: 3,
       timeoutBlocks: 200,
       skipDryRun: true,
       gas: 7900000
     },
-    development: {
-      host: "127.0.0.1", // Localhost (default: none)
-      port: 8545, // Standard Ethereum port (default: none)
-      network_id: "*", // Any network (default: none)'
-      gasPrice: 0x1,
-      gas: 0x1fffffffffffff,
-      defaultEtherBalance: constants.MAX_UINT256.toString(),
+    kovan: {
+      provider: () => new HDWalletProvider(mnemonic, `https://kovan.infura.io/v3/${projectId}`),
+      network_id: 42,
+      confirmations: 3,
+      timeoutBlocks: 200,
+      skipDryRun: true,
+      gas: 7900000
+    },
+    bsc: {
+      provider: () => new HDWalletProvider(mnemonic, `https://bsc-dataseed1.binance.org`),
+      network_id: 56,
+      confirmations: 3,
+      timeoutBlocks: 200,
+      skipDryRun: true,
+      gas: 7900000
+    },
+    bsc_testnet: {
+      provider: () => new HDWalletProvider(mnemonic, `https://data-seed-prebsc-1-s1.binance.org:8545`),
+      network_id: 97,
+      confirmations: 3,
+      timeoutBlocks: 200,
+      skipDryRun: true,
+      gas: 7900000,
     },
     develop: {
       host: "127.0.0.1", // Localhost (default: none)
@@ -100,15 +126,12 @@ module.exports = {
   // Configure your compilers
   compilers: {
     solc: {
-      version: "0.5.17", // Fetch exact version from solc-bin (default: truffle's version)
-      // docker: true,        // Use "0.5.1" you've installed locally with docker (default: false)
+      version: "0.5.17",
       settings: {
-        // See the solidity docs for advice about optimization and evmVersion
         optimizer: {
           enabled: true,
           runs: 200,
-        },
-        //  evmVersion: "byzantium"
+        }
       },
     },
   },
