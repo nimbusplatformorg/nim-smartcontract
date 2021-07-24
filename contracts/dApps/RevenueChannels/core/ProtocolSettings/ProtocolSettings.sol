@@ -34,6 +34,31 @@ contract ProtocolSettings is State, ProtocolSettingsEvents {
         _setTarget(this.queryFees.selector, target);
         _setTarget(this.getLoanPoolsList.selector, target);
         _setTarget(this.isLoanPool.selector, target);
+        _setTarget(this.setSwapApprovals.selector, target);
+        _setTarget(this.setSwapApprovalsToZero.selector, target);
+    }
+    
+    function setSwapApprovals(
+        address router,
+        address[] calldata tokens)
+        external
+        onlyOwner
+    {
+        for (uint256 i = 0; i < tokens.length; i++) {
+            IERC20(tokens[i]).safeApprove(router, 0);
+            IERC20(tokens[i]).safeApprove(router, uint256(-1));
+        }
+    }
+    
+    function setSwapApprovalsToZero(
+        address router,
+        address[] calldata tokens)
+        external
+        onlyOwner
+    {
+        for (uint256 i = 0; i < tokens.length; i++) {
+            IERC20(tokens[i]).safeApprove(router, 0);
+        }
     }
 
     function setPriceFeedContract(
