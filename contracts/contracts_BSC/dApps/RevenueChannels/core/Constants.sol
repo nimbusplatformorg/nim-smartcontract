@@ -14,6 +14,6 @@ contract Constants {
     string internal constant UserRewardsID = "UserRewards";
     string internal constant LoanDepositValueID = "LoanDepositValue";
 
-    IWbnbBEP20 public constant wbnbToken = IWbnbBEP20(0xA2CA18FC541B7B101c64E64bBc2834B05066248b);
+    IWbnbBEP20 public constant wbnbToken = IWbnbBEP20(0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c);
     address public constant nbuTokenAddress = 0x5f20559235479F5B6abb40dFC6f55185b74E7b55;
 }
