@@ -190,6 +190,13 @@ contract LockStakingRewardMinAmountFixedAPYReferral is ILockStakingRewards, Reen
     event RescueToken(address indexed to, address indexed token, uint amount);
     event WithdrawalCashbackSent(address indexed to, uint withdrawnAmount, uint cashbackAmout);
     event StakingCashbackSent(address indexed to, uint stakedAmount, uint cashbackAmout);
+    event AccuralMarketingRewardAllowanceUpdated(bool allowance);
+    event RewardRateUpdated(uint rate);
+    event ReferralRewardRateUpdated(uint rate);
+    event StakingCashbackRateUpdated(uint rate);
+    event WithdrawalCashbackRateUpdated(uint rate);
+    event OnlyAllowedAddressesUpdated(bool allowance);
+    event StakeSwapTokenAmountTresholdUpdated(uint treshold);
 
     constructor(
         address _rewardsToken,
@@ -205,6 +212,17 @@ contract LockStakingRewardMinAmountFixedAPYReferral is ILockStakingRewards, Reen
         address _swapToken,
         uint _swapTokenAmount
     ) {
+        require(Address.isContract(_rewardsToken), "_rewardsToken is not a contract");
+        require(Address.isContract(_stakingToken), "_stakingToken is not a contract");
+        require(Address.isContract(_swapRouter), "_swapRouter is not a contract");
+        require(Address.isContract(_referralProgramUsers), "_referralProgramUsers is not a contract");
+        require(Address.isContract(_referralProgramMarketing), "_referralProgramMarketing is not a contract");
+        require(Address.isContract(_swapToken), "_swapToken is not a contract");
+        require(_rewardRate >= 0, "_rewardRate is lower or equal to zero");
+        require(_referralRewardRate >= 0, "_referralRewardRate is lower or equal to zero");
+        require(_lockDuration >= 0, "_lockDuration is lower or equal to zero");
+        require(_swapTokenAmount > 0, "_swapTokenAmount is lower than zero");
+
         rewardsToken = IBEP20(_rewardsToken);
         stakingToken = IBEP20(_stakingToken);
         referralProgramUsers = INimbusReferralProgramUsers(_referralProgramUsers);
@@ -243,10 +261,10 @@ contract LockStakingRewardMinAmountFixedAPYReferral is ILockStakingRewards, Reen
         uint totalStakingAmount = balanceOf(user);
 
         for(uint i = stakeNonces[user] - 1; i >= 0; i--) {
-            uint stakeAmount = stakeInfo[user][i].stakeAmount;
+            StakeInfo memory userStakeInfo = stakeInfo[user][i];
 
-            if(stakeAmount != 0) {
-                totalRate += stakeInfo[user][i].rewardRate * (stakeAmount / totalStakingAmount);
+            if(userStakeInfo.stakeAmount != 0) {
+                totalRate += userStakeInfo.rewardRate * userStakeInfo.stakeAmount / totalStakingAmount;
             }
         }
     }
@@ -379,10 +397,12 @@ contract LockStakingRewardMinAmountFixedAPYReferral is ILockStakingRewards, Reen
 
     function updateOnlyAllowedAddresses(bool allowance) external onlyOwner {
         onlyAllowedAddresses = allowance;
+        emit OnlyAllowedAddressesUpdated(onlyAllowedAddresses);
     }
 
     function updateAccuralMarketingRewardAllowance(bool isAllowed) external onlyOwner {
         allowAccuralMarketingReward = isAllowed;
+        emit AccuralMarketingRewardAllowanceUpdated(allowAccuralMarketingReward);
     }
 
     function updateAllowedAddress(address _address, bool allowance) public onlyOwner {
@@ -415,28 +435,31 @@ contract LockStakingRewardMinAmountFixedAPYReferral is ILockStakingRewards, Reen
 
     function updateStakeSwapTokenAmountThreshold(uint threshold) external onlyOwner {
         swapTokenAmountThresholdForStaking = threshold;
+        emit StakeSwapTokenAmountTresholdUpdated(swapTokenAmountThresholdForStaking);
     }
 
     function updateRewardRate(uint256 _rewardRate) external onlyOwner {
         require(_rewardRate > 0, "LockStakingRewardFixedAPYReferral: Reward rate must be grater than 0");
         rewardRate = _rewardRate;
+        emit RewardRateUpdated(rewardRate);
     }
     
     function updateReferralRewardRate(uint256 _referralRewardRate) external onlyOwner {
         require(_referralRewardRate >= rewardRate, "LockStakingRewardMinAmountFixedAPYReferral: Referral reward rate can't be lower than reward rate");
         referralRewardRate = _referralRewardRate;
+        emit ReferralRewardRateUpdated(referralRewardRate);
     }
     
     function updateStakingCashbackRate(uint256 _stakingCashbackRate) external onlyOwner {
         //Staking cahsback can be equal to 0
-        require(_stakingCashbackRate >= 0, "LockStakingRewardMinAmountFixedAPYReferral: Staking cashback rate can't be lower than 0");
         stakingCashbackRate = _stakingCashbackRate;
+        emit StakingCashbackRateUpdated(stakingCashbackRate);
     }
     
     function updateWithdrawalCashbackRate(uint256 _withdrawalCashbackRate) external onlyOwner {
         //Withdrawal cahsback can be equal to 0
-        require(_withdrawalCashbackRate >= 0, "LockStakingRewardMinAmountFixedAPYReferral: Withdrawal cashback rate can't be lower than 0");
         withdrawalCashbackRate = _withdrawalCashbackRate;
+        emit WithdrawalCashbackRateUpdated(withdrawalCashbackRate);
     }
     
     function updateReferralProgramUsers(address _referralProgramUsers) external onlyOwner {

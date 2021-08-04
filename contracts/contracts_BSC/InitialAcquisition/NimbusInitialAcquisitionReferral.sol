@@ -115,6 +115,18 @@ interface INimbusReferralProgramMarketing {
     function updateReferralProfitAmount(address user, address token, uint amount) external;
 }
 
+library Address {
+    function isContract(address account) internal view returns (bool) {
+        // This method relies in extcodesize, which returns 0 for contracts in construction, 
+        // since the code is only stored at the end of the constructor execution.
+
+        uint256 size;
+        // solhint-disable-next-line no-inline-assembly
+        assembly { size := extcodesize(account) }
+        return size > 0;
+    }
+}
+
 contract NimbusInitialAcquisition is Ownable, Pausable {
     INBU public immutable SYSTEM_TOKEN;
     address public immutable NBU_WBNB;
@@ -147,9 +159,16 @@ contract NimbusInitialAcquisition is Ownable, Pausable {
     event UpdateTokenSystemTokenWeightedExchangeRate(address indexed token, uint newRate);
     event ToggleUseWeightedRates(bool useWeightedRates);
     event Rescue(address indexed to, uint amount);
-    event RescueToken(address indexed token, address indexed to, uint amount); 
+    event RescueToken(address indexed token, address indexed to, uint amount);
+
+    event AllowedTokenUpdated(address indexed token, bool allowance);
+    event SwapTokenUpdated(address indexed swapToken);
+    event SwapTokenAmountForBonusThresholdUpdated(uint amount);
 
     constructor (address systemToken, address router, address nbuWbnb, address) {
+        require(Address.isContract(systemToken), "systemToken is not a contract");
+        require(Address.isContract(router), "router is not a contract");
+        require(Address.isContract(nbuWbnb), "nbuWbnb is not a contract");
         SYSTEM_TOKEN = INBU(systemToken);
         NBU_WBNB = nbuWbnb;
         sponsorBonus = 10;
@@ -389,6 +408,7 @@ contract NimbusInitialAcquisition is Ownable, Pausable {
     function updateAllowedTokens(address token, bool isAllowed) external onlyOwner {
         require (token != address(0), "NimbusInitialAcquisition: Wrong addresses");
         allowedTokens[token] = isAllowed;
+        emit AllowedTokenUpdated(token, isAllowed);
     }
     
     function updateRecipient(address recipientAddress) external onlyOwner {
@@ -433,10 +453,12 @@ contract NimbusInitialAcquisition is Ownable, Pausable {
     function updateSwapToken(address newSwapToken) external onlyOwner {
         require(newSwapToken != address(0), "NimbusInitialAcquisition: Address is zero");
         swapToken = newSwapToken;
+        emit SwapTokenUpdated(swapToken);
     }
 
     function updateSwapTokenAmountForBonusThreshold(uint threshold) external onlyOwner {
         swapTokenAmountForBonusThreshold = threshold;
+        emit SwapTokenAmountForBonusThresholdUpdated(swapTokenAmountForBonusThreshold);
     }
 
     function updateTokenSystemTokenWeightedExchangeRate(address token, uint rate) external onlyOwner {
