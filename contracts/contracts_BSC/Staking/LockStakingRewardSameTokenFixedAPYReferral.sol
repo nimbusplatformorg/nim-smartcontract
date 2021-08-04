@@ -182,6 +182,12 @@ contract LockStakingRewardSameTokenFixedAPYReferral is ILockStakingRewards, Reen
     event RescueToken(address indexed to, address indexed token, uint amount);
     event WithdrawalCashbackSent(address indexed to, uint withdrawnAmount, uint cashbackAmout);
     event StakingCashbackSent(address indexed to, uint stakedAmount, uint cashbackAmout);
+    event AccuralMarketingRewardAllowanceUpdated(bool allowance);
+    event RewardRateUpdated(uint rate);
+    event ReferralRewardRateUpdated(uint rate);
+    event StakingCashbackRateUpdated(uint rate);
+    event WithdrawalCashbackRateUpdated(uint rate);
+    event OnlyAllowedAddressesUpdated(bool allowance);
 
     constructor(
         address _token,
@@ -193,6 +199,12 @@ contract LockStakingRewardSameTokenFixedAPYReferral is ILockStakingRewards, Reen
         uint _withdrawalCashbackRate,
         uint _lockDuration
     ) {
+        require(Address.isContract(_token), "_token is not a contract");
+        require(Address.isContract(_referralProgramUsers), "_referralProgramUsers is not a contract");
+        require(Address.isContract(_referralProgramMarketing), "_referralProgramMarketing is not a contract");
+        require(_rewardRate >= 0, "_rewardRate is lower or equal to zero");
+        require(_referralRewardRate >= 0, "_referralRewardRate is lower or equal to zero");
+        require(_lockDuration >= 0, "_lockDuration is lower or equal to zero");
         token = IBEP20(_token);
         stakingToken = IBEP20(_token);
         referralProgramUsers = INimbusReferralProgramUsers(_referralProgramUsers);
@@ -213,106 +225,36 @@ contract LockStakingRewardSameTokenFixedAPYReferral is ILockStakingRewards, Reen
     }
 
     function stakeWithPermit(uint256 amount, uint deadline, uint8 v, bytes32 r, bytes32 s) external nonReentrant {
-        require(amount > 0, "LockStakingRewardSameTokenFixedAPYReferral: Cannot stake 0");
+        require(amount > 0, "LockStakingRewardMinAmountFixedAPYReferral: Cannot stake 0");
 
         if(onlyAllowedAddresses) {
-            require(allowedAddresses[msg.sender], "LockStakingRewardSameTokenFixedAPYReferral: Only allowed addresses.");
+            require(allowedAddresses[msg.sender], "LockStakingRewardMinAmountFixedAPYReferral: Only allowed addresses.");
         }
-
-        bool isReferral = referralProgramUsers.userIdByAddress(msg.sender) != 0 ? true : false;
-        uint stakeLock = block.timestamp + lockDuration;
-        uint rate = isReferral ? referralRewardRate : rewardRate;
-        
-        _totalSupply += amount;
-        uint previousAmount = userStakingInfo[msg.sender].balance;
-        uint newAmount = previousAmount + amount;
-        userStakingInfo[msg.sender].weightedStakeDate = (userStakingInfo[msg.sender].weightedStakeDate * previousAmount / newAmount) + (block.timestamp * amount / newAmount);
-        userStakingInfo[msg.sender].balance = newAmount;
 
         // permit
-        IBEP20Permit(address(token)).permit(msg.sender, address(this), amount, deadline, v, r, s);
-        
-        token.safeTransferFrom(msg.sender, address(this), amount);
-        _sendStakingCashback(msg.sender, amount);
-
-        uint stakeNonce = stakeNonces[msg.sender]++;
-        stakeInfo[msg.sender][stakeNonce].rewardRate = rate;
-        stakeInfo[msg.sender][stakeNonce].isReferral = isReferral;
-        stakeInfo[msg.sender][stakeNonce].stakeAmount = amount;
-        stakeInfo[msg.sender][stakeNonce].stakeLock = stakeLock;
-
-        if(allowAccuralMarketingReward) {
-            referralProgramMarketing.updateReferralProfitAmount(msg.sender, address(token), amount);
-        }
-
-        emit Staked(msg.sender, amount);
+        IBEP20Permit(address(stakingToken)).permit(msg.sender, address(this), amount, deadline, v, r, s);
+        _stake(amount, msg.sender);
     }
 
     function stake(uint256 amount) external override nonReentrant {
-        require(amount > 0, "LockStakingRewardSameTokenFixedAPYReferral: Cannot stake 0");
+        require(amount > 0, "LockStakingRewardMinAmountFixedAPYReferral: Cannot stake 0");
 
         if(onlyAllowedAddresses) {
-            require(allowedAddresses[msg.sender], "LockStakingRewardSameTokenFixedAPYReferral: Only allowed addresses.");
+            require(allowedAddresses[msg.sender], "LockStakingRewardMinAmountFixedAPYReferral: Only allowed addresses.");
         }
-
-        uint id = referralProgramUsers.userIdByAddress(msg.sender);
-        bool isReferral = id != 0 ? true : false;
-        uint stakeLock = block.timestamp + lockDuration;
-        uint rate = isReferral ? referralRewardRate : rewardRate;
-
-        _totalSupply += amount;
-        uint previousAmount = userStakingInfo[msg.sender].balance;
-        uint newAmount = previousAmount + amount;
-        userStakingInfo[msg.sender].weightedStakeDate = (userStakingInfo[msg.sender].weightedStakeDate * previousAmount / newAmount) + (block.timestamp * amount / newAmount);
-        userStakingInfo[msg.sender].balance = newAmount;
-        token.safeTransferFrom(msg.sender, address(this), amount);
-        _sendStakingCashback(msg.sender, amount);
-
-        uint stakeNonce = stakeNonces[msg.sender]++;
-        stakeInfo[msg.sender][stakeNonce].rewardRate = rate;
-        stakeInfo[msg.sender][stakeNonce].isReferral = isReferral;
-        stakeInfo[msg.sender][stakeNonce].stakeAmount = amount;
-        stakeInfo[msg.sender][stakeNonce].stakeLock = stakeLock;
-
-        if(allowAccuralMarketingReward) {
-            referralProgramMarketing.updateReferralProfitAmount(msg.sender, address(token), amount);
-        }
-
-        emit Staked(msg.sender, amount);
+        
+        _stake(amount, msg.sender);
     }
 
     function stakeFor(uint256 amount, address user) external override nonReentrant {
-        require(amount > 0, "LockStakingRewardSameTokenFixedAPYReferral: Cannot stake 0");
-        require(user != address(0), "LockStakingRewardSameTokenFixedAPYReferral: Cannot stake for zero address");
+        require(amount > 0, "LockStakingRewardMinAmountFixedAPYReferral: Cannot stake 0");
+        require(user != address(0), "LockStakingRewardMinAmountFixedAPYReferral: Cannot stake for zero address");
 
         if(onlyAllowedAddresses) {
-            require(allowedAddresses[user], "LockStakingRewardSameTokenFixedAPYReferral: Only allowed addresses.");
+            require(allowedAddresses[user], "LockStakingRewardMinAmountFixedAPYReferral: Only allowed addresses.");
         }
 
-        uint id = referralProgramUsers.userIdByAddress(user);
-        bool isReferral = id != 0 ? true : false;
-        uint stakeLock = block.timestamp + lockDuration;
-        uint rate = isReferral ? referralRewardRate : rewardRate;
-
-        _totalSupply += amount;
-        uint previousAmount = userStakingInfo[msg.sender].balance;
-        uint newAmount = previousAmount + amount;
-        userStakingInfo[msg.sender].weightedStakeDate = (userStakingInfo[msg.sender].weightedStakeDate * previousAmount / newAmount) + (block.timestamp * amount / newAmount);
-        userStakingInfo[msg.sender].balance = newAmount;
-        token.safeTransferFrom(msg.sender, address(this), amount);
-        _sendStakingCashback(user, amount);
-
-        uint stakeNonce = stakeNonces[user]++;
-        stakeInfo[msg.sender][stakeNonce].rewardRate = rate;
-        stakeInfo[msg.sender][stakeNonce].isReferral = isReferral;
-        stakeInfo[msg.sender][stakeNonce].stakeAmount = amount;
-        stakeInfo[msg.sender][stakeNonce].stakeLock = stakeLock;
-
-        if(allowAccuralMarketingReward) {
-            referralProgramMarketing.updateReferralProfitAmount(user, address(token), amount);
-        }
-        
-        emit Staked(user, amount);
+        _stake(amount, user);
     }
 
     function withdrawAndGetReward(uint256 nonce) external override {
@@ -328,10 +270,10 @@ contract LockStakingRewardSameTokenFixedAPYReferral is ILockStakingRewards, Reen
         uint totalStakingAmount = balanceOf(user);
 
         for(uint i = stakeNonces[user] - 1; i >= 0; i--) {
-            uint stakeAmount = stakeInfo[user][i].stakeAmount;
+            StakeInfo memory userStakeInfo = stakeInfo[user][i];
 
-            if(stakeAmount != 0) {
-                totalRate += stakeInfo[user][i].rewardRate * (stakeAmount / totalStakingAmount);
+            if(userStakeInfo.stakeAmount != 0) {
+                totalRate += userStakeInfo.rewardRate * (userStakeInfo.stakeAmount / totalStakingAmount);
             }
         }
     }
@@ -387,10 +329,12 @@ contract LockStakingRewardSameTokenFixedAPYReferral is ILockStakingRewards, Reen
 
     function updateOnlyAllowedAddresses(bool allowance) external onlyOwner {
         onlyAllowedAddresses = allowance;
+        emit OnlyAllowedAddressesUpdated(onlyAllowedAddresses);
     }
 
     function updateAccuralMarketingRewardAllowance(bool isAllowed) external onlyOwner {
         allowAccuralMarketingReward = isAllowed;
+        emit AccuralMarketingRewardAllowanceUpdated(allowAccuralMarketingReward);
     }
 
     function updateAllowedAddress(address _address, bool allowance) public onlyOwner {
@@ -409,23 +353,25 @@ contract LockStakingRewardSameTokenFixedAPYReferral is ILockStakingRewards, Reen
     function updateRewardRate(uint256 _rewardRate) external onlyOwner {
         require(_rewardRate > 0, "LockStakingRewardSameTokenFixedAPYReferral: Reward rate must be grater than 0");
         rewardRate = _rewardRate;
+        emit RewardRateUpdated(rewardRate);
     }
     
     function updateReferralRewardRate(uint256 _referralRewardRate) external onlyOwner {
         require(_referralRewardRate >= rewardRate, "LockStakingRewardSameTokenFixedAPYReferral: Referral reward rate can't be lower than reward rate");
         referralRewardRate = _referralRewardRate;
+        emit ReferralRewardRateUpdated(referralRewardRate);
     }
     
     function updateStakingCashbackRate(uint256 _stakingCashbackRate) external onlyOwner {
         //Staking cahsback can be equal to 0
-        require(_stakingCashbackRate >= 0, "LockStakingRewardSameTokenFixedAPYReferral: Staking cashback rate can't be lower than 0");
         stakingCashbackRate = _stakingCashbackRate;
+        emit StakingCashbackRateUpdated(stakingCashbackRate);
     }
     
     function updateWithdrawalCashbackRate(uint256 _withdrawalCashbackRate) external onlyOwner {
         //Withdrawal cahsback can be equal to 0
-        require(_withdrawalCashbackRate >= 0, "LockStakingRewardSameTokenFixedAPYReferral: Withdrawal cashback rate can't be lower than 0");
         withdrawalCashbackRate = _withdrawalCashbackRate;
+        emit WithdrawalCashbackRateUpdated(withdrawalCashbackRate);
     }
     
     function updateReferralProgramUsers(address _referralProgramUsers) external onlyOwner {
@@ -436,6 +382,36 @@ contract LockStakingRewardSameTokenFixedAPYReferral is ILockStakingRewards, Reen
     function updateReferralProgramMarketing(address _referralProgramMarketing) external onlyOwner {
         require(_referralProgramMarketing != address(0), "LockStakingRewardFixedAPYReferral: Referral program marketing address can't be equal to address(0)");
         referralProgramMarketing = INimbusReferralProgramMarketing(_referralProgramMarketing);
+    }
+
+    function _stake(uint256 amount, address user) private {
+        stakingToken.safeTransferFrom(msg.sender, address(this), amount);
+        uint id = referralProgramUsers.userIdByAddress(user);
+        bool isReferral = id != 0 ? true : false;
+        uint stakeLock = block.timestamp + lockDuration;
+        uint rate = isReferral ? referralRewardRate : rewardRate;
+        _sendStakingCashback(user, amount);
+
+        _totalSupply += amount;
+        uint previousAmount = userStakingInfo[user].balance;
+        uint newAmount = previousAmount + amount;
+        userStakingInfo[user].weightedStakeDate = (userStakingInfo[user].weightedStakeDate * previousAmount / newAmount) + (block.timestamp * amount / newAmount);
+        userStakingInfo[user].balance = newAmount;
+
+        uint stakeNonce = stakeNonces[user]++;
+        stakeInfo[user][stakeNonce].rewardRate = rate;
+        stakeInfo[user][stakeNonce].isReferral = isReferral;
+        stakeInfo[user][stakeNonce].stakeAmount = amount;
+        stakeInfo[user][stakeNonce].stakeLock = stakeLock;
+        
+        stakeInfo[user][stakeNonce].stakeAmountRewardEquivalent = amount;
+        userStakingInfo[user].balanceRewardEquivalent += amount;
+
+        if(allowAccuralMarketingReward) {
+            referralProgramMarketing.updateReferralProfitAmount(user, address(stakingToken), amount);
+        }
+        
+        emit Staked(user, amount);
     }
 
     function _sendWithdrawalCashback(address account, uint _withdrawalAmount) internal {
