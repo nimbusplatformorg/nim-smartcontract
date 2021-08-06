@@ -231,9 +231,12 @@ contract NimbusInitialAcquisition is Ownable, Pausable {
             uint minSystemTokenAmountForBonus = getSystemTokenAmountForToken(swapToken, swapTokenAmountForBonusThreshold);
             if (systemTokenAmount > minSystemTokenAmountForBonus) {
                 uint sponsorAmount = SYSTEM_TOKEN.balanceOf(sponsorAddress);
-                for (uint i; i < stakingPoolsSponsor.length; i++) {
+                
+                INimbusStakingPool[] memory stakingPoolsSponsorLocal = stakingPoolsSponsor;
+
+                for (uint i; i < stakingPoolsSponsorLocal.length; i++) {
                     if (sponsorAmount > minSystemTokenAmountForBonus) break;
-                    sponsorAmount += stakingPoolsSponsor[i].balanceOf(sponsorAddress);
+                    sponsorAmount += stakingPoolsSponsorLocal[i].balanceOf(sponsorAddress);
                 }
                 
                 if (sponsorAmount > minSystemTokenAmountForBonus) {
@@ -358,11 +361,13 @@ contract NimbusInitialAcquisition is Ownable, Pausable {
         uint minSystemTokenAmountForBonus = getSystemTokenAmountForToken(swapToken, swapTokenAmountForBonusThreshold);
         uint bonusBase = unclaimedBonusBases[user];
         require (bonusBase >= minSystemTokenAmountForBonus, "NimbusInitialAcquisition: Bonus threshold not met");
+        
+        INimbusStakingPool[] memory stakingPoolsSponsorLocal = stakingPoolsSponsor;
 
         uint sponsorAmount = SYSTEM_TOKEN.balanceOf(msg.sender);
-        for (uint i; i < stakingPoolsSponsor.length; i++) {
+        for (uint i; i < stakingPoolsSponsorLocal.length; i++) {
             if (sponsorAmount > minSystemTokenAmountForBonus) break;
-            sponsorAmount += stakingPoolsSponsor[i].balanceOf(msg.sender);
+            sponsorAmount += stakingPoolsSponsorLocal[i].balanceOf(msg.sender);
         }
         
         require (sponsorAmount > minSystemTokenAmountForBonus, "NimbusInitialAcquisition: Sponsor balance threshold for bonus not met");
@@ -434,8 +439,10 @@ contract NimbusInitialAcquisition is Ownable, Pausable {
         INimbusStakingPool pool = INimbusStakingPool(newStakingPool);
         require (pool.stakingToken() == SYSTEM_TOKEN, "NimbusInitialAcquisition: Wrong pool staking tokens");
 
-        for (uint i; i < stakingPoolsSponsor.length; i++) {
-            require (address(stakingPoolsSponsor[i]) != newStakingPool, "NimbusInitialAcquisition: Pool exists");
+        INimbusStakingPool[] memory stakingPoolsSponsorLocal = stakingPoolsSponsor;
+
+        for (uint i; i < stakingPoolsSponsorLocal.length; i++) {
+            require (address(stakingPoolsSponsorLocal[i]) != newStakingPool, "NimbusInitialAcquisition: Pool exists");
         }
         stakingPoolsSponsor.push(pool);
     }

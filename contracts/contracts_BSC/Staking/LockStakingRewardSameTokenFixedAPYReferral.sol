@@ -202,9 +202,9 @@ contract LockStakingRewardSameTokenFixedAPYReferral is ILockStakingRewards, Reen
         require(Address.isContract(_token), "_token is not a contract");
         require(Address.isContract(_referralProgramUsers), "_referralProgramUsers is not a contract");
         require(Address.isContract(_referralProgramMarketing), "_referralProgramMarketing is not a contract");
-        require(_rewardRate >= 0, "_rewardRate is lower or equal to zero");
-        require(_referralRewardRate >= 0, "_referralRewardRate is lower or equal to zero");
-        require(_lockDuration >= 0, "_lockDuration is lower or equal to zero");
+        require(_rewardRate > 0, "_rewardRate is equal to zero");
+        require(_referralRewardRate > 0, "_referralRewardRate is equal to zero");
+        require(_lockDuration > 0, "_lockDuration is equal to zero");
         token = IBEP20(_token);
         stakingToken = IBEP20(_token);
         referralProgramUsers = INimbusReferralProgramUsers(_referralProgramUsers);
