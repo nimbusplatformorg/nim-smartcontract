@@ -212,9 +212,9 @@ contract LockStakingRewardFixedAPYReferral is ILockStakingRewards, ReentrancyGua
         require(Address.isContract(_swapRouter), "_swapRouter is not a contract");
         require(Address.isContract(_referralProgramUsers), "_referralProgramUsers is not a contract");
         require(Address.isContract(_referralProgramMarketing), "_referralProgramMarketing is not a contract");
-        require(_rewardRate >= 0, "_rewardRate is lower or equal to zero");
-        require(_referralRewardRate >= 0, "_referralRewardRate is lower or equal to zero");
-        require(_lockDuration >= 0, "_lockDuration is lower or equal to zero");
+        require(_rewardRate > 0, "_rewardRate is equal to zero");
+        require(_referralRewardRate > 0, "_referralRewardRate is equal to zero");
+        require(_lockDuration > 0, "_lockDuration is equal to zero");
 
         rewardsToken = IBEP20(_rewardsToken);
         stakingToken = IBEP20(_stakingToken);
