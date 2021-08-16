@@ -102,6 +102,7 @@ interface INBU_WETH {
 
 interface INimbusRouter {
     function getAmountsOut(uint amountIn, address[] calldata path) external view returns (uint[] memory amounts);
+    function getAmountsIn(uint amountOut, address[] calldata path) external view returns (uint[] memory amounts);
 }
 
 
@@ -169,7 +170,7 @@ contract NimbusInitialAcquisition is Ownable, Pausable {
             address[] memory path = new address[](2);
             path[0] = address(NBU);
             path[1] = token;
-            return swapRouter.getAmountsOut(nbuAmount, path)[1];
+            return swapRouter.getAmountsIn(nbuAmount, path)[0];
         } else {
             return nbuAmount * 1e18 / weightedTokenNbuExchangeRates[token];
         }

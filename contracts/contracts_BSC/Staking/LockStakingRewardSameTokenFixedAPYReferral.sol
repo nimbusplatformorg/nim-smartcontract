@@ -269,7 +269,7 @@ contract LockStakingRewardSameTokenFixedAPYReferral is ILockStakingRewards, Reen
     function getRate(address user) public view returns(uint totalRate) {
         uint totalStakingAmount = balanceOf(user);
 
-        for(uint i = stakeNonces[user] - 1; i >= 0; i--) {
+        for(uint i = 0; i <= stakeNonces[user]; i++) {
             StakeInfo memory userStakeInfo = stakeInfo[user][i];
 
             if(userStakeInfo.stakeAmount != 0) {
@@ -407,9 +407,11 @@ contract LockStakingRewardSameTokenFixedAPYReferral is ILockStakingRewards, Reen
         stakeInfo[user][stakeNonce].stakeAmountRewardEquivalent = amount;
         userStakingInfo[user].balanceRewardEquivalent += amount;
 
-        if(allowAccuralMarketingReward) {
-            referralProgramMarketing.updateReferralProfitAmount(user, address(stakingToken), amount);
-        }
+        if(isReferral) {
+            if(allowAccuralMarketingReward) {
+                referralProgramMarketing.updateReferralProfitAmount(user, address(stakingToken), amount);
+            }
+        }    
         
         emit Staked(user, amount);
     }
