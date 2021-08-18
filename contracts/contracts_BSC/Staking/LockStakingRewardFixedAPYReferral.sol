@@ -243,7 +243,7 @@ contract LockStakingRewardFixedAPYReferral is ILockStakingRewards, ReentrancyGua
     function getRate(address user) public view returns(uint totalRate) {
         uint totalStakingAmount = balanceOf(user);
 
-        for(uint i = 0; i <= stakeNonces[user]; i++) {
+        for(uint i = 1; i <= stakeNonces[user]; i++) {
             StakeInfo memory userStakeInfo = stakeInfo[user][i];
 
             if(userStakeInfo.stakeAmount != 0) {
@@ -467,10 +467,9 @@ contract LockStakingRewardFixedAPYReferral is ILockStakingRewards, ReentrancyGua
         
         stakeInfo[user][stakeNonce].stakeAmountRewardEquivalent = amountRewardEquivalent;
         userStakingInfo[user].balanceRewardEquivalent += amountRewardEquivalent;
-        if(isReferral) {
-            if(allowAccuralMarketingReward) {
-                referralProgramMarketing.updateReferralProfitAmount(user, address(stakingToken), amount);
-            }
+        
+        if(isReferral && allowAccuralMarketingReward) {
+            referralProgramMarketing.updateReferralProfitAmount(user, address(stakingToken), amount);
         }
         
         emit Staked(user, amount);

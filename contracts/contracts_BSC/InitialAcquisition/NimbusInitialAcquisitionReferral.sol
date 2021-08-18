@@ -199,8 +199,8 @@ contract NimbusInitialAcquisition is Ownable, Pausable {
     function getTokenAmountForSystemToken(address token, uint systemTokenAmount) public view returns (uint) { 
         if (!useWeightedRates) { 
             address[] memory path = new address[](2);
-            path[0] = address(SYSTEM_TOKEN);
-            path[1] = token;
+            path[0] = token;
+            path[1] = address(SYSTEM_TOKEN);
             return swapRouter.getAmountsIn(systemTokenAmount, path)[0];
         } else {
             return systemTokenAmount * 1e18 / weightedTokenSystemTokenExchangeRates[token];

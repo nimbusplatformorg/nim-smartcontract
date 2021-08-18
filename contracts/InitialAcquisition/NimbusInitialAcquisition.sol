@@ -168,8 +168,8 @@ contract NimbusInitialAcquisition is Ownable, Pausable {
     function getTokenAmountForNbu(address token, uint nbuAmount) public view returns (uint) { 
         if (!useWeightedRates) { 
             address[] memory path = new address[](2);
-            path[0] = address(NBU);
-            path[1] = token;
+            path[0] = token;
+            path[1] = address(NBU);
             return swapRouter.getAmountsIn(nbuAmount, path)[0];
         } else {
             return nbuAmount * 1e18 / weightedTokenNbuExchangeRates[token];
