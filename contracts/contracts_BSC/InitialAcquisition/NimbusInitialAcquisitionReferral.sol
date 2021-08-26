@@ -166,7 +166,7 @@ contract NimbusInitialAcquisition is Ownable, Pausable {
     event SwapTokenUpdated(address indexed swapToken);
     event SwapTokenAmountForBonusThresholdUpdated(uint amount);
 
-    constructor (address systemToken, address router, address nbuWbnb, address) {
+    constructor (address systemToken, address router, address nbuWbnb) {
         require(Address.isContract(systemToken), "systemToken is not a contract");
         require(Address.isContract(router), "router is not a contract");
         require(Address.isContract(nbuWbnb), "nbuWbnb is not a contract");
