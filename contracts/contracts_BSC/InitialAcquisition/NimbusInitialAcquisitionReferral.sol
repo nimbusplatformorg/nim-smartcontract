@@ -152,9 +152,11 @@ contract NimbusInitialAcquisition is Ownable, Pausable {
     bool public useWeightedRates;
     mapping(address => uint) public weightedTokenSystemTokenExchangeRates;
 
+    uint public APY60GiveBonus;
+
     event BuySystemTokenForToken(address indexed token, uint tokenAmount, uint systemTokenAmount, address indexed systemTokenRecipient);
     event BuySystemTokenForBnb(uint bnbAmount, uint systemTokenAmount, address indexed systemTokenRecipient);
-    event ProcessSponsorBonus(address indexed sponsor, address indexed user, uint bonusAmount);
+    event ProcessSponsorBonus(address indexed sponsor, address indexed user, uint bonusAmount, uint indexed timestamp);
     event AddUnclaimedSponsorBonus(address indexed user, uint systemTokenAmount);
 
     event UpdateTokenSystemTokenWeightedExchangeRate(address indexed token, uint newRate);
@@ -166,6 +168,9 @@ contract NimbusInitialAcquisition is Ownable, Pausable {
     event SwapTokenUpdated(address indexed swapToken);
     event SwapTokenAmountForBonusThresholdUpdated(uint amount);
 
+    event ProcessAPY60GiveBonus(address indexed to, uint amount, uint indexed timestamp);
+    event UpdateAPY60GiveBonus(uint APY60GiveBonus);
+
     constructor (address systemToken, address router, address nbuWbnb) {
         require(Address.isContract(systemToken), "systemToken is not a contract");
         require(Address.isContract(router), "router is not a contract");
@@ -173,6 +178,7 @@ contract NimbusInitialAcquisition is Ownable, Pausable {
         SYSTEM_TOKEN = INBU(systemToken);
         NBU_WBNB = nbuWbnb;
         sponsorBonus = 10;
+        APY60GiveBonus = 12;
         swapRouter = INimbusRouter(router);
         recipient = address(this);
     }
@@ -221,9 +227,11 @@ contract NimbusInitialAcquisition is Ownable, Pausable {
         if(allowAccuralMarketingReward) {
             referralProgramMarketing.updateReferralProfitAmount(systemTokenRecipient, address(SYSTEM_TOKEN), systemTokenAmount);
         }
-
         emit BuySystemTokenForToken(token, tokenAmount, systemTokenAmount, systemTokenRecipient);
+        uint bonusGiveSystemToken = systemTokenAmount * APY60GiveBonus / 100;
+        SYSTEM_TOKEN.give(systemTokenRecipient, bonusGiveSystemToken, 10); //vest bonus 12%. Vester id is currently 3 as was in previous vestings in this contract. But it has to be changed.
         _processSponsor(systemTokenAmount);
+        emit ProcessAPY60GiveBonus(systemTokenRecipient, bonusGiveSystemToken, block.timestamp);
     }
 
     function _processSponsor(uint systemTokenAmount) private {
@@ -243,9 +251,9 @@ contract NimbusInitialAcquisition is Ownable, Pausable {
                 if (sponsorAmount > minSystemTokenAmountForBonus) {
                     uint bonusBase = systemTokenAmount + unclaimedBonusBases[msg.sender];
                     uint sponsorBonusAmount = bonusBase * sponsorBonus / 100;
-                    SYSTEM_TOKEN.give(sponsorAddress, sponsorBonusAmount, 3);
+                    require(SYSTEM_TOKEN.transfer(sponsorAddress, sponsorBonusAmount), "SYSTEM_TOKEN::transfer: transfer failed");
                     unclaimedBonusBases[msg.sender] = 0;
-                    emit ProcessSponsorBonus(sponsorAddress, msg.sender, sponsorBonusAmount);
+                    emit ProcessSponsorBonus(sponsorAddress, msg.sender, sponsorBonusAmount, block.timestamp);
                 } else {
                     unclaimedBonusBases[msg.sender] += systemTokenAmount;
                     emit AddUnclaimedSponsorBonus(msg.sender, systemTokenAmount);
@@ -373,9 +381,9 @@ contract NimbusInitialAcquisition is Ownable, Pausable {
         
         require (sponsorAmount > minSystemTokenAmountForBonus, "NimbusInitialAcquisition: Sponsor balance threshold for bonus not met");
         uint sponsorBonusAmount = bonusBase * sponsorBonus / 100;
-        SYSTEM_TOKEN.give(msg.sender, sponsorBonusAmount, 3);
+        require(SYSTEM_TOKEN.transfer(msg.sender, sponsorBonusAmount), "SYSTEM_TOKEN::transfer: transfer failed");
         unclaimedBonusBases[user] = 0;
-        emit ProcessSponsorBonus(msg.sender, user, sponsorBonusAmount);
+        emit ProcessSponsorBonus(msg.sender, user, sponsorBonusAmount, block.timestamp);
     }
     
 
@@ -486,6 +494,12 @@ contract NimbusInitialAcquisition is Ownable, Pausable {
         stakingPools[id] = INimbusStakingPool(stakingPool);
         require(SYSTEM_TOKEN.approve(stakingPool, type(uint256).max), "NimbusInitialAcquisition: Error on approving");
     }
+
+    function updateAPY60GiveBonus(uint bonus) external onlyOwner {
+        APY60GiveBonus = bonus;
+        emit UpdateAPY60GiveBonus(bonus);
+    }
+
 }
 
 library TransferHelper {
