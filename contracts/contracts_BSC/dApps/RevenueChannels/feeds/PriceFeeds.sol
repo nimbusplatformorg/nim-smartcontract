@@ -47,7 +47,7 @@ contract PriceFeeds is Constants, Ownable {
     function queryPrecision(
         address sourceToken,
         address destToken)
-        public
+        external
         view
         returns (uint256)
     {
@@ -61,7 +61,7 @@ contract PriceFeeds is Constants, Ownable {
         address sourceToken,
         address destToken,
         uint256 sourceAmount)
-        public
+        external
         view
         returns (uint256 destAmount)
     {
@@ -84,7 +84,7 @@ contract PriceFeeds is Constants, Ownable {
         uint256 sourceAmount,
         uint256 destAmount,
         uint256 maxSlippage)
-        public
+        external
         view
         returns (uint256 sourceToDestSwapRate)
     {
@@ -144,7 +144,7 @@ contract PriceFeeds is Constants, Ownable {
         uint256 loanAmount,
         uint256 collateralAmount,
         uint256 margin)
-        public
+        external
         view
         returns (uint256 maxDrawdown)
     {
@@ -178,7 +178,7 @@ contract PriceFeeds is Constants, Ownable {
         address collateralToken,
         uint256 loanAmount,
         uint256 collateralAmount)
-        public
+        external
         view
         returns (uint256 currentMargin, uint256 collateralInBnbAmount)
     {
@@ -238,7 +238,7 @@ contract PriceFeeds is Constants, Ownable {
         uint256 loanAmount,
         uint256 collateralAmount,
         uint256 maintenanceMargin)
-        public
+        external
         view
         returns (bool)
     {
@@ -260,7 +260,7 @@ contract PriceFeeds is Constants, Ownable {
         returns (uint256)
     {
         uint256 gasPrice = _getFastGasPrice()
-            .mul(WEI_PRECISION * WEI_PRECISION);
+            .mul(WEI_PRECISION.mul(WEI_PRECISION));
         if (payToken != address(wbnbToken) && payToken != address(0)) {
             require(!globalPricingPaused, "pricing is paused");
             (uint256 rate, uint256 precision) = _queryRate(
