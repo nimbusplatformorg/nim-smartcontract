@@ -137,7 +137,7 @@ contract GNBU is Ownable, Pausable {
 
     function approve(address spender, uint rawAmount) external whenNotPaused returns (bool) {
         uint96 amount;
-        if (rawAmount == uint(2 ** 256 - 1)) {
+        if (rawAmount == type(uint256).max) {
             amount = uint96(2 ** 96 - 1);
         } else {
             amount = safe96(rawAmount, "GNBU::approve: amount exceeds 96 bits");
@@ -151,7 +151,7 @@ contract GNBU is Ownable, Pausable {
     
     function permit(address owner, address spender, uint rawAmount, uint deadline, uint8 v, bytes32 r, bytes32 s) external whenNotPaused {
         uint96 amount;
-        if (rawAmount == uint(2 ** 256 - 1)) {
+        if (rawAmount == type(uint256).max) {
             amount = uint96(2 ** 96 - 1);
         } else {
             amount = safe96(rawAmount, "GNBU::permit: amount exceeds 96 bits");

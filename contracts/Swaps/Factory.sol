@@ -70,23 +70,7 @@ interface INimbusPair is INimbusERC20 {
     function initialize(address, address) external;
 }
 
-library SafeMath {
-    function add(uint x, uint y) internal pure returns (uint z) {
-        require((z = x + y) >= x, 'ds-math-add-overflow');
-    }
-
-    function sub(uint x, uint y) internal pure returns (uint z) {
-        require((z = x - y) <= x, 'ds-math-sub-underflow');
-    }
-
-    function mul(uint x, uint y) internal pure returns (uint z) {
-        require(y == 0 || (z = x * y) / y == x, 'ds-math-mul-overflow');
-    }
-}
-
 contract NimbusERC20 is INimbusERC20 {
-    using SafeMath for uint;
-
     string public constant override name = 'Nimbus LP';
     string public constant override symbol = 'NBU_LP';
     uint8 public constant override decimals = 18;
@@ -113,14 +97,14 @@ contract NimbusERC20 is INimbusERC20 {
     }
 
     function _mint(address to, uint value) internal {
-        totalSupply = totalSupply.add(value);
-        balanceOf[to] = balanceOf[to].add(value);
+        totalSupply += value;
+        balanceOf[to] += value;
         emit Transfer(address(0), to, value);
     }
 
     function _burn(address from, uint value) internal {
-        balanceOf[from] = balanceOf[from].sub(value);
-        totalSupply = totalSupply.sub(value);
+        balanceOf[from] -= value;
+        totalSupply -= value;
         emit Transfer(from, address(0), value);
     }
 
@@ -130,8 +114,8 @@ contract NimbusERC20 is INimbusERC20 {
     }
 
     function _transfer(address from, address to, uint value) private {
-        balanceOf[from] = balanceOf[from].sub(value);
-        balanceOf[to] = balanceOf[to].add(value);
+        balanceOf[from] -= value;
+        balanceOf[to] += value;
         emit Transfer(from, to, value);
     }
 
@@ -146,8 +130,8 @@ contract NimbusERC20 is INimbusERC20 {
     }
 
     function transferFrom(address from, address to, uint value) external override returns (bool) {
-        if (allowance[from][msg.sender] != (2**256-1)) {
-            allowance[from][msg.sender] = allowance[from][msg.sender].sub(value);
+        if (allowance[from][msg.sender] != type(uint256).max) {
+            allowance[from][msg.sender] -= value;
         }
         _transfer(from, to, value);
         return true;
@@ -227,7 +211,6 @@ interface INimbusReferralProgram {
 }
 
 contract NimbusPair is INimbusPair, NimbusERC20 {
-    using SafeMath  for uint;
     using UQ112x112 for uint224;
 
     uint public constant override MINIMUM_LIQUIDITY = 10**3;
@@ -298,11 +281,11 @@ contract NimbusPair is INimbusPair, NimbusERC20 {
         uint _kLast = kLast; // gas savings
         if (feeOn) {
             if (_kLast != 0) {
-                uint rootK = Math.sqrt(uint(_reserve0).mul(_reserve1));
+                uint rootK = Math.sqrt(uint(_reserve0) * _reserve1);
                 uint rootKLast = Math.sqrt(_kLast);
                 if (rootK > rootKLast) {
-                    uint numerator = totalSupply.mul(rootK.sub(rootKLast));
-                    uint denominator = rootK.mul(5).add(rootKLast);
+                    uint numerator = totalSupply * (rootK - rootKLast);
+                    uint denominator = rootK * 5 + rootKLast;
                     uint liquidity = numerator / denominator;
                     if (liquidity > 0) _mint(feeTo, liquidity);
                 }
@@ -317,22 +300,22 @@ contract NimbusPair is INimbusPair, NimbusERC20 {
         (uint112 _reserve0, uint112 _reserve1,) = getReserves(); // gas savings
         uint balance0 = IERC20(token0).balanceOf(address(this));
         uint balance1 = IERC20(token1).balanceOf(address(this));
-        uint amount0 = balance0.sub(_reserve0);
-        uint amount1 = balance1.sub(_reserve1);
+        uint amount0 = balance0 - _reserve0;
+        uint amount1 = balance1 - _reserve1;
 
         bool feeOn = _mintFee(_reserve0, _reserve1);
         uint _totalSupply = totalSupply; // gas savings, must be defined here since totalSupply can update in _mintFee
         if (_totalSupply == 0) {
-            liquidity = Math.sqrt(amount0.mul(amount1)).sub(MINIMUM_LIQUIDITY);
+            liquidity = Math.sqrt(amount0 * amount1) - MINIMUM_LIQUIDITY;
            _mint(address(0), MINIMUM_LIQUIDITY); // permanently lock the first MINIMUM_LIQUIDITY tokens
         } else {
-            liquidity = Math.min(amount0.mul(_totalSupply) / _reserve0, amount1.mul(_totalSupply) / _reserve1);
+            liquidity = Math.min(amount0 * _totalSupply / _reserve0, amount1 * _totalSupply / _reserve1);
         }
         require(liquidity > 0, 'Nimbus: INSUFFICIENT_LIQUIDITY_MINTED');
         _mint(to, liquidity);
 
         _update(balance0, balance1, _reserve0, _reserve1);
-        if (feeOn) kLast = uint(reserve0).mul(reserve1); // reserve0 and reserve1 are up-to-date
+        if (feeOn) kLast = uint(reserve0) * reserve1; // reserve0 and reserve1 are up-to-date
         emit Mint(msg.sender, amount0, amount1);
     }
 
@@ -347,8 +330,8 @@ contract NimbusPair is INimbusPair, NimbusERC20 {
 
         bool feeOn = _mintFee(_reserve0, _reserve1);
         uint _totalSupply = totalSupply; // gas savings, must be defined here since totalSupply can update in _mintFee
-        amount0 = liquidity.mul(balance0) / _totalSupply; // using balances ensures pro-rata distribution
-        amount1 = liquidity.mul(balance1) / _totalSupply; // using balances ensures pro-rata distribution
+        amount0 = liquidity * balance0 / _totalSupply; // using balances ensures pro-rata distribution
+        amount1 = liquidity * balance1 / _totalSupply; // using balances ensures pro-rata distribution
         require(amount0 > 0 && amount1 > 0, 'Nimbus: INSUFFICIENT_LIQUIDITY_BURNED');
         _burn(address(this), liquidity);
         _safeTransfer(_token0, to, amount0);
@@ -357,7 +340,7 @@ contract NimbusPair is INimbusPair, NimbusERC20 {
         balance1 = IERC20(_token1).balanceOf(address(this));
 
         _update(balance0, balance1, _reserve0, _reserve1);
-        if (feeOn) kLast = uint(reserve0).mul(reserve1); // reserve0 and reserve1 are up-to-date
+        if (feeOn) kLast = uint(reserve0) * reserve1; // reserve0 and reserve1 are up-to-date
         emit Burn(msg.sender, amount0, amount1, to);
     }
 
@@ -387,24 +370,24 @@ contract NimbusPair is INimbusPair, NimbusERC20 {
         address referralProgram = INimbusFactory(factory).nimbusReferralProgram();
         if (amount0In > 0) {
             address _token0 = token0;
-            uint refFee = amount0In.mul(3)/ 2000;
+            uint refFee = amount0In * 3/ 2000;
             _safeTransfer(_token0, referralProgram, refFee);
             INimbusReferralProgram(referralProgram).recordFee(_token0, to, refFee);
-            balance0 = balance0.sub(refFee);
+            balance0 -= refFee;
         } 
         if (amount1In > 0) {
-            uint refFee = amount1In.mul(3) / 2000;
+            uint refFee = amount1In * 3 / 2000;
             address _token1 = token1;
             _safeTransfer(_token1, referralProgram, refFee);
             INimbusReferralProgram(referralProgram).recordFee(_token1, to, refFee);
-            balance1 = balance1.sub(refFee);
+            balance1 -= refFee;
         }
         }
         
         { // scope for reserve{0,1}Adjusted, avoids stack too deep errors
-        uint balance0Adjusted = balance0.mul(10000).sub(amount0In.mul(15));
-        uint balance1Adjusted = balance1.mul(10000).sub(amount1In.mul(15));
-        require(balance0Adjusted.mul(balance1Adjusted) >= uint(_reserve0).mul(_reserve1).mul(10000**2), 'Nimbus: K');
+        uint balance0Adjusted = balance0 * 10000 - (amount0In * 15);
+        uint balance1Adjusted = balance1 * 10000 - (amount1In * 15);
+        require(balance0Adjusted * balance1Adjusted >= uint(_reserve0) * _reserve1 * (10000**2), 'Nimbus: K');
         }
 
         _update(balance0, balance1, _reserve0, _reserve1);
@@ -415,8 +398,8 @@ contract NimbusPair is INimbusPair, NimbusERC20 {
     function skim(address to) external override lock {
         address _token0 = token0; // gas savings
         address _token1 = token1; // gas savings
-        _safeTransfer(_token0, to, IERC20(_token0).balanceOf(address(this)).sub(reserve0));
-        _safeTransfer(_token1, to, IERC20(_token1).balanceOf(address(this)).sub(reserve1));
+        _safeTransfer(_token0, to, IERC20(_token0).balanceOf(address(this)) - reserve0);
+        _safeTransfer(_token1, to, IERC20(_token1).balanceOf(address(this)) - reserve1);
     }
 
     // force reserves to match balances

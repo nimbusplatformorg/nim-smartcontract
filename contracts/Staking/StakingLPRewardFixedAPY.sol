@@ -49,47 +49,6 @@ contract Ownable {
     }
 }
 
-library SafeMath {
-    function add(uint256 a, uint256 b) internal pure returns (uint256) {
-        uint256 c = a + b;
-        require(c >= a, "SafeMath: addition overflow");
-
-        return c;
-    }
-
-    function sub(uint256 a, uint256 b) internal pure returns (uint256) {
-        require(b <= a, "SafeMath: subtraction overflow");
-        uint256 c = a - b;
-
-        return c;
-    }
-
-    function mul(uint256 a, uint256 b) internal pure returns (uint256) {
-      if (a == 0) {
-            return 0;
-        }
-
-        uint256 c = a * b;
-        require(c / a == b, "SafeMath: multiplication overflow");
-
-        return c;
-    }
-
-    function div(uint256 a, uint256 b) internal pure returns (uint256) {
-        // Solidity only automatically asserts when dividing by 0
-        require(b > 0, "SafeMath: division by zero");
-        uint256 c = a / b;
-        // assert(a == b * c + a % b); // There is no case in which this doesn't hold
-
-        return c;
-    }
-
-    function mod(uint256 a, uint256 b) internal pure returns (uint256) {
-        require(b != 0, "SafeMath: modulo by zero");
-        return a % b;
-    }
-}
-
 library Math {
     function max(uint256 a, uint256 b) internal pure returns (uint256) {
         return a >= b ? a : b;
@@ -131,7 +90,6 @@ library Address {
 }
 
 library SafeERC20 {
-    using SafeMath for uint256;
     using Address for address;
 
     function safeTransfer(IERC20 token, address to, uint256 value) internal {
@@ -150,12 +108,12 @@ library SafeERC20 {
     }
 
     function safeIncreaseAllowance(IERC20 token, address spender, uint256 value) internal {
-        uint256 newAllowance = token.allowance(address(this), spender).add(value);
+        uint256 newAllowance = token.allowance(address(this), spender) + value;
         callOptionalReturn(token, abi.encodeWithSelector(token.approve.selector, spender, newAllowance));
     }
 
     function safeDecreaseAllowance(IERC20 token, address spender, uint256 value) internal {
-        uint256 newAllowance = token.allowance(address(this), spender).sub(value);
+        uint256 newAllowance = token.allowance(address(this), spender) - value;
         callOptionalReturn(token, abi.encodeWithSelector(token.approve.selector, spender, newAllowance));
     }
 
@@ -205,7 +163,6 @@ interface IERC20Permit {
 }
 
 contract StakingLPRewardFixedAPY is IStakingRewards, ReentrancyGuard, Ownable {
-    using SafeMath for uint256;
     using SafeERC20 for IERC20;
 
     IERC20 public immutable rewardsToken;
@@ -251,10 +208,10 @@ contract StakingLPRewardFixedAPY is IStakingRewards, ReentrancyGuard, Ownable {
         lPPairTokenB = _lPPairTokenB;
         uint tokenADecimals = IERC20(_lPPairTokenA).decimals();
         require(tokenADecimals >= 6, "StakingLPRewardFixedAPY: small amount of decimals");
-        _tokenADecimalCompensate = tokenADecimals.sub(6);
+        _tokenADecimalCompensate = tokenADecimals - 6;
         uint tokenBDecimals = IERC20(_lPPairTokenB).decimals();
         require(tokenBDecimals >= 6, "StakingLPRewardFixedAPY: small amount of decimals");
-        _tokenBDecimalCompensate = tokenBDecimals.sub(6);
+        _tokenBDecimalCompensate = tokenBDecimals - 6;
     }
 
     function totalSupply() external view override returns (uint256) {
@@ -279,7 +236,7 @@ contract StakingLPRewardFixedAPY is IStakingRewards, ReentrancyGuard, Ownable {
     }
 
     function earned(address account) public view override returns (uint256) {
-        return (_balancesRewardEquivalent[account].mul(block.timestamp.sub(weightedStakeDate[account])).mul(rewardRate)) / (100 * rewardDuration);
+        return (_balancesRewardEquivalent[account] * ((block.timestamp - weightedStakeDate[account]) * rewardRate)) / (100 * rewardDuration);
     }
 
     function stakeWithPermit(uint256 amount, uint deadline, uint8 v, bytes32 r, bytes32 s) external nonReentrant {
@@ -301,20 +258,20 @@ contract StakingLPRewardFixedAPY is IStakingRewards, ReentrancyGuard, Ownable {
 
     function _stake(uint256 amount, address user) private {
         IERC20(stakingLPToken).safeTransferFrom(msg.sender, address(this), amount);
-        uint amountRewardEquivalent = getCurrentLPPrice().mul(amount) / 10 ** 18;
+        uint amountRewardEquivalent = getCurrentLPPrice() * amount / 10 ** 18;
 
-        _totalSupply = _totalSupply.add(amount);
-        _totalSupplyRewardEquivalent = _totalSupplyRewardEquivalent.add(amountRewardEquivalent);
+        _totalSupply += amount;
+        _totalSupplyRewardEquivalent += amountRewardEquivalent;
         uint previousAmount = _balances[user];
-        uint newAmount = previousAmount.add(amount);
-        weightedStakeDate[user] = (weightedStakeDate[user].mul(previousAmount) / newAmount).add(block.timestamp.mul(amount) / newAmount);
+        uint newAmount = previousAmount + amount;
+        weightedStakeDate[user] = (weightedStakeDate[user] * previousAmount / newAmount) + (block.timestamp * amount / newAmount);
         _balances[user] = newAmount;
 
         uint stakeNonce = stakeNonces[user]++;
         stakeAmounts[user][stakeNonce] = amount;
         
         stakeAmountsRewardEquivalent[user][stakeNonce] = amountRewardEquivalent;
-        _balancesRewardEquivalent[user] = _balancesRewardEquivalent[user].add(amountRewardEquivalent);
+        _balancesRewardEquivalent[user] += amountRewardEquivalent;
         emit Staked(user, amount);
     }
 
@@ -324,10 +281,10 @@ contract StakingLPRewardFixedAPY is IStakingRewards, ReentrancyGuard, Ownable {
         require(stakeAmounts[msg.sender][nonce] > 0, "StakingLPRewardFixedAPY: This stake nonce was withdrawn");
         uint amount = stakeAmounts[msg.sender][nonce];
         uint amountRewardEquivalent = stakeAmountsRewardEquivalent[msg.sender][nonce];
-        _totalSupply = _totalSupply.sub(amount);
-        _totalSupplyRewardEquivalent = _totalSupplyRewardEquivalent.sub(amountRewardEquivalent);
-        _balances[msg.sender] = _balances[msg.sender].sub(amount);
-        _balancesRewardEquivalent[msg.sender] = _balancesRewardEquivalent[msg.sender].sub(amountRewardEquivalent);
+        _totalSupply -= amount;
+        _totalSupplyRewardEquivalent -= amountRewardEquivalent;
+        _balances[msg.sender] -= amount;
+        _balancesRewardEquivalent[msg.sender] -= amountRewardEquivalent;
         IERC20(stakingLPToken).safeTransfer(msg.sender, amount);
         stakeAmounts[msg.sender][nonce] = 0;
         stakeAmountsRewardEquivalent[msg.sender][nonce] = 0;
@@ -360,7 +317,7 @@ contract StakingLPRewardFixedAPY is IStakingRewards, ReentrancyGuard, Ownable {
             path[0] = lPPairTokenA;
             tokenAToRewardPrice = swapRouter.getAmountsOut(10 ** 6, path)[1];
             if (_tokenADecimalCompensate > 0) 
-                tokenAToRewardPrice = tokenAToRewardPrice.mul(10 ** _tokenADecimalCompensate);
+                tokenAToRewardPrice = tokenAToRewardPrice * (10 ** _tokenADecimalCompensate);
         } else {
             tokenAToRewardPrice = 10 ** 18;
         }
@@ -369,7 +326,7 @@ contract StakingLPRewardFixedAPY is IStakingRewards, ReentrancyGuard, Ownable {
             path[0] = lPPairTokenB;
             tokenBToRewardPrice = swapRouter.getAmountsOut(10 ** 6, path)[1];
             if (_tokenBDecimalCompensate > 0)
-                tokenBToRewardPrice = tokenBToRewardPrice.mul(10 ** _tokenBDecimalCompensate);
+                tokenBToRewardPrice = tokenBToRewardPrice * (10 ** _tokenBDecimalCompensate);
         } else {
             tokenBToRewardPrice = 10 ** 18;
         }
@@ -378,8 +335,8 @@ contract StakingLPRewardFixedAPY is IStakingRewards, ReentrancyGuard, Ownable {
         require(totalLpSupply > 0, "StakingLPRewardFixedAPY: No liquidity for pair");
         (uint reserveA, uint reaserveB,) = stakingLPToken.getReserves();
         uint price = 
-            uint(2).mul(Math.sqrt(reserveA.mul(reaserveB))
-            .mul(Math.sqrt(tokenAToRewardPrice.mul(tokenBToRewardPrice)))) / totalLpSupply;
+            uint(2) * Math.sqrt(reserveA * reaserveB)
+            * Math.sqrt(tokenAToRewardPrice * tokenBToRewardPrice) / totalLpSupply;
         
         return price;
     }

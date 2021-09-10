@@ -25,6 +25,19 @@ library TransferHelper {
     }
 }
 
+library Address {
+    function isContract(address account) internal view returns (bool) {
+        // This method relies on extcodesize, which returns 0 for contracts in
+        // construction, since the code is only stored at the end of the
+        // constructor execution.
+
+        uint256 size;
+        // solhint-disable-next-line no-inline-assembly
+        assembly { size := extcodesize(account) }
+        return size > 0;
+    }
+}
+
 interface INBU_WETH {
     function deposit() external payable;
     function transfer(address to, uint value) external returns (bool);
@@ -67,6 +80,7 @@ contract NimbusERC20P2P_V1 {
     event WithdrawOverdueAsset(uint tradeId);
     
     constructor(address nbuWeth) {
+        require(Address.isContract(nbuWeth), "NimbusERC20P2P_V1: Not contract");
         NBU_WETH = INBU_WETH(nbuWeth);
     }
 
@@ -83,16 +97,19 @@ contract NimbusERC20P2P_V1 {
     }
 
     function createTrade(address proposedAsset, uint proposedAmount, address askedAsset, uint askedAmount, uint deadline) external returns (uint tradeId) {
+        require(Address.isContract(proposedAsset) && Address.isContract(askedAsset), "NimbusERC20P2P_V1: Not contracts");
         TransferHelper.safeTransferFrom(proposedAsset, msg.sender, address(this), proposedAmount);
         tradeId = _createTrade(proposedAsset, proposedAmount, askedAsset, askedAmount, deadline);   
     }
 
     function createTradeETH(address askedAsset, uint askedAmount, uint deadline) payable external returns (uint tradeId) {
+        require(Address.isContract(askedAsset), "NimbusERC20P2P_V1: Not contract");
         NBU_WETH.deposit{value: msg.value}();
         tradeId = _createTrade(address(NBU_WETH), msg.value, askedAsset, askedAmount, deadline);   
     }
 
     function createTradeWithPermit(address proposedAsset, uint proposedAmount, address askedAsset, uint askedAmount, uint deadline, uint permitDeadline, uint8 v, bytes32 r, bytes32 s) external returns (uint tradeId) {
+        require(Address.isContract(proposedAsset) && Address.isContract(askedAsset), "NimbusERC20P2P_V1: Not contracts");
         IERC20Permit(proposedAsset).permit(msg.sender, address(this), proposedAmount, permitDeadline, v, r, s);
         TransferHelper.safeTransferFrom(proposedAsset, msg.sender, address(this), proposedAmount);
         tradeId = _createTrade(proposedAsset, proposedAmount, askedAsset, askedAmount, deadline);   
@@ -186,9 +203,10 @@ contract NimbusERC20P2P_V1 {
 
 
     function _createTrade(address proposedAsset, uint proposedAmount, address askedAsset, uint askedAmount, uint deadline) private returns (uint tradeId) { 
-        require(askedAsset != address(0), "NimbusERC20P2P_V1: zero address");
+        require(askedAsset != proposedAsset, "NimbusERC20P2P_V1: asked asset can't be equal to proposed asset");
         require(proposedAmount > 0, "NimbusERC20P2P_V1: zero proposed amount");
         require(askedAmount > 0, "NimbusERC20P2P_V1: zero asked amount");
+        require(deadline > block.timestamp, "NimbusERC20P2P_V1: incorrect deadline");
         tradeId = ++tradeCount;
         Trade storage trade = trades[tradeId];
         trade.initiator = msg.sender;

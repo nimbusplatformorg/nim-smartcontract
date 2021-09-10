@@ -1,7 +1,6 @@
 pragma solidity =0.8.0;
 
 interface IERC20 {
-
     function totalSupply() external view returns (uint256);
     function balanceOf(address account) external view returns (uint256);
     function transfer(address recipient, uint256 amount) external returns (bool);
@@ -41,50 +40,7 @@ contract Ownable {
     }
 }
 
-library SafeMath {
-
-    function add(uint256 a, uint256 b) internal pure returns (uint256) {
-        uint256 c = a + b;
-        require(c >= a, "SafeMath: addition overflow");
-
-        return c;
-    }
-
-    function sub(uint256 a, uint256 b) internal pure returns (uint256) {
-        require(b <= a, "SafeMath: subtraction overflow");
-        uint256 c = a - b;
-
-        return c;
-    }
-
-    function mul(uint256 a, uint256 b) internal pure returns (uint256) {
-      if (a == 0) {
-            return 0;
-        }
-
-        uint256 c = a * b;
-        require(c / a == b, "SafeMath: multiplication overflow");
-
-        return c;
-    }
-
-    function div(uint256 a, uint256 b) internal pure returns (uint256) {
-        // Solidity only automatically asserts when dividing by 0
-        require(b > 0, "SafeMath: division by zero");
-        uint256 c = a / b;
-        // assert(a == b * c + a % b); // There is no case in which this doesn't hold
-
-        return c;
-    }
-
-    function mod(uint256 a, uint256 b) internal pure returns (uint256) {
-        require(b != 0, "SafeMath: modulo by zero");
-        return a % b;
-    }
-}
-
 library Math {
-
     function max(uint256 a, uint256 b) internal pure returns (uint256) {
         return a >= b ? a : b;
     }
@@ -112,7 +68,6 @@ library Address {
 }
 
 library SafeERC20 {
-    using SafeMath for uint256;
     using Address for address;
 
     function safeTransfer(IERC20 token, address to, uint256 value) internal {
@@ -131,12 +86,12 @@ library SafeERC20 {
     }
 
     function safeIncreaseAllowance(IERC20 token, address spender, uint256 value) internal {
-        uint256 newAllowance = token.allowance(address(this), spender).add(value);
+        uint256 newAllowance = token.allowance(address(this), spender) + value;
         callOptionalReturn(token, abi.encodeWithSelector(token.approve.selector, spender, newAllowance));
     }
 
     function safeDecreaseAllowance(IERC20 token, address spender, uint256 value) internal {
-        uint256 newAllowance = token.allowance(address(this), spender).sub(value);
+        uint256 newAllowance = token.allowance(address(this), spender) - value;
         callOptionalReturn(token, abi.encodeWithSelector(token.approve.selector, spender, newAllowance));
     }
 
@@ -174,25 +129,16 @@ contract ReentrancyGuard {
 interface IStakingRewards {
     // Views
     function lastTimeRewardApplicable() external view returns (uint256);
-
     function rewardPerToken() external view returns (uint256);
-
     function earned(address account) external view returns (uint256);
-
     function getRewardForDuration() external view returns (uint256);
-
     function totalSupply() external view returns (uint256);
-
     function balanceOf(address account) external view returns (uint256);
 
     // Mutative
-
     function stake(uint256 amount) external;
-
     function withdraw(uint256 amount) external;
-
     function getReward() external;
-
     function exit() external;
 }
 
@@ -208,7 +154,6 @@ abstract contract RewardsDistributionRecipient {
 }
 
 contract StakingRewards is IStakingRewards, RewardsDistributionRecipient, ReentrancyGuard {
-    using SafeMath for uint256;
     using SafeERC20 for IERC20;
 
     IERC20 public rewardsToken;
@@ -229,7 +174,7 @@ contract StakingRewards is IStakingRewards, RewardsDistributionRecipient, Reentr
         address _rewardsDistribution,
         address _rewardsToken,
         address _stakingToken
-    ) public {
+    ) {
         rewardsToken = IERC20(_rewardsToken);
         stakingToken = IERC20(_stakingToken);
         rewardsDistribution = _rewardsDistribution;
@@ -252,26 +197,24 @@ contract StakingRewards is IStakingRewards, RewardsDistributionRecipient, Reentr
             return rewardPerTokenStored;
         }
         return
-            rewardPerTokenStored.add(
-                lastTimeRewardApplicable().sub(lastUpdateTime).mul(rewardRate).mul(1e18).div(_totalSupply)
-            );
+            rewardPerTokenStored + ((lastTimeRewardApplicable() - lastUpdateTime) * rewardRate * 1e18 / _totalSupply);
     }
 
     function earned(address account) public override view returns (uint256) {
-        return _balances[account].mul(rewardPerToken().sub(userRewardPerTokenPaid[account])).div(1e18).add(rewards[account]);
+        return _balances[account] * (rewardPerToken() - userRewardPerTokenPaid[account]) / 1e18 + rewards[account];
     }
 
     function getRewardForDuration() external override view returns (uint256) {
-        return rewardRate.mul(rewardsDuration);
+        return rewardRate * rewardsDuration;
     }
 
     function stakeWithPermit(uint256 amount, uint deadline, uint8 v, bytes32 r, bytes32 s) external nonReentrant updateReward(msg.sender) {
         require(amount > 0, "Cannot stake 0");
-        _totalSupply = _totalSupply.add(amount);
-        _balances[msg.sender] = _balances[msg.sender].add(amount);
+        _totalSupply += amount;
+        _balances[msg.sender] += amount;
 
         // permit
-        IUniswapV2ERC20(address(stakingToken)).permit(msg.sender, address(this), amount, deadline, v, r, s);
+        IERC20Permit(address(stakingToken)).permit(msg.sender, address(this), amount, deadline, v, r, s);
 
         stakingToken.safeTransferFrom(msg.sender, address(this), amount);
         emit Staked(msg.sender, amount);
@@ -279,16 +222,16 @@ contract StakingRewards is IStakingRewards, RewardsDistributionRecipient, Reentr
 
     function stake(uint256 amount) external override nonReentrant updateReward(msg.sender) {
         require(amount > 0, "Cannot stake 0");
-        _totalSupply = _totalSupply.add(amount);
-        _balances[msg.sender] = _balances[msg.sender].add(amount);
+        _totalSupply += amount;
+        _balances[msg.sender] += amount;
         stakingToken.safeTransferFrom(msg.sender, address(this), amount);
         emit Staked(msg.sender, amount);
     }
 
     function withdraw(uint256 amount) public override nonReentrant updateReward(msg.sender) {
         require(amount > 0, "Cannot withdraw 0");
-        _totalSupply = _totalSupply.sub(amount);
-        _balances[msg.sender] = _balances[msg.sender].sub(amount);
+        _totalSupply -= amount;
+        _balances[msg.sender] -= amount;
         stakingToken.safeTransfer(msg.sender, amount);
         emit Withdrawn(msg.sender, amount);
     }
@@ -309,11 +252,11 @@ contract StakingRewards is IStakingRewards, RewardsDistributionRecipient, Reentr
 
     function notifyRewardAmount(uint256 reward) external override onlyRewardsDistribution updateReward(address(0)) {
         if (block.timestamp >= periodFinish) {
-            rewardRate = reward.div(rewardsDuration);
+            rewardRate = reward / rewardsDuration;
         } else {
-            uint256 remaining = periodFinish.sub(block.timestamp);
-            uint256 leftover = remaining.mul(rewardRate);
-            rewardRate = reward.add(leftover).div(rewardsDuration);
+            uint256 remaining = periodFinish - block.timestamp;
+            uint256 leftover = remaining * rewardRate;
+            rewardRate = (reward + leftover) / rewardsDuration;
         }
 
         // Ensure the provided reward amount is not more than the balance in the contract.
@@ -321,10 +264,10 @@ contract StakingRewards is IStakingRewards, RewardsDistributionRecipient, Reentr
         // very high values of rewardRate in the earned and rewardsPerToken functions;
         // Reward + leftover must be less than 2^256 / 10^18 to avoid overflow.
         uint balance = rewardsToken.balanceOf(address(this));
-        require(rewardRate <= balance.div(rewardsDuration), "Provided reward too high");
+        require(rewardRate <= balance / rewardsDuration, "Provided reward too high");
 
         lastUpdateTime = block.timestamp;
-        periodFinish = block.timestamp.add(rewardsDuration);
+        periodFinish = block.timestamp + rewardsDuration;
         emit RewardAdded(reward);
     }
 
@@ -344,7 +287,7 @@ contract StakingRewards is IStakingRewards, RewardsDistributionRecipient, Reentr
     event RewardPaid(address indexed user, uint256 reward);
 }
 
-interface IUniswapV2ERC20 {
+interface IERC20Permit {
     function permit(address owner, address spender, uint value, uint deadline, uint8 v, bytes32 r, bytes32 s) external;
 }
 
