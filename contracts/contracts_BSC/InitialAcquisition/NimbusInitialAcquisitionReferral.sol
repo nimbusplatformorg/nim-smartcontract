@@ -83,8 +83,11 @@ abstract contract Pausable is Ownable {
     }
 }
 
-interface INBU is IBEP20 {
-    function give(address recipient, uint256 amount, uint vesterId) external;
+interface INimbusVesting {
+    function vest(address user, uint amount, uint vestingFirstPeriod, uint vestingSecondPeriod) external;
+    function vestWithVestType(address user, uint amount, uint vestingFirstPeriodDuration, uint vestingSecondPeriodDuration, uint vestType) external;
+    function unvest() external returns (uint unvested);
+    function unvestFor(address user) external returns (uint unvested);
 }
 
 interface INimbusReferralProgram {
@@ -129,12 +132,16 @@ library Address {
 }
 
 contract NimbusInitialAcquisition is Ownable, Pausable {
-    INBU public immutable SYSTEM_TOKEN;
+    IBEP20 public immutable SYSTEM_TOKEN;
     address public immutable NBU_WBNB;
     INimbusReferralProgram public referralProgram;
     INimbusReferralProgramMarketing public referralProgramMarketing;
     INimbusStakingPool[] public stakingPoolsSponsor;   //staking pools for checking sponsor balances
 
+    INimbusVesting public vestingContract;
+    uint public vestingFirstPeriodDuration;
+    uint public vestingSecondPeriodDuration;
+    
     bool public allowAccuralMarketingReward;
 
     mapping(uint => INimbusStakingPool) public stakingPools;
@@ -159,28 +166,34 @@ contract NimbusInitialAcquisition is Ownable, Pausable {
     event ProcessSponsorBonus(address indexed sponsor, address indexed user, uint bonusAmount, uint indexed timestamp);
     event AddUnclaimedSponsorBonus(address indexed user, uint systemTokenAmount);
 
-    event UpdateTokenSystemTokenWeightedExchangeRate(address indexed token, uint newRate);
-    event ToggleUseWeightedRates(bool useWeightedRates);
+    event UpdateTokenSystemTokenWeightedExchangeRate(address indexed token, uint indexed newRate);
+    event ToggleUseWeightedRates(bool indexed useWeightedRates);
     event Rescue(address indexed to, uint amount);
     event RescueToken(address indexed token, address indexed to, uint amount);
 
     event AllowedTokenUpdated(address indexed token, bool allowance);
     event SwapTokenUpdated(address indexed swapToken);
-    event SwapTokenAmountForBonusThresholdUpdated(uint amount);
+    event SwapTokenAmountForBonusThresholdUpdated(uint indexed amount);
 
     event ProcessGiveBonus(address indexed to, uint amount, uint indexed timestamp);
-    event UpdateGiveBonus(uint giveBonus);
+    event UpdateGiveBonus(uint indexed giveBonus);
+    event UpdateVestingContract(address indexed vestingContractAddress);
+    event UpdateVestingParams(uint vestingFirstPeriod, uint vestingSecondPeriod);
 
-    constructor (address systemToken, address router, address nbuWbnb) {
+    constructor (address systemToken, address vestingContractAddress, address router, address nbuWbnb) {
         require(Address.isContract(systemToken), "systemToken is not a contract");
+        require(Address.isContract(vestingContractAddress), "vestingContractAddress is not a contract");
         require(Address.isContract(router), "router is not a contract");
         require(Address.isContract(nbuWbnb), "nbuWbnb is not a contract");
-        SYSTEM_TOKEN = INBU(systemToken);
+        SYSTEM_TOKEN = IBEP20(systemToken);
+        vestingContract = INimbusVesting(vestingContractAddress);
         NBU_WBNB = nbuWbnb;
         sponsorBonus = 10;
         giveBonus = 12;
         swapRouter = INimbusRouter(router);
         recipient = address(this);
+        vestingFirstPeriodDuration = 60 days;
+        vestingSecondPeriodDuration = 0;
     }
 
     function availableInitialSupply() external view returns (uint) {
@@ -218,7 +231,7 @@ contract NimbusInitialAcquisition is Ownable, Pausable {
     }
 
     function currentBalance(address token) external view returns (uint) { 
-        return INBU(token).balanceOf(address(this));
+        return IBEP20(token).balanceOf(address(this));
     }
 
     function _buySystemToken(address token, uint tokenAmount, uint systemTokenAmount, address systemTokenRecipient, uint stakingPoolId) private {
@@ -230,7 +243,7 @@ contract NimbusInitialAcquisition is Ownable, Pausable {
         emit BuySystemTokenForToken(token, tokenAmount, systemTokenAmount, systemTokenRecipient);
         if (giveBonus > 0) {
             uint bonusGiveSystemToken = systemTokenAmount * giveBonus / 100;
-            SYSTEM_TOKEN.give(systemTokenRecipient, bonusGiveSystemToken, 10); 
+            vestingContract.vestWithVestType(systemTokenRecipient, bonusGiveSystemToken, vestingFirstPeriodDuration, vestingSecondPeriodDuration, 1); 
             emit ProcessGiveBonus(systemTokenRecipient, bonusGiveSystemToken, block.timestamp);
         }
         _processSponsor(systemTokenAmount);
@@ -466,6 +479,19 @@ contract NimbusInitialAcquisition is Ownable, Pausable {
     function updateSwapRouter(address newSwapRouter) external onlyOwner {
         require(newSwapRouter != address(0), "NimbusInitialAcquisition: Address is zero");
         swapRouter = INimbusRouter(newSwapRouter);
+    }
+
+    function updateVestingContract(address vestingContractAddress) external onlyOwner {
+        require(Address.isContract(vestingContractAddress), "NimbusInitialAcquisition: VestingContractAddress is not a contract");
+        vestingContract = INimbusVesting(vestingContractAddress);
+        emit UpdateVestingContract(vestingContractAddress);
+    }
+
+    function updateVestingParams(uint vestingFirstPeriod, uint vestingSecondPeriod) external onlyOwner {
+        require(vestingFirstPeriod != vestingFirstPeriodDuration && vestingSecondPeriodDuration != vestingSecondPeriod, "NimbusInitialAcquisition: Same params");
+        vestingFirstPeriodDuration = vestingFirstPeriod;
+        vestingSecondPeriodDuration = vestingSecondPeriod;
+        emit UpdateVestingParams(vestingFirstPeriod, vestingSecondPeriod);
     }
 
     function updateSwapToken(address newSwapToken) external onlyOwner {

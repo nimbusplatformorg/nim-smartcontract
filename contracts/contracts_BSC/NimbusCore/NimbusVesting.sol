@@ -123,7 +123,14 @@ contract Pausable is Ownable {
     }
 }
 
-contract NimbusVesting is Ownable, Pausable { 
+interface INimbusVesting {
+    function vest(address user, uint amount, uint vestingFirstPeriod, uint vestingSecondPeriod) external;
+    function vestWithVestType(address user, uint amount, uint vestingFirstPeriodDuration, uint vestingSecondPeriodDuration, uint vestType) external;
+    function unvest() external returns (uint unvested);
+    function unvestFor(address user) external returns (uint unvested);
+}
+
+contract NimbusVesting is Ownable, Pausable, INimbusVesting { 
     using SafeBEP20 for IBEP20;
     
     IBEP20 public immutable vestingToken;
@@ -156,11 +163,11 @@ contract NimbusVesting is Ownable, Pausable {
         vestingToken = IBEP20(vestingTokenAddress);
     }
     
-    function vest(address user, uint amount, uint vestingFirstPeriod, uint vestingSecondPeriod) external { 
+    function vest(address user, uint amount, uint vestingFirstPeriod, uint vestingSecondPeriod) override external whenNotPaused { 
         vestWithVestType(user, amount, vestingFirstPeriod, vestingSecondPeriod, 0);
     }
 
-    function vestWithVestType(address user, uint amount, uint vestingFirstPeriodDuration, uint vestingSecondPeriodDuration, uint vestType) public {
+    function vestWithVestType(address user, uint amount, uint vestingFirstPeriodDuration, uint vestingSecondPeriodDuration, uint vestType) override public whenNotPaused {
         require (msg.sender == owner || vesters[msg.sender], "NimbusVesting::vest: Not allowed");
         require(user != address(0), "NimbusVesting::vest: Vest to the zero address");
         uint nonce = ++vestingNonces[user];
@@ -176,11 +183,11 @@ contract NimbusVesting is Ownable, Pausable {
         emit Vest(user, nonce, amount, vestingFirstPeriodDuration, vestingSecondPeriodDuration, vestingReleaseStartDate, vestingEnd, vestType);
     }
 
-    function unvest() external whenNotPaused returns (uint unvested) {
+    function unvest() external override whenNotPaused returns (uint unvested) {
         return _unvest(msg.sender);
     }
 
-    function unvestFor(address user) external whenNotPaused returns (uint unvested) {
+    function unvestFor(address user) external override whenNotPaused returns (uint unvested) {
         require(canAnyoneUnvest || vesters[msg.sender], "NimbusVesting: Not allowed");
         return _unvest(user);
     }
