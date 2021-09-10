@@ -23,7 +23,7 @@ contract("LockStakingRewardFixedAPY", (accounts) => {
   const [owner, client, notAllowAccount] = accounts;
   const clientAllowance = MAX_UINT256;
   const stakeAmount = new BN("200");
-  const _lockDuration = new BN(86400); // 1 day
+  const _lockDuration = new BN(86400); 
   const _rewardRate = new BN(100);
   const _rewardDuration = DAY.muln(365);
 
@@ -199,10 +199,8 @@ contract("LockStakingRewardFixedAPY", (accounts) => {
 
       it("after lock period + 100 days ", async function () {
         const timeIncrease = _lockDuration.add(DAY.muln(100)).toNumber();
-
         const expectedEarn = getEarnedMock(this.balancesRewardEq, timeIncrease);
         await timeHelper.increaseTime(timeIncrease);
-
         expect(await this.contract.earned(client)).to.be.bignumber.equal(
           expectedEarn
         );

@@ -27,7 +27,7 @@ const {
 contract("StakingLPRewardFixedAPY", (accounts) => {
   const [owner, client, notAllowAccount] = accounts;
   const clientAllowance = MAX_UINT256;
-  const defaultPeriod = new BN(86400); // 1 day
+  const defaultPeriod = new BN(86400); 
   const _rewardRate = new BN(100);
   const _rewardDuration = DAY.muln(365);
   const stakeAmount = new BN("2000");
