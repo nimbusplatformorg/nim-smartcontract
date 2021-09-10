@@ -199,10 +199,15 @@ contract NimbusVesting is Ownable, Pausable {
             VestingInfo memory vestingInfo = vestingInfos[user][i];
             if (vestingInfo.vestingAmount == vestingInfo.unvestedAmount) continue;
             if (vestingInfo.vestingReleaseStartDate > block.timestamp) break;
-            uint toUnvest = (block.timestamp - vestingInfo.vestingReleaseStartDate) * vestingInfo.vestingAmount / vestingInfo.vestingSecondPeriod;
-            if (toUnvest > vestingInfo.vestingAmount) {
+            uint toUnvest;
+            if (vestingInfo.vestingSecondPeriod != 0) {
+                toUnvest = (block.timestamp - vestingInfo.vestingReleaseStartDate) * vestingInfo.vestingAmount / vestingInfo.vestingSecondPeriod;
+                if (toUnvest > vestingInfo.vestingAmount) {
+                    toUnvest = vestingInfo.vestingAmount;
+                } 
+            } else {
                 toUnvest = vestingInfo.vestingAmount;
-            } 
+            }
             uint totalUnvestedForNonce = toUnvest;
             toUnvest -= vestingInfo.unvestedAmount;
             unvested += toUnvest;
@@ -220,10 +225,15 @@ contract NimbusVesting is Ownable, Pausable {
             VestingInfo memory vestingInfo = vestingInfos[user][i];
             if (vestingInfo.vestingAmount == vestingInfo.unvestedAmount) continue;
             if (vestingInfo.vestingReleaseStartDate > block.timestamp) break;
-            uint toUnvest = (block.timestamp - vestingInfo.vestingReleaseStartDate) * vestingInfo.vestingAmount / vestingInfo.vestingSecondPeriod;
-            if (toUnvest > vestingInfo.vestingAmount) {
+            uint toUnvest;
+            if (vestingInfo.vestingSecondPeriod != 0) {
+                toUnvest = (block.timestamp - vestingInfo.vestingReleaseStartDate) * vestingInfo.vestingAmount / vestingInfo.vestingSecondPeriod;
+                if (toUnvest > vestingInfo.vestingAmount) {
+                    toUnvest = vestingInfo.vestingAmount;
+                } 
+            } else {
                 toUnvest = vestingInfo.vestingAmount;
-            } 
+            }
             toUnvest -= vestingInfo.unvestedAmount;
             unvestAmount += toUnvest;
         }
