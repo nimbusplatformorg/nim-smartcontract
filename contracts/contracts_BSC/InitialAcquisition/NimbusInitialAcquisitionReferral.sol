@@ -289,13 +289,13 @@ contract NimbusInitialAcquisition is Ownable, Pausable {
         buyExactSystemTokenForTokens(token, systemTokenAmount, systemTokenRecipient, stakingPoolId);
     }
 
-    function buyExactSystemTokenForBnbAndRegister(uint systemTokenAmount, address systemTokenRecipient, uint stakingPoolId, uint sponsorId) external whenNotPaused {
+    function buyExactSystemTokenForBnbAndRegister(uint systemTokenAmount, address systemTokenRecipient, uint stakingPoolId, uint sponsorId) payable external whenNotPaused {
         require(sponsorId >= 1000000001, "NimbusInitialAcquisition: Sponsor id must be grater than 1000000000");
         referralProgramMarketing.registerUser(msg.sender, sponsorId);
         buyExactSystemTokenForBnb(systemTokenAmount, systemTokenRecipient, stakingPoolId);
     }
 
-    function buyExactSystemTokenForBnbAndRegister(uint systemTokenAmount, address systemTokenRecipient, uint stakingPoolId) external whenNotPaused {
+    function buyExactSystemTokenForBnbAndRegister(uint systemTokenAmount, address systemTokenRecipient, uint stakingPoolId) payable external whenNotPaused {
         referralProgramMarketing.registerUser(msg.sender, 1000000001);
         buyExactSystemTokenForBnb(systemTokenAmount, systemTokenRecipient, stakingPoolId);
     }
