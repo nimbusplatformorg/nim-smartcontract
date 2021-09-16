@@ -95,7 +95,15 @@ contract NimbusReferralProgramMarketing is Ownable {
     uint constant MARKETING_CATEGORY = 3;
     uint constant REFERRAL_LINES = 6;
 
+    mapping(address => bool) public isRegionManager;
+    mapping(address => bool) public isHeadOfLocation;
+    mapping(address => address) public userHeadOfLocations;
+    mapping(address => address) public headOfLocationRegionManagers;
+    address[] public regionalManagers;
+    address[] public headOfLocations;
 
+    mapping(address => uint) public headOfLocationTurnover; //contains the whole structure turnover (more than 6 lines), including userStructureTurnover (only 6 lines turnover)
+    mapping(address => uint) public regionalManagerTurnover;
     mapping(address => uint) public userPersonalTurnover;
     mapping(address => uint) public userStructureTurnover;
     mapping(address => uint) public userQualificationLevel;
@@ -116,11 +124,22 @@ contract NimbusReferralProgramMarketing is Ownable {
     event UserRegistered(address user, uint indexed sponsorId);
 
     event UpdateReferralProfitAmount(address indexed user, uint amount, uint indexed line);
+    event UpdateHeadOfLocationTurnover(address indexed headOfLocation, uint amount);
+    event UpdateRegionalManagerTurnover(address indexed regionalManager, uint amount);
     event UpdateVestingContract(address indexed vestingContractAddress);
     event UpdateAirdropProgramCap(uint indexed newAirdropProgramCap);
     event UpdateQualification(uint indexed index, uint indexed totalTurnoverAmount, uint indexed percentage, uint fixedReward);
+    event AddHeadOfLocation(address indexed headOfLocation, address indexed regionalManager);
+    event RemoveHeadOfLocation(address indexed headOfLocation);
+    event AddRegionalManager(address indexed regionalManager);
+    event RemoveRegionalManager(address indexed regionalManager);
+    event UpdateRegionalManager(address indexed user, bool indexed isManager);
     event ImportUserTurnoverSet(address indexed user, uint personalTurnover, uint structureTurnover);
     event ImportUserTurnoverUpdate(address indexed user, uint newPersonalTurnoverAmount, uint previousPersonalTurnoverAmount, uint newStructureTurnover, uint previousStructureTurnover);
+    event ImportHeadOfLocationTurnoverUpdate(address indexed headOfLocation, uint previousTurnover, uint newTurnover);
+    event ImportHeadOfLocationTurnoverSet(address indexed headOfLocation, uint turnover);
+    event ImportRegionalManagerTurnoverUpdate(address indexed headOfLocation, uint previousTurnover, uint newTurnover);
+    event ImportRegionalManagerTurnoverSet(address indexed headOfLocation, uint turnover);
 
     constructor(address _nbu, address _rpUsers, address _vestingContract) {
         require(Address.isContract(_nbu), "NimbusReferralProgramMarketing: _nbu is not a contract");
@@ -176,13 +195,13 @@ contract NimbusReferralProgramMarketing is Ownable {
         (uint userFixedAirdropAmount, uint userVariableAirdropAmount, uint potentialLevel) = getUserRewards(msg.sender);
         if (userFixedAirdropAmount > 0) {
             totalFixedAirdropped += userFixedAirdropAmount;
-            require(NBU.transfer(msg.sender, userFixedAirdropAmount), "NimbusReferralProgramMarketing: Fixed reward sending failed");
+            vestingContract.vestWithVestType(msg.sender, userFixedAirdropAmount, vestingFirstPeriodDuration, vestingSecondPeriodDuration, 11); 
             emit AirdropFixedReward(msg.sender, userFixedAirdropAmount, potentialLevel);
         }
 
         if (userVariableAirdropAmount > 0) {
             totalVariableAirdropped += userVariableAirdropAmount;
-            vestingContract.vestWithVestType(msg.sender, userVariableAirdropAmount, vestingFirstPeriodDuration, vestingSecondPeriodDuration, 11); 
+            vestingContract.vestWithVestType(msg.sender, userVariableAirdropAmount, vestingFirstPeriodDuration, vestingSecondPeriodDuration, 12); 
             emit AirdropVariableReward(msg.sender, userVariableAirdropAmount, potentialLevel);
         }
         require(totalAirdropped() <= airdropProgramCap, "NimbusReferralProgramMarketing: Airdrop program reached its cap");
@@ -194,6 +213,22 @@ contract NimbusReferralProgramMarketing is Ownable {
     function totalAirdropped() public view returns(uint) {
         return totalFixedAirdropped + totalVariableAirdropped;
     }
+
+    function totalTurnover() public view returns(uint total) {
+        for (uint i = 0; i < regionalManagers.length; i++) {
+            total += regionalManagerTurnover[regionalManagers[i]];
+        }
+    }
+
+    function getRegionalManagers() public view returns(address[] memory) {
+        return regionalManagers;
+    }
+
+    function getHeadOfLocations() public view returns(address[] memory) {
+        return headOfLocations;
+    }
+
+
 
     function canQualificationBeUpgraded(address user) external view returns (bool) {
         uint qualificationLevel = userQualificationLevel[user];
@@ -252,15 +287,52 @@ contract NimbusReferralProgramMarketing is Ownable {
             userPersonalTurnover[user] += amount;
             emit UpdateReferralProfitAmount(user, amount, line);
             address userSponsor = rpUsers.userSponsorAddressByAddress(user);
-            _updateReferralProfitAmount(userSponsor, amount, 1);
+            if (isHeadOfLocation[user]) {
+                headOfLocationTurnover[user] += amount;
+                address regionalManager = headOfLocationRegionManagers[user];
+                regionalManagerTurnover[regionalManager] += amount;
+            } else if (isRegionManager[user]) {
+                regionalManagerTurnover[user] += amount;
+                return;
+            } else {
+                _updateReferralProfitAmount(userSponsor, amount, 1);
+            }
         } else {
             userStructureTurnover[user] += amount;
             emit UpdateReferralProfitAmount(user, amount, line);
-            if (line >= REFERRAL_LINES) return;
+            if (isHeadOfLocation[user]) {
+                headOfLocationTurnover[user] += amount;
+                address regionalManager = headOfLocationRegionManagers[user];
+                regionalManagerTurnover[regionalManager] += amount;
+            } else if (isRegionManager[user]) {
+                regionalManagerTurnover[user] += amount;
+                return;
+            }
+
+            if (line >= REFERRAL_LINES) {
+                _updateReferralHeadOfLocationAndRegionalTurnover(user, amount);
+                return;
+            }
+
             address userSponsor = rpUsers.userSponsorAddressByAddress(user);
-            if (userSponsor == address(0)) return;
-            _updateReferralProfitAmount(userSponsor, amount, 1);
+            if (userSponsor == address(0)) {
+                _updateReferralHeadOfLocationAndRegionalTurnover(user, amount);
+                return;
+            }
+
+            _updateReferralProfitAmount(userSponsor, amount, ++line);
         }
+    }
+
+    function _updateReferralHeadOfLocationAndRegionalTurnover(address user, uint amount) internal {
+        address headOfLocation = userHeadOfLocations[user];
+        if (headOfLocation == address(0)) return;
+        headOfLocationTurnover[headOfLocation] += amount;
+        address regionalManager = headOfLocationRegionManagers[user];
+        emit UpdateHeadOfLocationTurnover(headOfLocation, amount);
+        if (regionalManager == address(0)) return;
+        regionalManagerTurnover[regionalManager] += amount;
+        emit UpdateRegionalManagerTurnover(regionalManager, amount);
     }
 
 
@@ -363,6 +435,38 @@ contract NimbusReferralProgramMarketing is Ownable {
         airdropProgramCap = newAirdropProgramCap;
         emit UpdateAirdropProgramCap(newAirdropProgramCap);
     }
+
+    function addHeadOfLocation(address headOfLocation, address regionalManager) external onlyOwner {
+        require(!isHeadOfLocation[headOfLocation], "NimbusReferralProgramMarketing: Head of location already added");
+        require(isRegionManager[regionalManager], "NimbusReferralProgramMarketing: No such regional manager");
+        headOfLocations.push(headOfLocation);
+        isHeadOfLocation[headOfLocation] = true;
+        headOfLocationRegionManagers[headOfLocation] = regionalManager;
+        emit AddHeadOfLocation(headOfLocation, regionalManager);
+    }
+
+    function removeHeadOfLocation(uint index) external onlyOwner {
+        require (headOfLocations.length > index, "NimbusReferralProgramMarketing: Incorrect index");
+        address headOfLocation = headOfLocations[index];
+        headOfLocations[index] = headOfLocations[headOfLocations.length - 1];
+        headOfLocations.pop(); 
+        emit RemoveHeadOfLocation(headOfLocation);
+    }
+
+    function addRegionalManager(address regionalManager) external onlyOwner {
+        require(!isRegionManager[regionalManager], "NimbusReferralProgramMarketing: No such regional manager");
+        regionalManagers.push(regionalManager);
+        isRegionManager[regionalManager] = true;
+        emit AddRegionalManager(regionalManager);
+    }
+
+    function removeRegionalManager(uint index) external onlyOwner {
+        require (regionalManagers.length > index, "NimbusReferralProgramMarketing: Incorrect index");
+        address regionalManager = regionalManagers[index];
+        regionalManagers[index] = regionalManagers[regionalManagers.length - 1];
+        regionalManagers.pop(); 
+        emit RemoveRegionalManager(regionalManager);
+    }
     
     function importUserTurnover(address user, uint personalTurnover, uint structureTurnover, bool addToCurrentTurnover) external onlyOwner {
         _importUserTurnover(user, personalTurnover, structureTurnover, addToCurrentTurnover);
@@ -374,6 +478,30 @@ contract NimbusReferralProgramMarketing is Ownable {
 
         for(uint i = 0; i < users.length; i++) {
             _importUserTurnover(users[i], personalTurnovers[i], structureTurnovers[i], addToCurrentTurnover);
+        }   
+    }
+
+    function importHeadOfLocationTurnover(address headOfLocation, uint turnover, bool addToCurrentTurnover) external onlyOwner {
+        _importHeadOfLocationTurnover(headOfLocation, turnover, addToCurrentTurnover);
+    }
+
+    function importHeadOfLocationTurnovers(address[] memory heads, uint[] memory turnovers, bool addToCurrentTurnover) external onlyOwner {
+        require(heads.length == turnovers.length, "NimbusReferralProgramMarketing: Array length missmatch");
+
+        for(uint i = 0; i < heads.length; i++) {
+            _importHeadOfLocationTurnover(heads[i], turnovers[i], addToCurrentTurnover);
+        }   
+    }
+
+    function importRegionalManagerTurnover(address headOfLocation, uint turnover, bool addToCurrentTurnover) external onlyOwner {
+        _importRegionalManagerTurnover(headOfLocation, turnover, addToCurrentTurnover);
+    }
+
+    function importRegionalManagerTurnovers(address[] memory managers, uint[] memory turnovers, bool addToCurrentTurnover) external onlyOwner {
+        require(managers.length == turnovers.length, "NimbusReferralProgramMarketing: Array length missmatch");
+
+        for(uint i = 0; i < managers.length; i++) {
+            _importRegionalManagerTurnover(managers[i], turnovers[i], addToCurrentTurnover);
         }   
     }
 
@@ -400,6 +528,36 @@ contract NimbusReferralProgramMarketing is Ownable {
            userPersonalTurnover[user] = personalTurnover;
            userStructureTurnover[user] = structureTurnover;
            emit ImportUserTurnoverSet(user, personalTurnover, structureTurnover);
+       }
+    }
+
+    function _importHeadOfLocationTurnover(address headOfLocation, uint turnover, bool addToCurrentTurnover) private {
+        require(isHeadOfLocation[headOfLocation], "NimbusReferralProgramMarketing: User is not head of location");
+       
+       if (addToCurrentTurnover) {
+           uint previousTurnover = headOfLocationTurnover[headOfLocation];
+
+           uint newTurnover = previousTurnover + turnover;
+           emit ImportHeadOfLocationTurnoverUpdate(headOfLocation, previousTurnover, newTurnover);
+           headOfLocationTurnover[headOfLocation] = newTurnover;
+       } else {
+           headOfLocationTurnover[headOfLocation] = turnover;
+           emit ImportHeadOfLocationTurnoverSet(headOfLocation, turnover);
+       }
+    }
+
+    function _importRegionalManagerTurnover(address regionalManager, uint turnover, bool addToCurrentTurnover) private {
+        require(isRegionManager[regionalManager], "NimbusReferralProgramMarketing: User is not head of location");
+       
+       if (addToCurrentTurnover) {
+           uint previousTurnover = regionalManagerTurnover[regionalManager];
+
+           uint newTurnover = previousTurnover + turnover;
+           emit ImportRegionalManagerTurnoverUpdate(regionalManager, previousTurnover, newTurnover);
+           regionalManagerTurnover[regionalManager] = newTurnover;
+       } else {
+           regionalManagerTurnover[regionalManager] = turnover;
+           emit ImportRegionalManagerTurnoverSet(regionalManager, turnover);
        }
     }
 }
