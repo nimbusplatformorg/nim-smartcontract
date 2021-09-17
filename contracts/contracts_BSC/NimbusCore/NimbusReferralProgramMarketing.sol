@@ -249,13 +249,18 @@ contract NimbusReferralProgramMarketing is Ownable {
         uint qualificationLevel = userQualificationLevel[user];
         potentialLevel = _getUserPotentialQualificationLevel(user, qualificationLevel);
         require(potentialLevel > qualificationLevel, "NimbusReferralProgramMarketing: User level hasn't changed");
-        uint userTurnover = userTotalTurnover(user);
+        //uint userTurnover = userTotalTurnover(user);
         uint[] memory userReferrals = rpUsers.getUserReferrals(user);
         if (userReferrals.length == 0) return (0, 0, potentialLevel);
+
+        address[] memory referralAddresses = new address[](userReferrals.length);
+        for (uint i; i < userReferrals.length; i++) {
+            address referralAddress = rpUsers.userAddressById(userReferrals[i]);
+            referralAddresses[i] = referralAddress;
+        }
         
-        (uint userFixedAmount, address[] memory referralAddresses) = _getFixedRewardToBePaidForQualification(user, userReferrals, userTurnover, qualificationLevel, potentialLevel);
-        userVariable = _getVariableRewardToBePaidForQualification(referralAddresses, userTurnover, potentialLevel);
-        userFixed = userFixedAmount;
+        userFixed = _getFixedRewardToBePaidForQualification(user, referralAddresses, userTotalTurnover(user), qualificationLevel, potentialLevel);
+        userVariable = _getVariableRewardToBePaidForQualification(referralAddresses, userStructureTurnover[user], potentialLevel);
     }
 
     function getUserRewardsByLines(address user) public view returns (uint userFixed, address[] memory referralAddresses, uint[] memory linePercentages, uint[] memory lineVariables, uint potentialLevel) {
@@ -263,12 +268,18 @@ contract NimbusReferralProgramMarketing is Ownable {
         uint qualificationLevel = userQualificationLevel[user];
         potentialLevel = _getUserPotentialQualificationLevel(user, qualificationLevel);
         require(potentialLevel > qualificationLevel, "NimbusReferralProgramMarketing: User level hasn't changed");
-        uint userTurnover = userTotalTurnover(user);
+        //uint userTurnover = userTotalTurnover(user);
         uint[] memory userReferrals = rpUsers.getUserReferrals(user);
         if (userReferrals.length == 0) return (0, new address[](0), new uint[](0), new uint[](0), potentialLevel);
         
-        (userFixed, referralAddresses) = _getFixedRewardToBePaidForQualification(user, userReferrals, userTurnover, qualificationLevel, potentialLevel);
-        (linePercentages, lineVariables) = _getVariableRewardToBePaidForQualificationByLines(referralAddresses, userTurnover, potentialLevel);
+        referralAddresses = new address[](userReferrals.length);
+        for (uint i; i < userReferrals.length; i++) {
+            address referralAddress = rpUsers.userAddressById(userReferrals[i]);
+            referralAddresses[i] = referralAddress;
+        }
+
+        userFixed = _getFixedRewardToBePaidForQualification(user, referralAddresses, userTotalTurnover(user), qualificationLevel, potentialLevel);
+        (linePercentages, lineVariables) = _getVariableRewardToBePaidForQualificationByLines(referralAddresses, userStructureTurnover[user], potentialLevel);
     }
 
 
@@ -349,39 +360,39 @@ contract NimbusReferralProgramMarketing is Ownable {
         return qualificationsCount; //user gained max qualification
     }
 
-    function _getFixedRewardToBePaidForQualification(address user, uint[] memory userReferrals, uint userTurnover, uint qualificationLevel, uint potentialLevel) internal view returns (uint userFixed, address[] memory referralAddresses) { 
-        referralAddresses = new address[](userReferrals.length);
+    function _getFixedRewardToBePaidForQualification(address user, address[] memory referralAddresses, uint userTurnover, uint qualificationLevel, uint potentialLevel) internal view returns (uint userFixed) { 
+        if (referralAddresses.length == 0) return 0;
         uint turnoverForCalculations;
         uint personalTurnover = userPersonalTurnover[user];
         if (personalTurnover * PERCENTAGE_PRECISION / userTurnover < 5e4) 
             turnoverForCalculations += personalTurnover;
         
-        for (uint i; i < userReferrals.length; i++) {
-            address referralAddress = rpUsers.userAddressById(userReferrals[i]);
-            referralAddresses[i] = referralAddress;
-            uint referralTurnover = userTotalTurnover(referralAddress);
+        for (uint i; i < referralAddresses.length; i++) {
+            uint referralTurnover = userTotalTurnover(referralAddresses[i]);
             if (referralTurnover * PERCENTAGE_PRECISION / userTurnover < 5e4)
                 turnoverForCalculations += referralTurnover;            
         }
 
-        for (uint i = qualificationLevel + 1; i <= potentialLevel; i++) {
-            uint fixedRewardAmount = qualifications[i].FixedReward;
-            if (fixedRewardAmount > 0) {
-                userFixed += fixedRewardAmount * turnoverForCalculations / userTurnover;
+        if (turnoverForCalculations > 0) {
+            for (uint i = qualificationLevel + 1; i <= potentialLevel; i++) {
+                uint fixedRewardAmount = qualifications[i].FixedReward;
+                if (fixedRewardAmount > 0) {
+                    userFixed += fixedRewardAmount * turnoverForCalculations / userTurnover;
+                }
             }
         }
     }
 
-    function _getVariableRewardToBePaidForQualification(address[] memory referralAddresses, uint userTurnover, uint qualification) internal view returns (uint userVariable) {
+    function _getVariableRewardToBePaidForQualification(address[] memory referralAddresses, uint structureTurnover, uint qualification) internal view returns (uint userVariable) {
         uint userQualificationPercentage = qualifications[qualification].Percentage;
         for (uint i; i < referralAddresses.length; i++) {
             uint referralPercentage = qualifications[userQualificationLevel[referralAddresses[i]]].Percentage;
             if (referralPercentage >= userQualificationPercentage) continue;
-            userVariable += (userQualificationPercentage - referralPercentage) * userTurnover / PERCENTAGE_PRECISION;
+            userVariable += (userQualificationPercentage - referralPercentage) * structureTurnover / PERCENTAGE_PRECISION;
         }
     }
 
-    function _getVariableRewardToBePaidForQualificationByLines(address[] memory referralAddresses, uint userTurnover, uint qualification) internal view returns (uint[] memory linePercentages, uint[] memory lineVariables) {
+    function _getVariableRewardToBePaidForQualificationByLines(address[] memory referralAddresses, uint structureTurnover, uint qualification) internal view returns (uint[] memory linePercentages, uint[] memory lineVariables) {
         uint userQualificationPercentage = qualifications[qualification].Percentage;
         linePercentages = new uint[](referralAddresses.length);
         lineVariables = new uint[](referralAddresses.length);
@@ -390,7 +401,7 @@ contract NimbusReferralProgramMarketing is Ownable {
             if (referralPercentage >= userQualificationPercentage) continue;
             uint linePercentage = userQualificationPercentage - referralPercentage;
             linePercentages[i] = linePercentage;
-            lineVariables[i] = linePercentage * userTurnover / PERCENTAGE_PRECISION;
+            lineVariables[i] = linePercentage * structureTurnover / PERCENTAGE_PRECISION;
         }
     }
 
