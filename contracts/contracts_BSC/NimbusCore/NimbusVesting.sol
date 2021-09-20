@@ -159,7 +159,7 @@ contract NimbusVesting is Ownable, Pausable, INimbusVesting {
     event ToggleCanAnyoneUnvest(bool indexed canAnyoneUnvest);
 
     constructor(address vestingTokenAddress) {
-        require(vestingTokenAddress != address(0) && Address.isContract(vestingTokenAddress), "NimbusVesting: Not a contract");
+        require(Address.isContract(vestingTokenAddress), "NimbusVesting: Not a contract");
         vestingToken = IBEP20(vestingTokenAddress);
     }
     
@@ -194,7 +194,8 @@ contract NimbusVesting is Ownable, Pausable, INimbusVesting {
 
     function unvestForBatch(address[] memory users) external whenNotPaused returns (uint unvested) {
         require(canAnyoneUnvest || vesters[msg.sender], "NimbusVesting: Not allowed");
-        for (uint i = 0; i < users.length; i++) {
+        uint length = users.length;
+        for (uint i = 0; i < length; i++) {
             unvested += _unvest(users[i]);
         }
     }
@@ -205,20 +206,21 @@ contract NimbusVesting is Ownable, Pausable, INimbusVesting {
         for (uint i = 1; i <= nonce; i++) {
             VestingInfo memory vestingInfo = vestingInfos[user][i];
             if (vestingInfo.vestingAmount == vestingInfo.unvestedAmount) continue;
-            if (vestingInfo.vestingReleaseStartDate > block.timestamp) break;
-            uint toUnvest;
-            if (vestingInfo.vestingSecondPeriod != 0) {
-                toUnvest = (block.timestamp - vestingInfo.vestingReleaseStartDate) * vestingInfo.vestingAmount / vestingInfo.vestingSecondPeriod;
-                if (toUnvest > vestingInfo.vestingAmount) {
+            if (vestingInfo.vestingReleaseStartDate <= block.timestamp) {
+                uint toUnvest;
+                if (vestingInfo.vestingSecondPeriod != 0) {
+                    toUnvest = (block.timestamp - vestingInfo.vestingReleaseStartDate) * vestingInfo.vestingAmount / vestingInfo.vestingSecondPeriod;
+                    if (toUnvest > vestingInfo.vestingAmount) {
+                        toUnvest = vestingInfo.vestingAmount;
+                    } 
+                } else {
                     toUnvest = vestingInfo.vestingAmount;
-                } 
-            } else {
-                toUnvest = vestingInfo.vestingAmount;
+                }
+                uint totalUnvestedForNonce = toUnvest;
+                toUnvest -= vestingInfo.unvestedAmount;
+                unvested += toUnvest;
+                vestingInfos[user][i].unvestedAmount = totalUnvestedForNonce;
             }
-            uint totalUnvestedForNonce = toUnvest;
-            toUnvest -= vestingInfo.unvestedAmount;
-            unvested += toUnvest;
-            vestingInfos[user][i].unvestedAmount = totalUnvestedForNonce;
         }
         require(unvested > 0, "NimbusVesting: Unvest amount is zero");
         vestingToken.safeTransfer(user, unvested);
@@ -231,18 +233,19 @@ contract NimbusVesting is Ownable, Pausable, INimbusVesting {
         for (uint i = 1; i <= nonce; i++) {
             VestingInfo memory vestingInfo = vestingInfos[user][i];
             if (vestingInfo.vestingAmount == vestingInfo.unvestedAmount) continue;
-            if (vestingInfo.vestingReleaseStartDate > block.timestamp) break;
-            uint toUnvest;
-            if (vestingInfo.vestingSecondPeriod != 0) {
-                toUnvest = (block.timestamp - vestingInfo.vestingReleaseStartDate) * vestingInfo.vestingAmount / vestingInfo.vestingSecondPeriod;
-                if (toUnvest > vestingInfo.vestingAmount) {
+            if (vestingInfo.vestingReleaseStartDate <= block.timestamp) {
+                uint toUnvest;
+                if (vestingInfo.vestingSecondPeriod != 0) {
+                    toUnvest = (block.timestamp - vestingInfo.vestingReleaseStartDate) * vestingInfo.vestingAmount / vestingInfo.vestingSecondPeriod;
+                    if (toUnvest > vestingInfo.vestingAmount) {
+                        toUnvest = vestingInfo.vestingAmount;
+                    } 
+                } else {
                     toUnvest = vestingInfo.vestingAmount;
-                } 
-            } else {
-                toUnvest = vestingInfo.vestingAmount;
+                }
+                toUnvest -= vestingInfo.unvestedAmount;
+                unvestAmount += toUnvest;
             }
-            toUnvest -= vestingInfo.unvestedAmount;
-            unvestAmount += toUnvest;
         }
     }
 
