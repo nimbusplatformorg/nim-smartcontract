@@ -349,7 +349,7 @@ contract NimbusReferralProgramMarketing is Ownable {
 
 
     function _getUserPotentialQualificationLevel(address user, uint qualificationLevel) internal view returns (uint) {
-        if (qualificationLevel >= qualificationsCount) return qualificationsCount;
+        if (qualificationLevel >= qualificationsCount) return qualificationsCount - 1;
         
         uint turnover = userTotalTurnover(user);
         for (uint i = qualificationLevel; i < qualificationsCount; i++) {
@@ -357,7 +357,7 @@ contract NimbusReferralProgramMarketing is Ownable {
                 return i;
             }
         }
-        return qualificationsCount; //user gained max qualification
+        return qualificationsCount - 1; //user gained max qualification
     }
 
     function _getFixedRewardToBePaidForQualification(address user, address[] memory referralAddresses, uint userTurnover, uint qualificationLevel, uint potentialLevel) internal view returns (uint userFixed) { 
@@ -479,40 +479,40 @@ contract NimbusReferralProgramMarketing is Ownable {
         emit RemoveRegionalManager(regionalManager);
     }
     
-    function importUserTurnover(address user, uint personalTurnover, uint structureTurnover, bool addToCurrentTurnover) external onlyOwner {
-        _importUserTurnover(user, personalTurnover, structureTurnover, addToCurrentTurnover);
+    function importUserTurnover(address user, uint personalTurnover, uint structureTurnover, uint levelHint, bool addToCurrentTurnover, bool updateLevel) external onlyOwner {
+        _importUserTurnover(user, personalTurnover, structureTurnover, levelHint, addToCurrentTurnover, updateLevel);
     }
 
-    function importUserTurnovers(address[] memory users, uint[] memory personalTurnovers, uint[] memory structureTurnovers, bool addToCurrentTurnover) external onlyOwner {
+    function importUserTurnovers(address[] memory users, uint[] memory personalTurnovers, uint[] memory structureTurnovers, uint[] memory levelsHints, bool addToCurrentTurnover, bool updateLevel) external onlyOwner {
         require(users.length == personalTurnovers.length && 
             users.length == structureTurnovers.length, "NimbusReferralProgramMarketing: Array length missmatch");
 
         for(uint i = 0; i < users.length; i++) {
-            _importUserTurnover(users[i], personalTurnovers[i], structureTurnovers[i], addToCurrentTurnover);
+            _importUserTurnover(users[i], personalTurnovers[i], structureTurnovers[i], levelsHints[i], addToCurrentTurnover, updateLevel);
         }   
     }
 
-    function importHeadOfLocationTurnover(address headOfLocation, uint turnover, bool addToCurrentTurnover) external onlyOwner {
-        _importHeadOfLocationTurnover(headOfLocation, turnover, addToCurrentTurnover);
+    function importHeadOfLocationTurnover(address headOfLocation, uint turnover, uint levelHint, bool addToCurrentTurnover, bool updateLevel) external onlyOwner {
+        _importHeadOfLocationTurnover(headOfLocation, turnover, levelHint, addToCurrentTurnover, updateLevel);
     }
 
-    function importHeadOfLocationTurnovers(address[] memory heads, uint[] memory turnovers, bool addToCurrentTurnover) external onlyOwner {
+    function importHeadOfLocationTurnovers(address[] memory heads, uint[] memory turnovers, uint[] memory levelsHints, bool addToCurrentTurnover, bool updateLevel) external onlyOwner {
         require(heads.length == turnovers.length, "NimbusReferralProgramMarketing: Array length missmatch");
 
         for(uint i = 0; i < heads.length; i++) {
-            _importHeadOfLocationTurnover(heads[i], turnovers[i], addToCurrentTurnover);
+            _importHeadOfLocationTurnover(heads[i], turnovers[i], levelsHints[i], addToCurrentTurnover, updateLevel);
         }   
     }
 
-    function importRegionalManagerTurnover(address headOfLocation, uint turnover, bool addToCurrentTurnover) external onlyOwner {
-        _importRegionalManagerTurnover(headOfLocation, turnover, addToCurrentTurnover);
+    function importRegionalManagerTurnover(address headOfLocation, uint turnover, uint levelHint, bool addToCurrentTurnover, bool updateLevel) external onlyOwner {
+        _importRegionalManagerTurnover(headOfLocation, turnover, levelHint, addToCurrentTurnover, updateLevel);
     }
 
-    function importRegionalManagerTurnovers(address[] memory managers, uint[] memory turnovers, bool addToCurrentTurnover) external onlyOwner {
+    function importRegionalManagerTurnovers(address[] memory managers, uint[] memory turnovers, uint[] memory levelsHints, bool addToCurrentTurnover, bool updateLevel) external onlyOwner {
         require(managers.length == turnovers.length, "NimbusReferralProgramMarketing: Array length missmatch");
 
         for(uint i = 0; i < managers.length; i++) {
-            _importRegionalManagerTurnover(managers[i], turnovers[i], addToCurrentTurnover);
+            _importRegionalManagerTurnover(managers[i], turnovers[i], levelsHints[i], addToCurrentTurnover, updateLevel);
         }   
     }
 
@@ -523,52 +523,99 @@ contract NimbusReferralProgramMarketing is Ownable {
         emit UpdateQualification(index, totalTurnoverAmount, percentage, fixedReward);
     }
 
-    function _importUserTurnover(address user, uint personalTurnover, uint structureTurnover, bool addToCurrentTurnover) private {
+    function _importUserTurnover(address user, uint personalTurnover, uint structureTurnover, uint levelHint, bool addToCurrentTurnover, bool updateLevel) private {
         require(rpUsers.userIdByAddress(user) != 0, "NimbusReferralProgramMarketing: User is not registered");
        
+       uint actualStructureTurnover;
        if (addToCurrentTurnover) {
            uint previousPersonalTurnover = userPersonalTurnover[user];
            uint previousStructureTurnover = userStructureTurnover[user];
 
            uint newPersonalTurnover = previousPersonalTurnover + personalTurnover;
-           uint newStructureTurnover = previousStructureTurnover + structureTurnover;
-           emit ImportUserTurnoverUpdate(user, newPersonalTurnover, previousPersonalTurnover, newStructureTurnover, previousStructureTurnover);
+           actualStructureTurnover = previousStructureTurnover + structureTurnover;
+           emit ImportUserTurnoverUpdate(user, newPersonalTurnover, previousPersonalTurnover, actualStructureTurnover, previousStructureTurnover);
            userPersonalTurnover[user] = newPersonalTurnover;
-           userStructureTurnover[user] = newStructureTurnover;
+           userStructureTurnover[user] = actualStructureTurnover;
        } else {
            userPersonalTurnover[user] = personalTurnover;
            userStructureTurnover[user] = structureTurnover;
            emit ImportUserTurnoverSet(user, personalTurnover, structureTurnover);
+           actualStructureTurnover = structureTurnover;
+       }
+
+       if (updateLevel) {
+            uint potentialLevel = _findQualificationLevel(actualStructureTurnover, levelHint);
+            if (potentialLevel > 0) {
+                userQualificationLevel[user] = potentialLevel;
+                emit QualificationUpdated(user, 0, potentialLevel);
+            }
        }
     }
 
-    function _importHeadOfLocationTurnover(address headOfLocation, uint turnover, bool addToCurrentTurnover) private {
+    function _importHeadOfLocationTurnover(address headOfLocation, uint turnover, uint levelHint, bool addToCurrentTurnover, bool updateLevel) private {
         require(isHeadOfLocation[headOfLocation], "NimbusReferralProgramMarketing: User is not head of location");
        
+       uint actualTurnover;
        if (addToCurrentTurnover) {
            uint previousTurnover = headOfLocationTurnover[headOfLocation];
 
-           uint newTurnover = previousTurnover + turnover;
-           emit ImportHeadOfLocationTurnoverUpdate(headOfLocation, previousTurnover, newTurnover);
-           headOfLocationTurnover[headOfLocation] = newTurnover;
+           actualTurnover = previousTurnover + turnover;
+           emit ImportHeadOfLocationTurnoverUpdate(headOfLocation, previousTurnover, actualTurnover);
+           headOfLocationTurnover[headOfLocation] = actualTurnover;
        } else {
            headOfLocationTurnover[headOfLocation] = turnover;
            emit ImportHeadOfLocationTurnoverSet(headOfLocation, turnover);
+           actualTurnover = turnover;
        }
+
+        if (updateLevel) {
+            uint potentialLevel = _findQualificationLevel(actualTurnover, levelHint);
+            if (potentialLevel > 0) {
+                userQualificationLevel[headOfLocation] = potentialLevel;
+                emit QualificationUpdated(headOfLocation, 0, potentialLevel);
+            }
+        }
     }
 
-    function _importRegionalManagerTurnover(address regionalManager, uint turnover, bool addToCurrentTurnover) private {
+    function _importRegionalManagerTurnover(address regionalManager, uint turnover, uint levelHint, bool addToCurrentTurnover, bool updateLevel) private {
         require(isRegionManager[regionalManager], "NimbusReferralProgramMarketing: User is not head of location");
+        require(levelHint < qualificationsCount, "NimbusReferralProgramMarketing: Incorrect level hint");
        
+       uint actualTurnover;
        if (addToCurrentTurnover) {
            uint previousTurnover = regionalManagerTurnover[regionalManager];
 
-           uint newTurnover = previousTurnover + turnover;
-           emit ImportRegionalManagerTurnoverUpdate(regionalManager, previousTurnover, newTurnover);
-           regionalManagerTurnover[regionalManager] = newTurnover;
+           actualTurnover = previousTurnover + turnover;
+           emit ImportRegionalManagerTurnoverUpdate(regionalManager, previousTurnover, actualTurnover);
+           regionalManagerTurnover[regionalManager] = actualTurnover;
        } else {
            regionalManagerTurnover[regionalManager] = turnover;
            emit ImportRegionalManagerTurnoverSet(regionalManager, turnover);
+           actualTurnover = turnover;
        }
+
+        if (updateLevel) {
+            uint potentialLevel = _findQualificationLevel(actualTurnover, levelHint);
+            if (potentialLevel > 0) {
+                userQualificationLevel[regionalManager] = potentialLevel;
+                emit QualificationUpdated(regionalManager, 0, potentialLevel);
+            }
+        }
+    }
+
+    function _findQualificationLevel(uint amount, uint levelHint) internal view returns (uint) {
+        if ((levelHint == (qualificationsCount - 1) && amount >= qualifications[levelHint].TotalTurnover) ||
+            (amount >= qualifications[levelHint].TotalTurnover && amount < qualifications[levelHint + 1].TotalTurnover)) {
+            return levelHint;
+        } else {
+            require(amount >= qualifications[levelHint].TotalTurnover, "NimbusReferralProgramMarketing: Incorrect hint");
+            for (uint i = levelHint; i < qualificationsCount; i++) {
+                if (qualifications[i+1].TotalTurnover > amount) {
+                    return i;
+                }
+            }
+        }
+
+        return qualificationsCount - 1;
     }
 }
