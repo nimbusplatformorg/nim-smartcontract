@@ -188,7 +188,7 @@ contract NimbusReferralProgramMarketing is Ownable {
     function updateReferralProfitAmount(address user, uint amount) external onlyAllowedContract {
         require(rpUsers.userIdByAddress(user) != 0, "NimbusReferralProgramMarketing: User is not a part of referral program");
 
-        _updateReferralProfitAmount(user, amount, 0);
+        _updateReferralProfitAmount(user, amount, 0, false);
     }
 
     function claimRewards() external {
@@ -293,7 +293,7 @@ contract NimbusReferralProgramMarketing is Ownable {
         return rpUsers.registerUserBySponsorId(user, sponsorId, MARKETING_CATEGORY);
     }
 
-    function _updateReferralProfitAmount(address user, uint amount, uint line) internal {
+    function _updateReferralProfitAmount(address user, uint amount, uint line, bool isRegionalAmountUpdated) internal {
         if (line == 0) {
             userPersonalTurnover[user] += amount;
             emit UpdateReferralProfitAmount(user, amount, line);
@@ -302,11 +302,12 @@ contract NimbusReferralProgramMarketing is Ownable {
                 headOfLocationTurnover[user] += amount;
                 address regionalManager = headOfLocationRegionManagers[user];
                 regionalManagerTurnover[regionalManager] += amount;
+                isRegionalAmountUpdated = true;
             } else if (isRegionManager[user]) {
                 regionalManagerTurnover[user] += amount;
                 return;
             } else {
-                _updateReferralProfitAmount(userSponsor, amount, 1);
+                _updateReferralProfitAmount(userSponsor, amount, 1, isRegionalAmountUpdated);
             }
         } else {
             userStructureTurnover[user] += amount;
@@ -314,24 +315,27 @@ contract NimbusReferralProgramMarketing is Ownable {
             if (isHeadOfLocation[user]) {
                 headOfLocationTurnover[user] += amount;
                 address regionalManager = headOfLocationRegionManagers[user];
-                regionalManagerTurnover[regionalManager] += amount;
+                if (!isRegionalAmountUpdated) {
+                    regionalManagerTurnover[regionalManager] += amount;
+                    isRegionalAmountUpdated = true;
+                }
             } else if (isRegionManager[user]) {
-                regionalManagerTurnover[user] += amount;
+                if (!isRegionalAmountUpdated) regionalManagerTurnover[user] += amount;
                 return;
             }
 
-            if (line >= REFERRAL_LINES) {
+            if (line >= REFERRAL_LINES && !isRegionalAmountUpdated) {
                 _updateReferralHeadOfLocationAndRegionalTurnover(user, amount);
                 return;
             }
 
             address userSponsor = rpUsers.userSponsorAddressByAddress(user);
-            if (userSponsor == address(0)) {
+            if (userSponsor == address(0) && !isRegionalAmountUpdated) {
                 _updateReferralHeadOfLocationAndRegionalTurnover(user, amount);
                 return;
             }
 
-            _updateReferralProfitAmount(userSponsor, amount, ++line);
+            _updateReferralProfitAmount(userSponsor, amount, ++line, isRegionalAmountUpdated);
         }
     }
 
@@ -465,7 +469,7 @@ contract NimbusReferralProgramMarketing is Ownable {
     }
 
     function addRegionalManager(address regionalManager) external onlyOwner {
-        require(!isRegionManager[regionalManager], "NimbusReferralProgramMarketing: No such regional manager");
+        require(!isRegionManager[regionalManager], "NimbusReferralProgramMarketing: Regional manager exist");
         regionalManagers.push(regionalManager);
         isRegionManager[regionalManager] = true;
         emit AddRegionalManager(regionalManager);
