@@ -140,6 +140,7 @@ contract NimbusReferralProgramMarketing is Ownable {
     event ImportHeadOfLocationTurnoverSet(address indexed headOfLocation, uint turnover);
     event ImportRegionalManagerTurnoverUpdate(address indexed headOfLocation, uint previousTurnover, uint newTurnover);
     event ImportRegionalManagerTurnoverSet(address indexed headOfLocation, uint turnover);
+    event ImportUserHeadOfLocation(address indexed user, address indexed headOfLocation);
 
     constructor(address _nbu, address _rpUsers, address _vestingContract) {
         require(Address.isContract(_nbu), "NimbusReferralProgramMarketing: _nbu is not a contract");
@@ -289,6 +290,10 @@ contract NimbusReferralProgramMarketing is Ownable {
         address sponsor = rpUsers.userAddressById(sponsorId);
         require(sponsor != address(0), "NimbusReferralProgramMarketing: User sponsor address is equal to 0");
 
+        address head = userHeadOfLocations[sponsor];
+        if(head != address(0)){
+            userHeadOfLocations[user] = head;
+        }
         emit UserRegistered(user, sponsorId);   
         return rpUsers.registerUserBySponsorId(user, sponsorId, MARKETING_CATEGORY);
     }
@@ -482,6 +487,17 @@ contract NimbusReferralProgramMarketing is Ownable {
         regionalManagers.pop(); 
         emit RemoveRegionalManager(regionalManager);
     }
+
+    function importUserHeadOfLocation(address user, address headOfLocation) external onlyOwner {
+        _importUserHeadOfLocation(user, headOfLocation);
+    }
+
+    function importUserHeadOfLocations(address[] memory users, address[] memory headOfLocationsLocal) external onlyOwner {
+        require(users.length == headOfLocationsLocal.length, "NimbusReferralProgramMarketing: Array length missmatch");
+        for(uint i = 0; i < users.length; i++) {
+            _importUserHeadOfLocation(users[i], headOfLocationsLocal[i]);
+        } 
+    }
     
     function importUserTurnover(address user, uint personalTurnover, uint structureTurnover, uint levelHint, bool addToCurrentTurnover, bool updateLevel) external onlyOwner {
         _importUserTurnover(user, personalTurnover, structureTurnover, levelHint, addToCurrentTurnover, updateLevel);
@@ -520,6 +536,12 @@ contract NimbusReferralProgramMarketing is Ownable {
         }   
     }
 
+
+    function _importUserHeadOfLocation(address user, address headOfLocation) internal onlyOwner {
+        require(isHeadOfLocation[headOfLocation], "NimbusReferralProgramMarketing: Not head of location");
+        userHeadOfLocations[user] = headOfLocation;
+        emit ImportUserHeadOfLocation(user, headOfLocation);
+    }
 
     function _updateQualification(uint index, uint totalTurnoverAmount, uint percentage, uint fixedReward) internal {
         require(totalTurnoverAmount > 0, "NimbusReferralProgramMarketing: Total turnover amount can't be lower then one");
