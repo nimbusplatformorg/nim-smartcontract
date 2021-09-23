@@ -95,6 +95,8 @@ interface INimbusReferralProgram {
     function userIdByAddress(address user) external view returns (uint);
     function userAddressById(uint id) external view returns (address);
     function userSponsorAddressByAddress(address user) external view returns (address);
+    function registerUserBySponsorId(address user, uint sponsorId, uint category) external returns (uint);
+    function registerUserBySponsorAddress(address user, address sponsorAddress, uint category) external returns (uint); 
 }
 
 interface INimbusStakingPool {
@@ -114,11 +116,6 @@ interface INimbusRouter {
     function getAmountsIn(uint amountOut, address[] calldata path) external view returns (uint[] memory amounts);
 }
 
-interface INimbusReferralProgramMarketing {
-    function registerUser(address user, uint sponsorId) external returns(uint userId);
-    function updateReferralProfitAmount(address user, address token, uint amount) external;
-}
-
 library Address {
     function isContract(address account) internal view returns (bool) {
         // This method relies in extcodesize, which returns 0 for contracts in construction, 
@@ -132,17 +129,15 @@ library Address {
 }
 
 contract NimbusInitialAcquisition is Ownable, Pausable {
+    uint public constant USER_CATEGORY = 3;
     IBEP20 public immutable SYSTEM_TOKEN;
     address public immutable NBU_WBNB;
     INimbusReferralProgram public referralProgram;
-    INimbusReferralProgramMarketing public referralProgramMarketing;
     INimbusStakingPool[] public stakingPoolsSponsor;   //staking pools for checking sponsor balances
 
     INimbusVesting public vestingContract;
     uint public vestingFirstPeriodDuration;
     uint public vestingSecondPeriodDuration;
-    
-    bool public allowAccuralMarketingReward;
 
     mapping(uint => INimbusStakingPool) public stakingPools;
 
@@ -237,9 +232,6 @@ contract NimbusInitialAcquisition is Ownable, Pausable {
     function _buySystemToken(address token, uint tokenAmount, uint systemTokenAmount, address systemTokenRecipient, uint stakingPoolId) private {
         stakingPools[stakingPoolId].stakeFor(systemTokenAmount, systemTokenRecipient);
         
-        if(allowAccuralMarketingReward) {
-            referralProgramMarketing.updateReferralProfitAmount(systemTokenRecipient, address(SYSTEM_TOKEN), systemTokenAmount);
-        }
         emit BuySystemTokenForToken(token, tokenAmount, systemTokenAmount, systemTokenRecipient);
         if (giveBonus > 0) {
             uint bonusGiveSystemToken = systemTokenAmount * giveBonus / 100;
@@ -293,45 +285,45 @@ contract NimbusInitialAcquisition is Ownable, Pausable {
 
     function buyExactSystemTokenForTokensAndRegister(address token, uint systemTokenAmount, address systemTokenRecipient, uint stakingPoolId, uint sponsorId) external whenNotPaused {
         require(sponsorId >= 1000000001, "NimbusInitialAcquisition: Sponsor id must be grater than 1000000000");
-        referralProgramMarketing.registerUser(msg.sender, sponsorId);
+        referralProgram.registerUserBySponsorId(msg.sender, sponsorId, USER_CATEGORY);
         buyExactSystemTokenForTokens(token, systemTokenAmount, systemTokenRecipient, stakingPoolId);
     }
 
     function buyExactSystemTokenForTokensAndRegister(address token, uint systemTokenAmount, address systemTokenRecipient, uint stakingPoolId) external whenNotPaused {
-        referralProgramMarketing.registerUser(msg.sender, 1000000001);
+        referralProgram.registerUserBySponsorId(msg.sender, 1000000001, USER_CATEGORY);
         buyExactSystemTokenForTokens(token, systemTokenAmount, systemTokenRecipient, stakingPoolId);
     }
 
     function buyExactSystemTokenForBnbAndRegister(uint systemTokenAmount, address systemTokenRecipient, uint stakingPoolId, uint sponsorId) payable external whenNotPaused {
         require(sponsorId >= 1000000001, "NimbusInitialAcquisition: Sponsor id must be grater than 1000000000");
-        referralProgramMarketing.registerUser(msg.sender, sponsorId);
+        referralProgram.registerUserBySponsorId(msg.sender, sponsorId, USER_CATEGORY);
         buyExactSystemTokenForBnb(systemTokenAmount, systemTokenRecipient, stakingPoolId);
     }
 
     function buyExactSystemTokenForBnbAndRegister(uint systemTokenAmount, address systemTokenRecipient, uint stakingPoolId) payable external whenNotPaused {
-        referralProgramMarketing.registerUser(msg.sender, 1000000001);
+        referralProgram.registerUserBySponsorId(msg.sender, 1000000001, USER_CATEGORY);
         buyExactSystemTokenForBnb(systemTokenAmount, systemTokenRecipient, stakingPoolId);
     }
 
     function buySystemTokenForExactBnbAndRegister(address systemTokenRecipient, uint stakingPoolId, uint sponsorId) payable external whenNotPaused {
         require(sponsorId >= 1000000001, "NimbusInitialAcquisition: Sponsor id must be grater than 1000000000");
-        referralProgramMarketing.registerUser(msg.sender, sponsorId);
+        referralProgram.registerUserBySponsorId(msg.sender, sponsorId, USER_CATEGORY);
         buySystemTokenForExactBnb(systemTokenRecipient, stakingPoolId);
     }
 
     function buySystemTokenForExactBnbAndRegister(address systemTokenRecipient, uint stakingPoolId) payable external whenNotPaused {
-        referralProgramMarketing.registerUser(msg.sender, 1000000001);
+        referralProgram.registerUserBySponsorId(msg.sender, 1000000001, USER_CATEGORY);
         buySystemTokenForExactBnb(systemTokenRecipient, stakingPoolId);
     }
 
     function buySystemTokenForExactTokensAndRegister(address token, uint tokenAmount, address systemTokenRecipient, uint stakingPoolId, uint sponsorId) external whenNotPaused {
         require(sponsorId >= 1000000001, "NimbusInitialAcquisition: Sponsor id must be grater than 1000000000");
-        referralProgramMarketing.registerUser(msg.sender, sponsorId);
+        referralProgram.registerUserBySponsorId(msg.sender, sponsorId, USER_CATEGORY);
         buySystemTokenForExactTokens(token, tokenAmount, systemTokenRecipient, stakingPoolId);
     }
 
     function buySystemTokenForExactTokensAndRegister(address token, uint tokenAmount, address systemTokenRecipient, uint stakingPoolId) external whenNotPaused {
-        referralProgramMarketing.registerUser(msg.sender, 1000000001);
+        referralProgram.registerUserBySponsorId(msg.sender, 1000000001, USER_CATEGORY);
         buySystemTokenForExactTokens(token, tokenAmount, systemTokenRecipient, stakingPoolId);
     }
     
@@ -418,10 +410,6 @@ contract NimbusInitialAcquisition is Ownable, Pausable {
         emit RescueToken(token, to, amount);
     }
 
-    function updateAccuralMarketingRewardAllowance(bool isAllowed) external onlyOwner {
-        allowAccuralMarketingReward = isAllowed;
-    }
-
     function updateStakingPool(uint id, address stakingPool) public onlyOwner {
         _updateStakingPool(id, stakingPool);
     }
@@ -452,11 +440,6 @@ contract NimbusInitialAcquisition is Ownable, Pausable {
     function updateReferralProgramContract(address newReferralProgramContract) external onlyOwner {
         require(newReferralProgramContract != address(0), "NimbusInitialAcquisition: Address is zero");
         referralProgram = INimbusReferralProgram(newReferralProgramContract);
-    }
-
-    function updateReferralProgramMarketingContract(address newReferralProgramMarketingContract) external onlyOwner {
-        require(newReferralProgramMarketingContract != address(0), "NimbusInitialAcquisition: Address is zero");
-        referralProgramMarketing = INimbusReferralProgramMarketing(newReferralProgramMarketingContract);
     }
 
     function updateStakingPoolAdd(address newStakingPool) external onlyOwner {
