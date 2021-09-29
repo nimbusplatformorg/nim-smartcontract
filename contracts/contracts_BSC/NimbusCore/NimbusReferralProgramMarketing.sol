@@ -123,6 +123,7 @@ contract NimbusReferralProgramMarketing is Ownable {
     event UpdateVestingParams(uint vestingFirstPeriod, uint vestingSecondPeriod);
 
     event UserRegistered(address user, uint indexed sponsorId);
+    event UserRegisteredWithoutHeadOfLocation(address user, uint indexed sponsorId);
 
     event UpdateReferralProfitAmount(address indexed user, uint amount, uint indexed line);
     event UpdateHeadOfLocationTurnover(address indexed headOfLocation, uint amount);
@@ -292,10 +293,18 @@ contract NimbusReferralProgramMarketing is Ownable {
         address sponsor = rpUsers.userAddressById(sponsorId);
         require(sponsor != address(0), "NimbusReferralProgramMarketing: User sponsor address is equal to 0");
 
-        address head = userHeadOfLocations[sponsor];
-        if(head != address(0)){
-            userHeadOfLocations[user] = head;
+        address sponsorAddress = rpUsers.userAddressById(sponsorId);
+        if (isHeadOfLocation[sponsorAddress]) {
+            userHeadOfLocations[user] = sponsorAddress;
+        } else {
+            address head = userHeadOfLocations[sponsor];
+            if (head != address(0)){
+                userHeadOfLocations[user] = head;
+            } else {
+                emit UserRegisteredWithoutHeadOfLocation(user, sponsorId);
+            }
         }
+        
         emit UserRegistered(user, sponsorId);   
         return rpUsers.registerUserBySponsorId(user, sponsorId, MARKETING_CATEGORY);
     }
