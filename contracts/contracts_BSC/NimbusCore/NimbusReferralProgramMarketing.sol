@@ -567,6 +567,7 @@ contract NimbusReferralProgramMarketing is Ownable {
     function _addHeadOfLocation(address headOfLocation, address regionalManager) internal {
         require(!isHeadOfLocation[headOfLocation], "NimbusReferralProgramMarketing: Head of location already added");
         require(isRegionManager[regionalManager], "NimbusReferralProgramMarketing: Regional manager exists");
+        require(rpUsers.userIdByAddress(headOfLocation) > 1000000001, "NimbusReferralProgramMarketing: Head of location not in referral system or first user");
         headOfLocations.push(headOfLocation);
         isHeadOfLocation[headOfLocation] = true;
         headOfLocationRegionManagers[headOfLocation] = regionalManager;
@@ -575,6 +576,7 @@ contract NimbusReferralProgramMarketing is Ownable {
 
     function _addRegionalManager(address regionalManager) internal {
         require(!isRegionManager[regionalManager], "NimbusReferralProgramMarketing: Regional manager exist");
+        require(rpUsers.userIdByAddress(regionalManager) > 1000000001, "NimbusReferralProgramMarketing: Regional manager not in referral system or first user");
         regionalManagers.push(regionalManager);
         isRegionManager[regionalManager] = true;
         emit AddRegionalManager(regionalManager);
