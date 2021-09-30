@@ -202,7 +202,6 @@ contract NimbusInitialAcquisition is Ownable, Pausable {
     function buyExactSystemTokenForTokensAndRegister(address token, uint systemTokenAmount, address systemTokenRecipient, uint stakingPoolId, uint sponsorId) external whenNotPaused {
         require(sponsorId >= 1000000001, "NimbusInitialAcquisition: Sponsor id must be grater than 1000000000");
         require(userPurchasesEquivalent[referralProgram.userAddressById(sponsorId)] >= swapTokenAmountForBonusThreshold, "NimbusInitialAcquisition: Sponsor purchases amount is low");
-        require(referralProgram.userIdByAddress(msg.sender) > 0, "NimbusInitialAcquisition: Not part of referral program");
         referralProgramMarketing.registerUser(msg.sender, sponsorId);
         buyExactSystemTokenForTokens(token, systemTokenAmount, systemTokenRecipient, stakingPoolId);
     }
@@ -215,7 +214,6 @@ contract NimbusInitialAcquisition is Ownable, Pausable {
     function buyExactSystemTokenForBnbAndRegister(uint systemTokenAmount, address systemTokenRecipient, uint stakingPoolId, uint sponsorId) payable external whenNotPaused {
         require(sponsorId >= 1000000001, "NimbusInitialAcquisition: Sponsor id must be grater than 1000000000");
         require(userPurchasesEquivalent[referralProgram.userAddressById(sponsorId)] >= swapTokenAmountForBonusThreshold, "NimbusInitialAcquisition: Sponsor purchases amount is low");
-        require(referralProgram.userIdByAddress(msg.sender) > 0, "NimbusInitialAcquisition: Not part of referral program");
         referralProgramMarketing.registerUser(msg.sender, sponsorId);
         buyExactSystemTokenForBnb(systemTokenAmount, systemTokenRecipient, stakingPoolId);
     }
@@ -228,7 +226,6 @@ contract NimbusInitialAcquisition is Ownable, Pausable {
     function buySystemTokenForExactBnbAndRegister(address systemTokenRecipient, uint stakingPoolId, uint sponsorId) payable external whenNotPaused {
         require(sponsorId >= 1000000001, "NimbusInitialAcquisition: Sponsor id must be grater than 1000000000");
         require(userPurchasesEquivalent[referralProgram.userAddressById(sponsorId)] >= swapTokenAmountForBonusThreshold, "NimbusInitialAcquisition: Sponsor purchases amount is low");
-        require(referralProgram.userIdByAddress(msg.sender) > 0, "NimbusInitialAcquisition: Not part of referral program");
         referralProgramMarketing.registerUser(msg.sender, sponsorId);
         buySystemTokenForExactBnb(systemTokenRecipient, stakingPoolId);
     }
@@ -241,7 +238,6 @@ contract NimbusInitialAcquisition is Ownable, Pausable {
     function buySystemTokenForExactTokensAndRegister(address token, uint tokenAmount, address systemTokenRecipient, uint stakingPoolId, uint sponsorId) external whenNotPaused {
         require(sponsorId >= 1000000001, "NimbusInitialAcquisition: Sponsor id must be grater than 1000000000");
         require(userPurchasesEquivalent[referralProgram.userAddressById(sponsorId)] >= swapTokenAmountForBonusThreshold, "NimbusInitialAcquisition: Sponsor purchases amount is low");
-        require(referralProgram.userIdByAddress(msg.sender) > 0, "NimbusInitialAcquisition: Not part of referral program");
         referralProgramMarketing.registerUser(msg.sender, sponsorId);
         buySystemTokenForExactTokens(token, tokenAmount, systemTokenRecipient, stakingPoolId);
     }
