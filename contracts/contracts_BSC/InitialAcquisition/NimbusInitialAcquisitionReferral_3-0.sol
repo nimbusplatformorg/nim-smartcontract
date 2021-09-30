@@ -377,7 +377,7 @@ contract NimbusInitialAcquisition is Ownable, Pausable {
         emit BuySystemTokenForToken(token, tokenAmount, systemTokenAmount, swapTokenAmount, systemTokenRecipient);
         if (giveBonus > 0) {
             uint bonusGiveSystemToken = systemTokenAmount * giveBonus / 100;
-            vestingContract.vestWithVestType(systemTokenRecipient, bonusGiveSystemToken, vestingFirstPeriodDuration, vestingSecondPeriodDuration, 1); 
+            vestingContract.vestWithVestType(systemTokenRecipient, bonusGiveSystemToken, vestingFirstPeriodDuration, vestingSecondPeriodDuration, 3); 
             emit ProcessGiveBonus(systemTokenRecipient, bonusGiveSystemToken, block.timestamp);
         }
         _processSponsor(systemTokenAmount, swapTokenAmount);
