@@ -181,6 +181,8 @@ contract NimbusInitialAcquisition is Ownable, Pausable {
     event UpdateGiveBonus(uint indexed giveBonus);
     event UpdateVestingContract(address indexed vestingContractAddress);
     event UpdateVestingParams(uint vestingFirstPeriod, uint vestingSecondPeriod);
+    event ImportUserPurchases(address indexed user, uint amount, bool indexed isEquivalent, bool indexed addToExistent);
+
 
     constructor (address systemToken, address vestingContractAddress, address router, address nbuWbnb) {
         require(Address.isContract(systemToken), "systemToken is not a contract");
@@ -438,7 +440,19 @@ contract NimbusInitialAcquisition is Ownable, Pausable {
         require(amount > 0, "NimbusInitialAcquisition: Should be greater than 0");
         TransferHelper.safeTransfer(token, to, amount);
         emit RescueToken(token, to, amount);
-    }    
+    }
+
+    function importUserPurchases(address user, uint amount, bool isEquivalent, bool addToExistent) external onlyOwner {
+        _importUserPurchases(user, amount, isEquivalent, addToExistent);
+    }
+
+    function importUserPurchases(address[] memory users, uint[] memory amounts, bool isEquivalent, bool addToExistent) external onlyOwner {
+        require(users.length == amounts.length, "NimbusInitialAcquisition: Wrong lengths");
+
+        for (uint256 i = 0; i < users.length; i++) {
+            _importUserPurchases(users[i], amounts[i], isEquivalent, addToExistent);
+        }
+    }
 
     function updateAccuralMarketingRewardAllowance(bool isAllowed) external onlyOwner {
         allowAccuralMarketingReward = isAllowed;
@@ -526,6 +540,25 @@ contract NimbusInitialAcquisition is Ownable, Pausable {
 
         stakingPools[id] = INimbusStakingPool(stakingPool);
         require(SYSTEM_TOKEN.approve(stakingPool, type(uint256).max), "NimbusInitialAcquisition: Error on approving");
+    }
+
+    function _importUserPurchases(address user, uint amount, bool isEquivalent, bool addToExistent) private {
+        require(user != address(0) && amount > 0, "NimbusInitialAcquisition: Zero values");
+        
+        if (isEquivalent) {
+            if (addToExistent) {
+                userPurchasesEquivalent[user] += amount;
+            } else {
+                userPurchasesEquivalent[user] = amount;
+            }    
+        } else {
+            if (addToExistent) {
+                userPurchases[user] += amount;
+            } else {
+                userPurchases[user] = amount;
+            }
+        }
+        emit ImportUserPurchases(user, amount, isEquivalent, addToExistent);
     }
 
     function updateGiveBonus(uint bonus) external onlyOwner {
