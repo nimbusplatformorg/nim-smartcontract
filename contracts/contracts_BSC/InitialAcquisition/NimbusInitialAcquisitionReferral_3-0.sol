@@ -367,9 +367,9 @@ contract NimbusInitialAcquisition is Ownable, Pausable {
 
     function _buySystemToken(address token, uint tokenAmount, uint systemTokenAmount, address systemTokenRecipient, uint stakingPoolId) private {
         stakingPools[stakingPoolId].stakeFor(systemTokenAmount, systemTokenRecipient);
-        userPurchases[systemTokenRecipient] = systemTokenAmount;
+        userPurchases[systemTokenRecipient] += systemTokenAmount;
         uint swapTokenAmount = getTokenAmountForSystemToken(swapToken, systemTokenAmount);
-        userPurchasesEquivalent[systemTokenRecipient] = swapTokenAmount;
+        userPurchasesEquivalent[systemTokenRecipient] += swapTokenAmount;
 
         if(allowAccuralMarketingReward && address(referralProgramMarketing) != address(0)) {
             referralProgramMarketing.updateReferralProfitAmount(systemTokenRecipient, systemTokenAmount);
@@ -380,45 +380,44 @@ contract NimbusInitialAcquisition is Ownable, Pausable {
             vestingContract.vestWithVestType(systemTokenRecipient, bonusGiveSystemToken, vestingFirstPeriodDuration, vestingSecondPeriodDuration, 3); 
             emit ProcessGiveBonus(systemTokenRecipient, bonusGiveSystemToken, block.timestamp);
         }
-        _processSponsor(systemTokenAmount, swapTokenAmount);
+        _processSponsor(systemTokenRecipient, systemTokenAmount, swapTokenAmount);
     }
 
-    function _processSponsor(uint systemTokenAmount, uint swapTokenAmount) private {
-        address sponsorAddress = _getUserSponsorAddress();
+    function _processSponsor(address systemTokenRecipient, uint systemTokenAmount, uint swapTokenAmount) private {
+        address sponsorAddress = getUserSponsorAddress(systemTokenRecipient);
         if (sponsorAddress != address(0)) { 
             uint minSwapTokenAmountForBonus = swapTokenAmountForBonusThreshold;
-            uint userTotalPurchasesEquivalent = swapTokenAmount + userPurchasesEquivalent[msg.sender]; 
-            if (userTotalPurchasesEquivalent >= minSwapTokenAmountForBonus) {
+            if (userPurchasesEquivalent[systemTokenRecipient] >= minSwapTokenAmountForBonus) {
                 uint sponsorPurchases = userPurchasesEquivalent[sponsorAddress];
                 
                 if (sponsorPurchases >= minSwapTokenAmountForBonus) {
-                    uint bonusBase = systemTokenAmount + unclaimedBonusBases[msg.sender];
+                    uint bonusBase = systemTokenAmount + unclaimedBonusBases[systemTokenRecipient];
                     uint sponsorBonusAmount = bonusBase * sponsorBonus / 100;
                     require(SYSTEM_TOKEN.transfer(sponsorAddress, sponsorBonusAmount), "NimbusInitialAcquisition: Transfer failed");
-                    unclaimedBonusBases[msg.sender] = 0;
-                    unclaimedBonusBasesEquivalent[msg.sender] = 0;
-                    emit ProcessSponsorBonus(sponsorAddress, msg.sender, sponsorBonusAmount, block.timestamp);
+                    unclaimedBonusBases[systemTokenRecipient] = 0;
+                    unclaimedBonusBasesEquivalent[systemTokenRecipient] = 0;
+                    emit ProcessSponsorBonus(sponsorAddress, systemTokenRecipient, sponsorBonusAmount, block.timestamp);
                 } else {
-                    unclaimedBonusBases[msg.sender] += systemTokenAmount;
-                    unclaimedBonusBasesEquivalent[msg.sender] += swapTokenAmount;
-                    emit AddUnclaimedSponsorBonus(msg.sender, systemTokenAmount, swapTokenAmount);
+                    unclaimedBonusBases[systemTokenRecipient] += systemTokenAmount;
+                    unclaimedBonusBasesEquivalent[systemTokenRecipient] += swapTokenAmount;
+                    emit AddUnclaimedSponsorBonus(systemTokenRecipient, systemTokenAmount, swapTokenAmount);
                 }
             } else {
-                unclaimedBonusBases[msg.sender] += systemTokenAmount;
-                unclaimedBonusBasesEquivalent[msg.sender] += swapTokenAmount;
-                emit AddUnclaimedSponsorBonus(msg.sender, systemTokenAmount, swapTokenAmount);
+                unclaimedBonusBases[systemTokenRecipient] += systemTokenAmount;
+                unclaimedBonusBasesEquivalent[systemTokenRecipient] += swapTokenAmount;
+                emit AddUnclaimedSponsorBonus(systemTokenRecipient, systemTokenAmount, swapTokenAmount);
             }
         } else {
-            unclaimedBonusBases[msg.sender] += systemTokenAmount;
-            emit AddUnclaimedSponsorBonus(msg.sender, systemTokenAmount, swapTokenAmount);
+            unclaimedBonusBases[systemTokenRecipient] += systemTokenAmount;
+            emit AddUnclaimedSponsorBonus(systemTokenRecipient, systemTokenAmount, swapTokenAmount);
         }
     }
 
-    function _getUserSponsorAddress() private view returns (address) {
+    function getUserSponsorAddress(address user) public view returns (address) {
         if (address(referralProgram) == address(0)) {
             return address(0);
         } else {
-            return referralProgram.userSponsorAddressByAddress(msg.sender);
+            return referralProgram.userSponsorAddressByAddress(user);
         } 
     }
 
@@ -439,7 +438,7 @@ contract NimbusInitialAcquisition is Ownable, Pausable {
         require(amount > 0, "NimbusInitialAcquisition: Should be greater than 0");
         TransferHelper.safeTransfer(token, to, amount);
         emit RescueToken(token, to, amount);
-    }
+    }    
 
     function updateAccuralMarketingRewardAllowance(bool isAllowed) external onlyOwner {
         allowAccuralMarketingReward = isAllowed;
