@@ -313,7 +313,6 @@ contract NimbusReferralProgramMarketing is Ownable {
         if (line == 0) {
             userPersonalTurnover[user] += amount;
             emit UpdateReferralProfitAmount(user, amount, line);
-            address userSponsor = rpUsers.userSponsorAddressByAddress(user);
             if (isHeadOfLocation[user]) {
                 headOfLocationTurnover[user] += amount;
                 address regionalManager = headOfLocationRegionManagers[user];
@@ -323,6 +322,7 @@ contract NimbusReferralProgramMarketing is Ownable {
                 regionalManagerTurnover[user] += amount;
                 return;
             } else {
+                address userSponsor = rpUsers.userSponsorAddressByAddress(user);
                 _updateReferralProfitAmount(userSponsor, amount, 1, isRegionalAmountUpdated);
             }
         } else {
@@ -340,14 +340,14 @@ contract NimbusReferralProgramMarketing is Ownable {
                 return;
             }
 
-            if (line >= REFERRAL_LINES && !isRegionalAmountUpdated) {
-                _updateReferralHeadOfLocationAndRegionalTurnover(user, amount);
+            if (line >= REFERRAL_LINES) {
+                if (!isRegionalAmountUpdated) _updateReferralHeadOfLocationAndRegionalTurnover(user, amount);
                 return;
             }
 
             address userSponsor = rpUsers.userSponsorAddressByAddress(user);
-            if (userSponsor == address(0) && !isRegionalAmountUpdated) {
-                _updateReferralHeadOfLocationAndRegionalTurnover(user, amount);
+            if (userSponsor == address(0)) {
+                if (!isRegionalAmountUpdated) _updateReferralHeadOfLocationAndRegionalTurnover(user, amount);
                 return;
             }
 
