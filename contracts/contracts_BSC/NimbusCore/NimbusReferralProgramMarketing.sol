@@ -250,7 +250,7 @@ contract NimbusReferralProgramMarketing is Ownable {
     {
         uint qualificationLevel = userQualificationLevel[user];
         canQualBeUpgraded = _getUserPotentialQualificationLevel(user, qualificationLevel) > qualificationLevel;
-        if (qualificationLevel >= qualificationLevel - 1) {
+        if (qualificationLevel >= qualificationsCount - 1) {
             (, uint userVariable, ,)  = getUserRewards(user);
             canClaimMaxLevelReward = userVariable > 0;
         }
