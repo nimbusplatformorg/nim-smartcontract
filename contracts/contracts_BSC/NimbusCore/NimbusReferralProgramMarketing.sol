@@ -108,6 +108,7 @@ contract NimbusReferralProgramMarketing is Ownable {
     mapping(address => uint) public userStructureTurnover;
     mapping(address => uint) public userQualificationLevel;
     mapping(address => uint) public userQualificationOrigin; //0 - organic, 1 - imported, 2 - set
+    mapping(address => uint) public userMaxLevelPayment;
 
     uint public qualificationsCount;
     mapping(uint => Qualification) public qualifications;
@@ -137,6 +138,7 @@ contract NimbusReferralProgramMarketing is Ownable {
     event RemoveRegionalManager(address indexed regionalManager);
     event UpdateRegionalManager(address indexed user, bool indexed isManager);
     event ImportUserTurnoverSet(address indexed user, uint personalTurnover, uint structureTurnover);
+    event ImportUserMaxLevelPayment(address indexed user, uint maxLevelPayment, bool indexed addToCurrentPayment);
     event ImportUserTurnoverUpdate(address indexed user, uint newPersonalTurnoverAmount, uint previousPersonalTurnoverAmount, uint newStructureTurnover, uint previousStructureTurnover);
     event ImportHeadOfLocationTurnoverUpdate(address indexed headOfLocation, uint previousTurnover, uint newTurnover);
     event ImportHeadOfLocationTurnoverSet(address indexed headOfLocation, uint turnover);
@@ -144,6 +146,7 @@ contract NimbusReferralProgramMarketing is Ownable {
     event ImportRegionalManagerTurnoverSet(address indexed headOfLocation, uint turnover);
     event ImportUserHeadOfLocation(address indexed user, address indexed headOfLocation);
     event UpgradeUserQualification(address indexed user, uint indexed previousQualification, uint indexed newQualification, uint previousStructureTurnOver, uint newStructureTurnover);
+
 
     constructor(address _nbu, address _rpUsers, address _vestingContract) {
         require(Address.isContract(_nbu), "NimbusReferralProgramMarketing: _nbu is not a contract");
@@ -196,7 +199,7 @@ contract NimbusReferralProgramMarketing is Ownable {
     }
 
     function claimRewards() external {
-        (uint userFixedAirdropAmount, uint userVariableAirdropAmount, uint potentialLevel) = getUserRewards(msg.sender);
+        (uint userFixedAirdropAmount, uint userVariableAirdropAmount, uint potentialLevel, bool isMaxLevel) = getUserRewards(msg.sender);
         if (userFixedAirdropAmount > 0) {
             totalFixedAirdropped += userFixedAirdropAmount;
             vestingContract.vestWithVestType(msg.sender, userFixedAirdropAmount, vestingFirstPeriodDuration, vestingSecondPeriodDuration, 11); 
@@ -211,6 +214,9 @@ contract NimbusReferralProgramMarketing is Ownable {
         require(totalAirdropped() <= airdropProgramCap, "NimbusReferralProgramMarketing: Airdrop program reached its cap");
         emit QualificationUpdated(msg.sender, userQualificationLevel[msg.sender], potentialLevel);
         userQualificationLevel[msg.sender] = potentialLevel;
+        if (isMaxLevel) {
+            userMaxLevelPayment[msg.sender] += userVariableAirdropAmount;
+        }
     }
 
 
@@ -239,6 +245,17 @@ contract NimbusReferralProgramMarketing is Ownable {
         return _getUserPotentialQualificationLevel(user, qualificationLevel) > qualificationLevel;
     }
 
+    function canQualificationBeUpgradedOrCanClaimMaxLevelReward(address user) external view 
+        returns (bool canQualBeUpgraded, bool canClaimMaxLevelReward) 
+    {
+        uint qualificationLevel = userQualificationLevel[user];
+        canQualBeUpgraded = _getUserPotentialQualificationLevel(user, qualificationLevel) > qualificationLevel;
+        if (qualificationLevel >= qualificationLevel - 1) {
+            (, uint userVariable, ,)  = getUserRewards(user);
+            canClaimMaxLevelReward = userVariable > 0;
+        }
+    }
+
     function getUserPotentialQualificationLevel(address user) public view returns (uint) {
         uint qualificationLevel = userQualificationLevel[user];
         return _getUserPotentialQualificationLevel(user, qualificationLevel);
@@ -248,14 +265,19 @@ contract NimbusReferralProgramMarketing is Ownable {
         return userPersonalTurnover[user] + userStructureTurnover[user];
     }
 
-    function getUserRewards(address user) public view returns (uint userFixed, uint userVariable, uint potentialLevel) {
+    function getUserRewards(address user) public view returns (uint userFixed, uint userVariable, uint potentialLevel, bool isMaxLevel) {
         require(rpUsers.userIdByAddress(user) > 0, "NimbusReferralProgramMarketing: User not registered");
         uint qualificationLevel = userQualificationLevel[user];
-        potentialLevel = _getUserPotentialQualificationLevel(user, qualificationLevel);
-        require(potentialLevel > qualificationLevel, "NimbusReferralProgramMarketing: User level hasn't changed");
-        //uint userTurnover = userTotalTurnover(user);
+        isMaxLevel = qualificationLevel >= (qualificationsCount - 1);
+        if (!isMaxLevel) {
+            potentialLevel = _getUserPotentialQualificationLevel(user, qualificationLevel);
+            require(potentialLevel > qualificationLevel, "NimbusReferralProgramMarketing: User level hasn't changed");
+        } else {
+            potentialLevel = qualificationsCount - 1;
+        }
+
         uint[] memory userReferrals = rpUsers.getUserReferrals(user);
-        if (userReferrals.length == 0) return (0, 0, potentialLevel);
+        if (userReferrals.length == 0) return (0, 0, potentialLevel, isMaxLevel);
 
         address[] memory referralAddresses = new address[](userReferrals.length);
         for (uint i; i < userReferrals.length; i++) {
@@ -264,17 +286,25 @@ contract NimbusReferralProgramMarketing is Ownable {
         }
         
         userFixed = _getFixedRewardToBePaidForQualification(user, referralAddresses, userTotalTurnover(user), qualificationLevel, potentialLevel);
-        userVariable = _getVariableRewardToBePaidForQualification(referralAddresses, userStructureTurnover[user], potentialLevel);
+        userVariable = _getVariableRewardToBePaidForQualification(referralAddresses, potentialLevel);
+        if (isMaxLevel) {
+            if (userVariable > userMaxLevelPayment[user]) userVariable -= userMaxLevelPayment[user];
+        }
     }
 
-    function getUserRewardsByLines(address user) public view returns (uint userFixed, address[] memory referralAddresses, uint[] memory linePercentages, uint[] memory lineVariables, uint potentialLevel) {
+    function getUserRewardsByLines(address user) public view returns (uint userFixed, address[] memory referralAddresses, uint[] memory linePercentages, uint[] memory lineVariables, uint potentialLevel, bool isMaxLevel) {
         require(rpUsers.userIdByAddress(user) > 0, "NimbusReferralProgramMarketing: User not registered");
         uint qualificationLevel = userQualificationLevel[user];
-        potentialLevel = _getUserPotentialQualificationLevel(user, qualificationLevel);
-        require(potentialLevel > qualificationLevel, "NimbusReferralProgramMarketing: User level hasn't changed");
-        //uint userTurnover = userTotalTurnover(user);
+        isMaxLevel = qualificationLevel >= (qualificationsCount - 1);
+        if (!isMaxLevel) {
+            potentialLevel = _getUserPotentialQualificationLevel(user, qualificationLevel);
+            require(potentialLevel > qualificationLevel, "NimbusReferralProgramMarketing: User level hasn't changed");
+        } else {
+            potentialLevel = qualificationsCount - 1;
+        }
+
         uint[] memory userReferrals = rpUsers.getUserReferrals(user);
-        if (userReferrals.length == 0) return (0, new address[](0), new uint[](0), new uint[](0), potentialLevel);
+        if (userReferrals.length == 0) return (0, new address[](0), new uint[](0), new uint[](0), potentialLevel, isMaxLevel);
         
         referralAddresses = new address[](userReferrals.length);
         for (uint i; i < userReferrals.length; i++) {
@@ -283,7 +313,8 @@ contract NimbusReferralProgramMarketing is Ownable {
         }
 
         userFixed = _getFixedRewardToBePaidForQualification(user, referralAddresses, userTotalTurnover(user), qualificationLevel, potentialLevel);
-        (linePercentages, lineVariables) = _getVariableRewardToBePaidForQualificationByLines(referralAddresses, userStructureTurnover[user], potentialLevel);
+        (linePercentages, lineVariables) = _getVariableRewardToBePaidForQualificationByLines(referralAddresses, potentialLevel);
+        //don't recalculate for max level users because of impossibility to estimate userMaxLevelPayment impact for the result
     }
 
 
@@ -403,16 +434,16 @@ contract NimbusReferralProgramMarketing is Ownable {
         }
     }
 
-    function _getVariableRewardToBePaidForQualification(address[] memory referralAddresses, uint structureTurnover, uint qualification) internal view returns (uint userVariable) {
+    function _getVariableRewardToBePaidForQualification(address[] memory referralAddresses, uint qualification) internal view returns (uint userVariable) {
         uint userQualificationPercentage = qualifications[qualification].Percentage;
         for (uint i; i < referralAddresses.length; i++) {
             uint referralPercentage = qualifications[userQualificationLevel[referralAddresses[i]]].Percentage;
             if (referralPercentage >= userQualificationPercentage) continue;
-            userVariable += (userQualificationPercentage - referralPercentage) * structureTurnover / PERCENTAGE_PRECISION;
+            userVariable += (userQualificationPercentage - referralPercentage) * userTotalTurnover(referralAddresses[i]) / PERCENTAGE_PRECISION;
         }
     }
 
-    function _getVariableRewardToBePaidForQualificationByLines(address[] memory referralAddresses, uint structureTurnover, uint qualification) internal view returns (uint[] memory linePercentages, uint[] memory lineVariables) {
+    function _getVariableRewardToBePaidForQualificationByLines(address[] memory referralAddresses, uint qualification) internal view returns (uint[] memory linePercentages, uint[] memory lineVariables) {
         uint userQualificationPercentage = qualifications[qualification].Percentage;
         linePercentages = new uint[](referralAddresses.length);
         lineVariables = new uint[](referralAddresses.length);
@@ -421,7 +452,7 @@ contract NimbusReferralProgramMarketing is Ownable {
             if (referralPercentage >= userQualificationPercentage) continue;
             uint linePercentage = userQualificationPercentage - referralPercentage;
             linePercentages[i] = linePercentage;
-            lineVariables[i] = linePercentage * structureTurnover / PERCENTAGE_PRECISION;
+            lineVariables[i] = linePercentage * userTotalTurnover(referralAddresses[i]) / PERCENTAGE_PRECISION;
         }
     }
 
@@ -467,14 +498,14 @@ contract NimbusReferralProgramMarketing is Ownable {
         emit UpdateAirdropProgramCap(newAirdropProgramCap);
     }
 
-    function setUserQualification(address user, uint qualification) external onlyOwner {
-        _upgradeUserQualification(user, qualification);
+    function setUserQualification(address user, uint qualification, bool updateTurnover) external onlyOwner {
+        _upgradeUserQualification(user, qualification, updateTurnover);
     }
 
-    function setUserQualifications(address[] memory users, uint[] memory newQualifications) external onlyOwner {
+    function setUserQualifications(address[] memory users, uint[] memory newQualifications, bool updateTurnover) external onlyOwner {
         require(users.length == newQualifications.length, "NimbusReferralProgramMarketing: Arrays length are not equal");
         for (uint i; i < users.length; i++) {
-            _upgradeUserQualification(users[i], newQualifications[i]);
+            _upgradeUserQualification(users[i], newQualifications[i], updateTurnover);
         }
     }
 
@@ -523,7 +554,7 @@ contract NimbusReferralProgramMarketing is Ownable {
         require(users.length == headOfLocationsLocal.length, "NimbusReferralProgramMarketing: Array length missmatch");
         for(uint i = 0; i < users.length; i++) {
             _importUserHeadOfLocation(users[i], headOfLocationsLocal[i]);
-        } 
+        }
     }
     
     function importUserTurnover(address user, uint personalTurnover, uint structureTurnover, uint levelHint, bool addToCurrentTurnover, bool updateLevel) external onlyOwner {
@@ -536,7 +567,7 @@ contract NimbusReferralProgramMarketing is Ownable {
 
         for(uint i = 0; i < users.length; i++) {
             _importUserTurnover(users[i], personalTurnovers[i], structureTurnovers[i], levelsHints[i], addToCurrentTurnover, updateLevel);
-        }   
+        }
     }
 
     function importHeadOfLocationTurnover(address headOfLocation, uint turnover, uint levelHint, bool addToCurrentTurnover, bool updateLevel) external onlyOwner {
@@ -548,7 +579,7 @@ contract NimbusReferralProgramMarketing is Ownable {
 
         for(uint i = 0; i < heads.length; i++) {
             _importHeadOfLocationTurnover(heads[i], turnovers[i], levelsHints[i], addToCurrentTurnover, updateLevel);
-        }   
+        }
     }
 
     function importRegionalManagerTurnover(address headOfLocation, uint turnover, uint levelHint, bool addToCurrentTurnover, bool updateLevel) external onlyOwner {
@@ -556,12 +587,26 @@ contract NimbusReferralProgramMarketing is Ownable {
     }
 
     function importRegionalManagerTurnovers(address[] memory managers, uint[] memory turnovers, uint[] memory levelsHints, bool addToCurrentTurnover, bool updateLevel) external onlyOwner {
-        require(managers.length == turnovers.length, "NimbusReferralProgramMarketing: Array length missmatch");
+        require(managers.length == turnovers.length && managers.length == levelsHints.length, "NimbusReferralProgramMarketing: Array length missmatch");
 
         for(uint i = 0; i < managers.length; i++) {
             _importRegionalManagerTurnover(managers[i], turnovers[i], levelsHints[i], addToCurrentTurnover, updateLevel);
-        }   
+        }
     }
+
+    function importUserMaxLevelPayment(address user, uint maxLevelPayment, bool addToCurrentPayment) external onlyOwner { 
+        _importUserMaxLevelPayment(user, maxLevelPayment, addToCurrentPayment);
+    }
+
+    function importUserMaxLevelPayments(address[] memory users, uint[] memory maxLevelPayments, bool addToCurrentPayment) external onlyOwner { 
+        require(users.length == maxLevelPayments.length, "NimbusReferralProgramMarketing: Array length missmatch");
+
+        for(uint i = 0; i < users.length; i++) {
+            _importUserMaxLevelPayment(users[i], maxLevelPayments[i], addToCurrentPayment);
+        }
+    }
+
+    
 
 
     function _addHeadOfLocation(address headOfLocation, address regionalManager) internal {
@@ -582,13 +627,17 @@ contract NimbusReferralProgramMarketing is Ownable {
         emit AddRegionalManager(regionalManager);
     }
 
-    function _upgradeUserQualification(address user, uint qualification) internal {
+    function _upgradeUserQualification(address user, uint qualification, bool updateTurnover) internal {
         require(qualification < qualificationsCount, "NimbusReferralProgramMarketing: Incorrect qualification index");
         require(userQualificationLevel[user] < qualification, "NimbusReferralProgramMarketing: Can't donwgrade user qualification");
-        uint newTurnover = qualifications[qualification].TotalTurnover;
+        uint newTurnover;
+        if (updateTurnover) {
+            newTurnover = qualifications[qualification].TotalTurnover;
+            userStructureTurnover[user] = newTurnover;
+        }
         emit UpgradeUserQualification(user, userQualificationLevel[user], qualification, userStructureTurnover[user], newTurnover);
         userQualificationLevel[user] = qualification;
-        userStructureTurnover[user] = newTurnover;
+        userQualificationOrigin[user] = 2;
     }
 
     function _importUserHeadOfLocation(address user, address headOfLocation) internal onlyOwner {
@@ -598,7 +647,7 @@ contract NimbusReferralProgramMarketing is Ownable {
     }
 
     function _updateQualification(uint index, uint totalTurnoverAmount, uint percentage, uint fixedReward) internal {
-        require(totalTurnoverAmount > 0, "NimbusReferralProgramMarketing: Total turnover amount can't be lower then one");
+        //Total turnover amount can be zero for the first qualification (zero qualification), so check and require is not needed
         qualifications[index] = Qualification(index, totalTurnoverAmount, percentage, fixedReward);
         emit UpdateQualification(index, totalTurnoverAmount, percentage, fixedReward);
     }
@@ -684,6 +733,16 @@ contract NimbusReferralProgramMarketing is Ownable {
             }
         }
         userQualificationOrigin[regionalManager] = 1;
+    }
+
+    function _importUserMaxLevelPayment(address user, uint maxLevelPayment, bool addToCurrentPayment) internal {
+        require(userQualificationLevel[user] >= qualificationsCount - 1, "NimbusReferralProgramMarketing: Not max level user");
+        if (addToCurrentPayment) {
+            userMaxLevelPayment[user] += maxLevelPayment;
+        } else {
+            userMaxLevelPayment[user] = maxLevelPayment;
+        }
+        emit ImportUserMaxLevelPayment(user, maxLevelPayment, addToCurrentPayment);
     }
 
     function _findQualificationLevel(uint amount, uint levelHint) internal view returns (uint) {
