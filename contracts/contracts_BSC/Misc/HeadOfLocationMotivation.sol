@@ -186,6 +186,7 @@ contract HeadOfLocationMotivation is Ownable, Pausable {
     event RescueToken(address indexed token, address indexed to, uint amount);
     event UpdateReferralProgramMarketing(address newContract);
     event ImportUser(address user, uint lastTurnoverAmount);
+    event UpdatePercent(uint indexed newPercent);
 
     constructor (address systemToken, address referralProgramMarketingAddress) {
         require(Address.isContract(systemToken), "HeadOfLocationMotivation: SystemToken is not a contract");
@@ -218,12 +219,9 @@ contract HeadOfLocationMotivation is Ownable, Pausable {
         uint reward = difference * percent / 10000;
         return reward;
     }
+    
 
-    function updatePercent(uint newPercent) external onlyOwner {
-        require(newPercent > 0, "HeadOfLocationMotivation: New percent can't be zero");
-        require(newPercent != percent, "HeadOfLocationMotivation: New percent is the same as the old one");
-        percent = newPercent;
-    }
+
     
     function allowUserToReceiveReward(address user) external onlyOwner {
         require(referralProgramMarketing.isHeadOfLocation(user), "HeadOfLocationMotivation: User is not head of location");
@@ -234,6 +232,13 @@ contract HeadOfLocationMotivation is Ownable, Pausable {
     function disallowUserToReceiveReward(address user) external onlyOwner {
         require(isAllowedToReceiveReward[user], "HeadOfLocationMotivation: User already disallowed");
         isAllowedToReceiveReward[user] = false;
+    }
+
+    function updatePercent(uint newPercent) external onlyOwner {
+        require(newPercent > 0, "HeadOfLocationMotivation: New percent can't be zero");
+        require(newPercent != percent, "HeadOfLocationMotivation: New percent is the same as the old one");
+        percent = newPercent;
+        emit UpdatePercent(newPercent);
     }
 
     function rescue(address payable to, uint256 amount) external onlyOwner {
