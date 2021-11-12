@@ -570,8 +570,6 @@ contract NimbusP2P_V2 is NimbusP2P_V2Storage, IERC721Receiver {
         bool isNFTAskedAsset
     ) private returns (uint tradeId) { 
         require(askedAsset != proposedAsset, "NimbusP2P_V2: Asked asset can't be equal to proposed asset");
-        require(proposedAmount > 0, "NimbusP2P_V2: Zero proposed amount");
-        require(askedAmount > 0, "NimbusP2P_V2: Zero asked amount");
         require(deadline > block.timestamp, "NimbusP2P_V2: Incorrect deadline");
         tradeId = ++tradeCount;
         
