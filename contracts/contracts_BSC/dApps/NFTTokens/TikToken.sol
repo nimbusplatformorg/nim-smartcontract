@@ -216,7 +216,6 @@ library Address {
     }
 }
 
-
 interface IERC721Receiver {
     function onERC721Received(
         address operator,
@@ -321,7 +320,6 @@ interface ILpStaking {
     function rewardDuration() external returns (uint256);
 }
 
-
 interface IWBNB {
     function deposit() external payable;
     function transfer(address to, uint value) external returns (bool);
@@ -335,10 +333,7 @@ interface ILending {
     function burnToBnb(address receiver, uint256 burnAmount) external returns (uint256 loanAmountPaid);
 }
 
-
-contract TikToken is Context, ERC165, IBEP721, IBEP721Metadata, Ownable {
-    using Address for address;
-    using Strings for uint256;
+contract TikTokenStorage is Ownable, Context, ERC165 {    
     IWBNB public WBNB;
     IRouter public swapRouter;
     ILpStaking public lpStakingBnbNbu;
@@ -346,9 +341,6 @@ contract TikToken is Context, ERC165, IBEP721, IBEP721Metadata, Ownable {
     ILending public lendingContract;
     IBEP20 public nbuToken;
     IBEP20 public gnbuToken;
-    
-    string private _name;
-    string private _symbol;
 
     uint public tokenCount;
     uint public minPurchaseAmount;
@@ -367,16 +359,19 @@ contract TikToken is Context, ERC165, IBEP721, IBEP721Metadata, Ownable {
       bool IsActive;
     }
     
-    mapping(uint => uint[]) private _userRewards;
+    mapping(uint => uint[]) internal _userRewards;
+    mapping(uint => uint256) internal _balancesRewardEquivalentBnbNbu;
+    mapping(uint => uint256) internal _balancesRewardEquivalentBnbGnbu;
     mapping(uint => UserSupply) public tikSupplies;
-    mapping(uint256 => address) private _owners;
-    mapping(address => uint256) private _balances;
-    mapping(uint256 => address) private _tokenApprovals;
-    mapping(address => mapping(address => bool)) private _operatorApprovals;
-    mapping(address => uint[]) private _userTokens;
-    mapping(uint => uint256) private _balancesRewardEquivalentBnbNbu;
-    mapping(uint => uint256) private _balancesRewardEquivalentBnbGnbu;
     mapping(uint => uint256) public weightedStakeDate;
+
+    string internal _name;
+    string internal _symbol;
+    mapping(uint256 => address) internal _owners;
+    mapping(address => uint256) internal _balances;
+    mapping(uint256 => address) internal _tokenApprovals;
+    mapping(address => mapping(address => bool)) internal _operatorApprovals;
+    mapping(address => uint[]) internal _userTokens;
      
     event BuyTikToken(address indexed user, uint indexed tokenId, uint providedBnb, uint supplyTime);
     event WithdrawRewards(address indexed user, uint indexed tokenId, uint lpNbuBnbUserRewards, uint lpGnbuBnbUserRewards);
@@ -388,10 +383,53 @@ contract TikToken is Context, ERC165, IBEP721, IBEP721Metadata, Ownable {
     event UpdateTokenNbu(address indexed newToken);
     event UpdateTokenGnbu(address indexed newToken);
     event UpdateMinPurchaseAmount(uint indexed newAmount);
+}
+
+contract TikTokenProxy is TikTokenStorage {
+    address public target;
     
+    event SetTarget(address indexed newTarget);
 
+    constructor(address _newTarget) TikTokenStorage() {
+        _setTarget(_newTarget);
+    }
 
-    constructor(
+    fallback() external payable {
+        if (gasleft() <= 2300) {
+            return;
+        }
+
+        address target_ = target;
+        bytes memory data = msg.data;
+        assembly {
+            let result := delegatecall(gas(), target_, add(data, 0x20), mload(data), 0, 0)
+            let size := returndatasize()
+            let ptr := mload(0x40)
+            returndatacopy(ptr, 0, size)
+            switch result
+            case 0 { revert(ptr, size) }
+            default { return(ptr, size) }
+        }
+    }
+
+    function setTarget(address _newTarget) external onlyOwner {
+        _setTarget(_newTarget);
+    }
+
+    function _setTarget(address _newTarget) internal {
+        require(Address.isContract(_newTarget), "Target not a contract");
+        target = _newTarget;
+        emit SetTarget(_newTarget);
+    }
+}
+
+contract TikToken is TikTokenStorage, IBEP721, IBEP721Metadata {
+    using Address for address;
+    using Strings for uint256;
+    
+    address public target;
+
+    function initialize(
         address _swapRouter, 
         address _wbnb, 
         address _nbuToken, 
@@ -401,7 +439,7 @@ contract TikToken is Context, ERC165, IBEP721, IBEP721Metadata, Ownable {
         address _lpStakingBnbNbu, 
         address _lpStakingBnbGnbu, 
         address _lendingContract
-    ) {
+    ) external onlyOwner {
         require(Address.isContract(_swapRouter), "NimbusTikToken_V1: Not contract");
         require(Address.isContract(_wbnb), "NimbusTikToken_V1: Not contract");
         require(Address.isContract(_nbuToken), "NimbusTikToken_V1: Not contract");
@@ -439,7 +477,7 @@ contract TikToken is Context, ERC165, IBEP721, IBEP721Metadata, Ownable {
     }
     
 
-    
+
     // ========================== TikToken functions ==========================
 
     function buyTikToken() payable external {
