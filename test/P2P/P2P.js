@@ -30,7 +30,6 @@ contract("Tiktoken", (accounts) => {
   beforeEach(async function () {
 
     nbu = await NBU.new();
-
     gnbu = await GNBU.new();
     wbnb = await WBNB.new();
     nft = await NFT.new('test', 'ts');
@@ -453,10 +452,6 @@ contract("Tiktoken", (accounts) => {
       )
     });
   })
-
-
-
-
 
   describe("test methods support trades ", function () {
     let date = Date.now();
@@ -1084,12 +1079,6 @@ contract("Tiktoken", (accounts) => {
         "NimbusP2P_V2: Invalid trade id"
       );
     });
-
-
-
-
-
-
 
     it('BNB to NFT trade should not be canceled if user not owner', async function () {
       await contractP2P.createTradeBNBtoNFT(
