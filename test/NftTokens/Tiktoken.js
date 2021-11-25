@@ -364,5 +364,4 @@ contract("Tiktoken", (accounts) => {
       expect(stakeDate).to.be.bignumber;
     });
   });
-
 })
