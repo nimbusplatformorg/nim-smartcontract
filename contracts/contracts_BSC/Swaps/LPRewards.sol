@@ -118,7 +118,42 @@ contract LPReward is Ownable {
         require(msg.sender == swapRouter, "LPReward: Caller is not the allowed router");
         _;
     }
-    
+
+    function getUserLiquidityRewards(address recipient, address tokenA, address tokenB, uint amountA, uint amountB, uint liquidity) public view returns (uint amountNbu) {
+            address pair = swapFactory.getPair(tokenA, tokenB);
+            uint amount0;
+            uint amount1;
+            {
+            uint ratio = Math.sqrt(amountA * amountB) * 1e18 / liquidity;
+            uint previousRatio = weightedRatio[recipient][pair];
+            uint difference = ratio - previousRatio;
+            amount0 = amountA * difference / 1e18;
+            amount1 = amountB * difference / 1e18;
+            }
+             if (tokenA != NBU && tokenB != NBU) {
+                address tokenToNbuPair = swapFactory.getPair(tokenA, NBU);
+                if (tokenToNbuPair != address(0)) {
+                    amountNbu = INimbusRouter(swapRouter).getAmountsOut(amount0, getPathForToken(tokenA))[1];
+                }
+
+                tokenToNbuPair = swapFactory.getPair(tokenB, NBU);
+                if (tokenToNbuPair != address(0)) {
+                    if (amountNbu != 0) {
+                        amountNbu = amountNbu + INimbusRouter(swapRouter).getAmountsOut(amount1, getPathForToken(tokenB))[1];
+                    } else  {
+                        amountNbu = INimbusRouter(swapRouter).getAmountsOut(amount1, getPathForToken(tokenB))[1] * 2;
+                    }
+                } else {
+                    amountNbu = amountNbu * 2;
+                }
+            } else if (tokenA == NBU) {
+                amountNbu = amount0 * 2;
+            } else {
+                amountNbu = amount1 * 2;
+            }
+            return amountNbu;
+        }
+
     function recordAddLiquidity(address recipient, address pair, uint amountA, uint amountB, uint liquidity) external onlyRouter {
         if (!allowedPairs[pair]) return;
         uint ratio = Math.sqrt(amountA * amountB) * 1e18 / liquidity;   
