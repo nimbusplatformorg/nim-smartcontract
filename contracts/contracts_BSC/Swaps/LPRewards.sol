@@ -144,7 +144,7 @@ contract LPReward is Ownable {
             }
 
             if (swapFactory.getPair(tokenA, NBU) != address(0)) {
-                amountNbu = INimbusRouter(swapRouter).getAmountsOut(amount0, getPathForToken(tokenA))[1];
+              return amountNbu = INimbusRouter(swapRouter).getAmountsOut(amount0, getPathForToken(tokenA))[1];
             }
 
             if (amountNbu != 0) {
