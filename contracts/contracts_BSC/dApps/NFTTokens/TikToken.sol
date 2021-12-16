@@ -498,7 +498,7 @@ contract TikToken is TikTokenStorage, IBEP721, IBEP721Metadata {
     // ========================== TikToken functions ==========================
 
     function buyTikToken() payable external {
-      require(msg.value >= minPurchaseAmount, 'TikToken: token price is more than sent');
+      require(msg.value >= minPurchaseAmount, 'TikToken: Token price is more than sent');
       uint amountBNB = msg.value;
       uint swapAmount = amountBNB/6;
       tokenCount = ++tokenCount;
