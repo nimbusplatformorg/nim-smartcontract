@@ -351,6 +351,8 @@ contract TikTokenStorage is Ownable, Context, ERC165 {
       uint NbuBnbLpAmount;
       uint GnbuBnbLpAmount;
       uint LendedBNBAmount;
+      uint PoolNbuAmount;
+      uint PoolGnbuAmount;
       uint LendedITokenAmount;
       uint NbuBnbStakeNonce;
       uint GnbuBnbStakeNonce;
@@ -517,6 +519,8 @@ contract TikToken is TikTokenStorage, IBEP721, IBEP721Metadata {
       UserSupply storage userSupply = tikSupplies[tokenCount];
       userSupply.ProvidedBnb = msg.value;
       userSupply.IsActive = true;
+      userSupply.PoolNbuAmount = amountsBnbNbuSwap[1];
+      userSupply.PoolGnbuAmount = amountsBnbGnbuSwap[1];
       userSupply.GnbuBnbLpAmount = liquidityBnbGnbu;
       userSupply.NbuBnbLpAmount = liquidityBnbNbu;
       userSupply.LendedITokenAmount = mintAmount;
