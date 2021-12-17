@@ -350,7 +350,7 @@ interface ILending {
     function burnToBnb(address receiver, uint256 burnAmount) external returns (uint256 loanAmountPaid);
 }
 
-contract TikTokenStorage is Ownable, Context, ERC165, ReentrancyGuard {    
+contract SmartLPStorage is Ownable, Context, ERC165, ReentrancyGuard {    
     IWBNB public WBNB;
     IRouter public swapRouter;
     ILpStaking public lpStakingBnbNbu;
@@ -392,9 +392,9 @@ contract TikTokenStorage is Ownable, Context, ERC165, ReentrancyGuard {
     mapping(address => mapping(address => bool)) internal _operatorApprovals;
     mapping(address => uint[]) internal _userTokens;
      
-    event BuyTikToken(address indexed user, uint indexed tokenId, uint providedBnb, uint supplyTime);
+    event BuySmartLP(address indexed user, uint indexed tokenId, uint providedBnb, uint supplyTime);
     event WithdrawRewards(address indexed user, uint indexed tokenId, uint lpNbuBnbUserRewards, uint lpGnbuBnbUserRewards);
-    event BurnTikToken(uint indexed tokenId);
+    event BurnSmartLP(uint indexed tokenId);
     event UpdateSwapRouter(address indexed newSwapRouterContract);
     event UpdateLpStakingBnbNbu(address indexed newLpStakingAContract);
     event UpdateLpStakingBnbGnbu(address indexed newLpStakingBContract);
@@ -404,12 +404,12 @@ contract TikTokenStorage is Ownable, Context, ERC165, ReentrancyGuard {
     event UpdateMinPurchaseAmount(uint indexed newAmount);
 }
 
-contract TikTokenProxy is TikTokenStorage {
+contract SmartLPProxy is SmartLPStorage {
     address public target;
     
     event SetTarget(address indexed newTarget);
 
-    constructor(address _newTarget) TikTokenStorage() {
+    constructor(address _newTarget) SmartLPStorage() {
         _setTarget(_newTarget);
     }
 
@@ -442,7 +442,7 @@ contract TikTokenProxy is TikTokenStorage {
     }
 }
 
-contract TikToken is TikTokenStorage, IBEP721, IBEP721Metadata {
+contract SmartLP is SmartLPStorage, IBEP721, IBEP721Metadata {
     using Address for address;
     using Strings for uint256;
     
@@ -459,17 +459,17 @@ contract TikToken is TikTokenStorage, IBEP721, IBEP721Metadata {
         address _lpStakingBnbGnbu, 
         address _lendingContract
     ) external onlyOwner {
-        require(Address.isContract(_swapRouter), "NimbusTikToken_V1: Not contract");
-        require(Address.isContract(_wbnb), "NimbusTikToken_V1: Not contract");
-        require(Address.isContract(_nbuToken), "NimbusTikToken_V1: Not contract");
-        require(Address.isContract(_gnbuToken), "NimbusTikToken_V1: Not contract");
-        require(Address.isContract(_bnbNbuPair), "NimbusTikToken_V1: Not contract");
-        require(Address.isContract(_gnbuBnbPair), "NimbusTikToken_V1: Not contract");
-        require(Address.isContract(_lpStakingBnbNbu), "NimbusTikToken_V1: Not contract");
-        require(Address.isContract(_lpStakingBnbGnbu), "NimbusTikToken_V1: Not contract");
-        require(Address.isContract(_lendingContract), "NimbusTikToken_V1: Not contract");
+        require(Address.isContract(_swapRouter), "NimbusSmartLP_V1: Not contract");
+        require(Address.isContract(_wbnb), "NimbusSmartLP_V1: Not contract");
+        require(Address.isContract(_nbuToken), "NimbusSmartLP_V1: Not contract");
+        require(Address.isContract(_gnbuToken), "NimbusSmartLP_V1: Not contract");
+        require(Address.isContract(_bnbNbuPair), "NimbusSmartLP_V1: Not contract");
+        require(Address.isContract(_gnbuBnbPair), "NimbusSmartLP_V1: Not contract");
+        require(Address.isContract(_lpStakingBnbNbu), "NimbusSmartLP_V1: Not contract");
+        require(Address.isContract(_lpStakingBnbGnbu), "NimbusSmartLP_V1: Not contract");
+        require(Address.isContract(_lendingContract), "NimbusSmartLP_V1: Not contract");
 
-        _name = "Smart Lender";
+        _name = "Smart LP";
         _symbol = "SL";
          
         swapRouter = IRouter(_swapRouter);
@@ -497,10 +497,10 @@ contract TikToken is TikTokenStorage, IBEP721, IBEP721Metadata {
     
 
 
-    // ========================== TikToken functions ==========================
+    // ========================== SmartLP functions ==========================
 
-    function buyTikToken() payable external {
-      require(msg.value >= minPurchaseAmount, 'TikToken: Token price is more than sent');
+    function buySmartLP() payable external {
+      require(msg.value >= minPurchaseAmount, 'SmartLP: Token price is more than sent');
       uint amountBNB = msg.value;
       uint swapAmount = amountBNB/6;
       tokenCount = ++tokenCount;
@@ -551,21 +551,21 @@ contract TikToken is TikTokenStorage, IBEP721, IBEP721Metadata {
       _userTokens[msg.sender].push(tokenCount); 
       _mint(msg.sender, tokenCount);
       
-      emit BuyTikToken(msg.sender, tokenCount, msg.value, block.timestamp);
+      emit BuySmartLP(msg.sender, tokenCount, msg.value, block.timestamp);
     }
     
     function withdrawUserRewards(uint tokenId) external nonReentrant {
-        require(_owners[tokenId] == msg.sender, "TikToken: Not token owner");
+        require(_owners[tokenId] == msg.sender, "SmartLP: Not token owner");
         UserSupply memory userSupply = tikSupplies[tokenId];
-        require(userSupply.IsActive, "TikToken: Not active");
+        require(userSupply.IsActive, "SmartLP: Not active");
         (uint lpBnbNbuUserRewards, uint lpBnbGnbuUserRewards, ) = getTokenRewardsAmounts(tokenId);
         _withdrawUserRewards(tokenId, lpBnbNbuUserRewards, lpBnbGnbuUserRewards);
     }
     
-    function burnTikToken(uint tokenId) external nonReentrant {
-        require(_owners[tokenId] == msg.sender, "TikToken: Not token owner");
+    function burnSmartLP(uint tokenId) external nonReentrant {
+        require(_owners[tokenId] == msg.sender, "SmartLP: Not token owner");
         UserSupply storage userSupply = tikSupplies[tokenId];
-        require(userSupply.IsActive, "TikToken: Token not active");
+        require(userSupply.IsActive, "SmartLP: Token not active");
         (uint lpBnbNbuUserRewards, uint lpBnbGnbuUserRewards, ) = getTokenRewardsAmounts(tokenId);
         
         if(lpBnbNbuUserRewards + lpBnbGnbuUserRewards > 0) {
@@ -583,14 +583,14 @@ contract TikToken is TikTokenStorage, IBEP721, IBEP721Metadata {
         transferFrom(msg.sender, address(0x1), tokenId);
         userSupply.IsActive = false;
         
-        emit BurnTikToken(tokenId);      
+        emit BurnSmartLP(tokenId);      
     }
 
 
 
     function getTokenRewardsAmounts(uint tokenId) public view returns (uint lpBnbNbuUserRewards, uint lpBnbGnbuUserRewards, uint lendedUserRewards) {
         UserSupply memory userSupply = tikSupplies[tokenId];
-        require(userSupply.IsActive, "TikToken: Not active");
+        require(userSupply.IsActive, "SmartLP: Not active");
 
         lpBnbNbuUserRewards = (_balancesRewardEquivalentBnbNbu[tokenId] * ((block.timestamp - weightedStakeDate[tokenId]) * 100)) / (100 * rewardDuration);
         lpBnbGnbuUserRewards = (_balancesRewardEquivalentBnbGnbu[tokenId] * ((block.timestamp - weightedStakeDate[tokenId]) * 100)) / (100 * rewardDuration);
@@ -610,7 +610,7 @@ contract TikToken is TikTokenStorage, IBEP721, IBEP721Metadata {
 
     function _withdrawUserRewards(uint tokenId, uint lpBnbNbuUserRewards, uint lpBnbGnbuUserRewards) private {
         uint totalReward = lpBnbNbuUserRewards + lpBnbGnbuUserRewards;
-        require(totalReward > 0, "TikToken: Claim not enough");
+        require(totalReward > 0, "SmartLP: Claim not enough");
         if (nbuToken.balanceOf(address(this)) < totalReward) {
             lpStakingBnbNbu.getReward();
             if (nbuToken.balanceOf(address(this)) < totalReward) {
@@ -661,7 +661,7 @@ contract TikToken is TikTokenStorage, IBEP721, IBEP721Metadata {
     }
 
     function approve(address to, uint256 tokenId) public virtual override {
-        address owner = TikToken.ownerOf(tokenId);
+        address owner = SmartLP.ownerOf(tokenId);
         require(to != owner, "ERC721: approval to current owner");
 
         require(
@@ -717,7 +717,7 @@ contract TikToken is TikTokenStorage, IBEP721, IBEP721Metadata {
 
     function _isApprovedOrOwner(address spender, uint256 tokenId) internal view virtual returns (bool) {
         require(_exists(tokenId), "ERC721: operator query for nonexistent token");
-        address owner = TikToken.ownerOf(tokenId);
+        address owner = SmartLP.ownerOf(tokenId);
         return (spender == owner || getApproved(tokenId) == spender || isApprovedForAll(owner, spender));
     }
 
@@ -744,7 +744,7 @@ contract TikToken is TikTokenStorage, IBEP721, IBEP721Metadata {
     }
 
     function _burn(uint256 tokenId) internal virtual {
-        address owner = TikToken.ownerOf(tokenId);
+        address owner = SmartLP.ownerOf(tokenId);
 
         // Clear approvals
         _approve(address(0), tokenId);
@@ -756,7 +756,7 @@ contract TikToken is TikTokenStorage, IBEP721, IBEP721Metadata {
     }
 
     function _transfer(address from, address to, uint256 tokenId) internal virtual {
-        require(TikToken.ownerOf(tokenId) == from, "ERC721: transfer of token that is not own");
+        require(SmartLP.ownerOf(tokenId) == from, "ERC721: transfer of token that is not own");
         require(to != address(0), "ERC721: transfer to the zero address");
 
         // Clear approvals from the previous owner
@@ -771,7 +771,7 @@ contract TikToken is TikTokenStorage, IBEP721, IBEP721Metadata {
 
     function _approve(address to, uint256 tokenId) internal virtual {
         _tokenApprovals[tokenId] = to;
-        emit Approval(TikToken.ownerOf(tokenId), to, tokenId);
+        emit Approval(SmartLP.ownerOf(tokenId), to, tokenId);
     }
 
     function _setApprovalForAll( address owner, address operator, bool approved) internal virtual {
@@ -803,31 +803,31 @@ contract TikToken is TikTokenStorage, IBEP721, IBEP721Metadata {
     // ========================== Owner functions ==========================
 
     function updateSwapRouter(address newSwapRouter) external onlyOwner {
-        require(Address.isContract(newSwapRouter), "TikToken: Not a contract");
+        require(Address.isContract(newSwapRouter), "SmartLP: Not a contract");
         swapRouter = IRouter(newSwapRouter);
         emit UpdateSwapRouter(newSwapRouter);
     }
     
     function updateLpStakingBnbNbu(address newLpStaking) external onlyOwner {
-        require(Address.isContract(newLpStaking), "TikToken: Not a contract");
+        require(Address.isContract(newLpStaking), "SmartLP: Not a contract");
         lpStakingBnbNbu = ILpStaking(newLpStaking);
         emit UpdateLpStakingBnbNbu(newLpStaking);
     }
     
     function updateLpStakingBnbGnbu(address newLpStaking) external onlyOwner {
-        require(Address.isContract(newLpStaking), "TikToken: Not a contract");
+        require(Address.isContract(newLpStaking), "SmartLP: Not a contract");
         lpStakingBnbGnbu = ILpStaking(newLpStaking);
         emit UpdateLpStakingBnbGnbu(newLpStaking);
     }
     
     function updateLendingContract(address newLendingContract) external onlyOwner {
-        require(Address.isContract(newLendingContract), "TikToken: Not a contract");
+        require(Address.isContract(newLendingContract), "SmartLP: Not a contract");
         lendingContract = ILending(newLendingContract);
         emit UpdateLendingContract(newLendingContract);
     }
     
     function updateTokenAllowance(address token, address spender, int amount) external onlyOwner {
-        require(Address.isContract(token), "TikToken: Not a contract");
+        require(Address.isContract(token), "SmartLP: Not a contract");
         uint allowance;
         if (amount < 0) {
             allowance = type(uint256).max;
@@ -838,7 +838,7 @@ contract TikToken is TikTokenStorage, IBEP721, IBEP721Metadata {
     }
     
     function updateMinPurchaseAmount (uint newAmount) external onlyOwner {
-        require(newAmount > 0, "TikToken: Amount must be greater than zero");
+        require(newAmount > 0, "SmartLP: Amount must be greater than zero");
         minPurchaseAmount = newAmount;
         emit UpdateMinPurchaseAmount(newAmount);
     }
