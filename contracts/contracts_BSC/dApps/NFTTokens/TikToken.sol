@@ -112,6 +112,23 @@ contract Ownable {
     }
 }
 
+contract ReentrancyGuard {
+    /// @dev counter to allow mutex lock with only one SSTORE operation
+    uint256 private _guardCounter;
+
+    constructor () {
+        // The counter starts at one to prevent changing it from zero to a non-zero
+        // value, which is a more expensive operation.
+        _guardCounter = 1;
+    }
+
+    modifier nonReentrant() {
+        _guardCounter += 1;
+        uint256 localCounter = _guardCounter;
+        _;
+        require(localCounter == _guardCounter, "ReentrancyGuard: reentrant call");
+    }
+}
 
 library Address {
     function isContract(address account) internal view returns (bool) {
@@ -333,7 +350,7 @@ interface ILending {
     function burnToBnb(address receiver, uint256 burnAmount) external returns (uint256 loanAmountPaid);
 }
 
-contract TikTokenStorage is Ownable, Context, ERC165 {    
+contract TikTokenStorage is Ownable, Context, ERC165, ReentrancyGuard {    
     IWBNB public WBNB;
     IRouter public swapRouter;
     ILpStaking public lpStakingBnbNbu;
@@ -481,7 +498,7 @@ contract TikToken is TikTokenStorage, IBEP721, IBEP721Metadata {
     // ========================== TikToken functions ==========================
 
     function buyTikToken() payable external {
-      require(msg.value >= minPurchaseAmount, 'TikToken: min purchase is too low');
+      require(msg.value >= minPurchaseAmount, 'TikToken: Token price is more than sent');
       uint amountBNB = msg.value;
       uint swapAmount = amountBNB/6;
       tokenCount = ++tokenCount;
@@ -533,7 +550,7 @@ contract TikToken is TikTokenStorage, IBEP721, IBEP721Metadata {
       emit BuyTikToken(msg.sender, tokenCount, msg.value, block.timestamp);
     }
     
-    function withdrawUserRewards(uint tokenId) external {
+    function withdrawUserRewards(uint tokenId) external nonReentrant {
         require(_owners[tokenId] == msg.sender, "TikToken: Not token owner");
         UserSupply memory userSupply = tikSupplies[tokenId];
         require(userSupply.IsActive, "TikToken: Not active");
@@ -541,7 +558,7 @@ contract TikToken is TikTokenStorage, IBEP721, IBEP721Metadata {
         _withdrawUserRewards(tokenId, lpBnbNbuUserRewards, lpBnbGnbuUserRewards);
     }
     
-    function burnTikToken(uint tokenId) external {
+    function burnTikToken(uint tokenId) external nonReentrant {
         require(_owners[tokenId] == msg.sender, "TikToken: Not token owner");
         UserSupply storage userSupply = tikSupplies[tokenId];
         require(userSupply.IsActive, "TikToken: Token not active");
