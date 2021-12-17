@@ -467,8 +467,8 @@ contract TikToken is TikTokenStorage, IBEP721, IBEP721Metadata {
         require(Address.isContract(_lpStakingBnbGnbu), "NimbusTikToken_V1: Not contract");
         require(Address.isContract(_lendingContract), "NimbusTikToken_V1: Not contract");
 
-        _name = "TikToken";
-        _symbol = "TT";
+        _name = "Smart Lender";
+        _symbol = "SL";
          
         swapRouter = IRouter(_swapRouter);
         WBNB = IWBNB(_wbnb);
