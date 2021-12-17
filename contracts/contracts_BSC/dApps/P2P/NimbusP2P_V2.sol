@@ -49,6 +49,10 @@ interface IEIP20Permit {
     function permit(address owner, address spender, uint value, uint deadline, uint8 v, bytes32 r, bytes32 s) external;
 }
 
+interface IEIP20 {
+   function decimals() external returns (uint8);
+}
+
 contract Ownable {
     address public owner;
     address public newOwner;
@@ -194,6 +198,8 @@ contract NimbusP2P_V2 is NimbusP2P_V2Storage, IERC721Receiver {
 
     function createTradeEIP20ToEIP20(address proposedAsset, uint proposedAmount, address askedAsset, uint askedAmount, uint deadline) external returns (uint tradeId) {
         require(Address.isContract(proposedAsset) && Address.isContract(askedAsset), "NimbusP2P_V2: Not contracts");
+         require(IEIP20(proposedAsset).decimals() >= 0, "NimbusP2P_V2: Propossed asset is not an EIP20 token" );
+        require(IEIP20(askedAsset).decimals() >= 0, "NimbusP2P_V2: Asked asset is not an EIP20 token" );
         require(proposedAmount > 0, "NimbusP2P_V2: Zero amount not allowed");
         TransferHelper.safeTransferFrom(proposedAsset, msg.sender, address(this), proposedAmount);
         tradeId = _createTradeSingle(proposedAsset, proposedAmount, 0, askedAsset, askedAmount, 0, deadline, false);   
