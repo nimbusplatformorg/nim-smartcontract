@@ -566,6 +566,9 @@ contract SmartLP is SmartLPStorage, IBEP721, IBEP721Metadata {
         require(_owners[tokenId] == msg.sender, "SmartLP: Not token owner");
         UserSupply storage userSupply = tikSupplies[tokenId];
         require(userSupply.IsActive, "SmartLP: Token not active");
+        require(userSupply.LendedBNBAmount < ((userSupply.LendedITokenAmount *lendingContract.tokenPrice()) / 1e18),
+            "SmartLP: lending rewards are not available"
+        );
         (uint lpBnbNbuUserRewards, uint lpBnbGnbuUserRewards, ) = getTokenRewardsAmounts(tokenId);
         
         if(lpBnbNbuUserRewards + lpBnbGnbuUserRewards > 0) {
