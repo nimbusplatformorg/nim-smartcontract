@@ -481,7 +481,7 @@ contract SmartLP is SmartLPStorage, IBEP721, IBEP721Metadata {
         lendingContract = ILending(_lendingContract);
 
         rewardDuration = ILpStaking(_lpStakingBnbNbu).rewardDuration();
-        minPurchaseAmount = 2.5 ether;
+        minPurchaseAmount = 1 ether;
 
         IBEP20(_nbuToken).approve(_swapRouter, type(uint256).max);
         IBEP20(_gnbuToken).approve(_swapRouter, type(uint256).max);
@@ -763,7 +763,8 @@ contract SmartLP is SmartLPStorage, IBEP721, IBEP721Metadata {
 
         for (uint256 i; i < _userTokens[msg.sender].length; i++) {
             if(_userTokens[msg.sender][i] == tokenId) {
-                _remove(i, _userTokens[msg.sender]);
+                _remove(i, msg.sender);
+                break;
             }
         }
         // Clear approvals from the previous owner
@@ -776,13 +777,9 @@ contract SmartLP is SmartLPStorage, IBEP721, IBEP721Metadata {
         emit Transfer(from, to, tokenId);
     }
 
-    function _remove(uint index, uint[] storage arr) internal virtual {
-        require(index < arr.length, "index out of bound");
-
-        for (uint i = index; i < arr.length - 1; i++) {
-            arr[i] = arr[i + 1];
-        }
-        arr.pop();
+    function _remove(uint index, address tokenOwner) internal virtual {
+        _userTokens[tokenOwner][index] = _userTokens[tokenOwner][_userTokens[tokenOwner].length - 1];
+        _userTokens[tokenOwner].pop();
     }
 
     function _approve(address to, uint256 tokenId) internal virtual {
