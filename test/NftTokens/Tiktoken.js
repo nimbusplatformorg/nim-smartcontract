@@ -3,8 +3,8 @@ const TT = artifacts.require("ERC20TestToken");
 const MockRouter = artifacts.require("MockRouterforTiktoken");
 const MockLpStaking = artifacts.require("MockLpStakingforTiktoken");
 const MockLending = artifacts.require("MockLendingforTiktoken");
-const Tiktoken = artifacts.require("TikToken")
-const TiktokenProxy = artifacts.require("TikTokenProxy");
+const SmartLP = artifacts.require("SmartLP")
+const SmartLPProxy = artifacts.require("SmartLPProxy");
 
 const {
   BN,
@@ -29,14 +29,14 @@ let iToken;
 let bnbNbuPair;
 let bnbGnbuPair;
 let token;
-let tiktokenProxy;
-let contractTiktoken;
+let smartLPProxy;
+let contractSmartLP;
 let lending;
 
 
 
 
-contract("Tiktoken", (accounts) => {
+contract("SmartLP", (accounts) => {
   beforeEach(async function () {
 
     nbu = await TT.new(new BN("1000000000000000000000000"), {
@@ -116,10 +116,10 @@ contract("Tiktoken", (accounts) => {
       from: accounts[0],
     });
 
-    token = await Tiktoken.new();
-    tiktokenProxy = await TiktokenProxy.new(token.address);
-    contractTiktoken = await Tiktoken.at(tiktokenProxy.address);
-    let a = await contractTiktoken.initialize(
+    token = await SmartLP.new();
+    smartLPProxy = await SmartLPProxy.new(token.address);
+    contractSmartLP = await SmartLP.at(smartLPProxy.address);
+    let a = await contractSmartLP.initialize(
       router.address,
       wbnb.address,
       nbu.address,
@@ -131,43 +131,43 @@ contract("Tiktoken", (accounts) => {
       lending.address
     )
 
-    await nbu.approve(contractTiktoken.address, MAX_UINT256, {
+    await nbu.approve(contractSmartLP.address, MAX_UINT256, {
       from: accounts[0],
     });
-    await nbu.transfer(contractTiktoken.address, new BN("10000000000000000000000"), {
+    await nbu.transfer(contractSmartLP.address, new BN("10000000000000000000000"), {
       from: accounts[0],
     });
 
-    await gnbu.approve(contractTiktoken.address, MAX_UINT256, {
+    await gnbu.approve(contractSmartLP.address, MAX_UINT256, {
       from: accounts[0],
     });
-    await gnbu.transfer(contractTiktoken.address, new BN("10000000000000000000000"), {
+    await gnbu.transfer(contractSmartLP.address, new BN("10000000000000000000000"), {
       from: accounts[0],
     });
 
   });
 
-  describe("test buyTiktoken method", async function () {
+  describe("test buySmartLP method", async function () {
     it("purchase should not take place if the amount is less than the min purchase amount", async function () {
       await expectRevert(
-        contractTiktoken.buyTikToken({
+        contractSmartLP.buySmartLP({
           from: accounts[0],
           value: "100000000000000000"
         }),
-        'TikToken: min purchase is too low'
+        'SmartLP: Token price is more than sent'
       );
     });
 
     it("purchase must take place if the BNB amount is more than the min purchase amount", async function () {
-      await contractTiktoken.buyTikToken({
+      await contractSmartLP.buySmartLP({
         from: accounts[0],
         value: "5000000000000000000"
       });
 
-      let userTokens = await contractTiktoken.getUserTokens(accounts[0]);
-      let tokenInfo = await contractTiktoken.tikSupplies(userTokens[userTokens.length - 1]);
-      let tokenCount = await contractTiktoken.tokenCount();
-      let tokenOwner = await contractTiktoken.ownerOf(userTokens[userTokens.length - 1]);
+      let userTokens = await contractSmartLP.getUserTokens(accounts[0]);
+      let tokenInfo = await contractSmartLP.tikSupplies(userTokens[userTokens.length - 1]);
+      let tokenCount = await contractSmartLP.tokenCount();
+      let tokenOwner = await contractSmartLP.ownerOf(userTokens[userTokens.length - 1]);
 
       expect(tokenCount).to.be.bignumber.equal(new BN(1));
       expect(tokenInfo.ProvidedBnb).to.be.bignumber.equal(new BN("5000000000000000000"));
@@ -179,18 +179,18 @@ contract("Tiktoken", (accounts) => {
   describe("test withdrawUserRewards method", async function () {
     it("should send the owner of the token his reward", async function () {
       let date = Date.now()
-      await contractTiktoken.buyTikToken({
+      await contractSmartLP.buySmartLP({
         from: accounts[0],
         value: "5000000000000000000"
       });
-      let userTokens = await contractTiktoken.getUserTokens(accounts[0]);
-      let userRewards = await contractTiktoken.getTokenRewardsAmounts(
+      let userTokens = await contractSmartLP.getUserTokens(accounts[0]);
+      let userRewards = await contractSmartLP.getTokenRewardsAmounts(
         userTokens[userTokens.length - 1], {
           from: accounts[0]
         }
       );
       await time.increaseTo(new BN(date + 15));
-      await contractTiktoken.withdrawUserRewards(userTokens[userTokens.length - 1], {
+      await contractSmartLP.withdrawUserRewards(userTokens[userTokens.length - 1], {
         from: accounts[0]
       })
       expect(userRewards["0"] + userRewards["1"]).to.be.bignumber.equal(new BN(0));
@@ -198,67 +198,67 @@ contract("Tiktoken", (accounts) => {
 
     it("rewards should not be sent to not the token owner", async function () {
       let date = Date.now()
-      await contractTiktoken.buyTikToken({
+      await contractSmartLP.buySmartLP({
         from: accounts[0],
         value: "5000000000000000000"
       });
-      let userTokens = await contractTiktoken.getUserTokens(accounts[0]);
+      let userTokens = await contractSmartLP.getUserTokens(accounts[0]);
       await time.increaseTo(new BN(date + 15));
 
       await expectRevert(
-        contractTiktoken.withdrawUserRewards(userTokens[userTokens.length - 1], {
+        contractSmartLP.withdrawUserRewards(userTokens[userTokens.length - 1], {
           from: accounts[1]
         }),
-        "TikToken: Not token owner"
+        "SmartLP: Not token owner"
       );
     });
 
     it("rewards should not be sent if they haven't appeared yet", async function () {
-      await contractTiktoken.buyTikToken({
+      await contractSmartLP.buySmartLP({
         from: accounts[0],
         value: "5000000000000000000"
       });
-      let userTokens = await contractTiktoken.getUserTokens(accounts[0]);
+      let userTokens = await contractSmartLP.getUserTokens(accounts[0]);
 
       await expectRevert(
-        contractTiktoken.withdrawUserRewards(userTokens[userTokens.length - 1], {
+        contractSmartLP.withdrawUserRewards(userTokens[userTokens.length - 1], {
           from: accounts[0]
         }),
-        "TikToken: Claim not enough"
+        "SmartLP: Claim not enough"
       );
     });
 
   });
 
-  describe("test burnTikToken method", async function () {
-    it("should burn TikToken", async function () {
-      await contractTiktoken.buyTikToken({
+  describe("test burnSmartLP method", async function () {
+    it("should burn SmartLP", async function () {
+      await contractSmartLP.buySmartLP({
         from: accounts[0],
         value: "5000000000000000000"
       });
-      let userTokens = await contractTiktoken.getUserTokens(accounts[0]);
-      await contractTiktoken.burnTikToken(userTokens[userTokens.length - 1], {
+      let userTokens = await contractSmartLP.getUserTokens(accounts[0]);
+      await contractSmartLP.burnSmartLP(userTokens[userTokens.length - 1], {
         from: accounts[0]
       })
-      let tokenInfo = await contractTiktoken.tikSupplies(userTokens[userTokens.length - 1]);
-      let tokenOwner = await contractTiktoken.ownerOf(userTokens[userTokens.length - 1]);
+      let tokenInfo = await contractSmartLP.tikSupplies(userTokens[userTokens.length - 1]);
+      let tokenOwner = await contractSmartLP.ownerOf(userTokens[userTokens.length - 1]);
 
       expect(tokenOwner).to.not.equal(accounts[0])
       expect(tokenInfo.IsActive).to.be.false;
     });
 
-    it("not must burn Tiktoken if the user is not the owner of Tiktoken", async function () {
-      await contractTiktoken.buyTikToken({
+    it("not must burn SmartLP if the user is not the owner of SmartLP", async function () {
+      await contractSmartLP.buySmartLP({
         from: accounts[0],
         value: "5000000000000000000"
       });
-      let userTokens = await contractTiktoken.getUserTokens(accounts[0]);
+      let userTokens = await contractSmartLP.getUserTokens(accounts[0]);
 
       await expectRevert(
-        contractTiktoken.burnTikToken(userTokens[userTokens.length - 1], {
+        contractSmartLP.burnSmartLP(userTokens[userTokens.length - 1], {
           from: accounts[1]
         }),
-        "TikToken: Not token owner"
+        "SmartLP: Not token owner"
       );
     });
 
@@ -266,12 +266,12 @@ contract("Tiktoken", (accounts) => {
 
   describe("test read contract methods", async function () {
     it("getUserTokens should return an array of user tokens", async function () {
-      await contractTiktoken.buyTikToken({
+      await contractSmartLP.buySmartLP({
         from: accounts[0],
         value: "5000000000000000000"
       });
-      let userTokens = await contractTiktoken.getUserTokens(accounts[0]);
-      let tokenCount = await contractTiktoken.tokenCount();
+      let userTokens = await contractSmartLP.getUserTokens(accounts[0]);
+      let tokenCount = await contractSmartLP.tokenCount();
 
       expect(userTokens).to.be.an('array');
       expect(userTokens[userTokens.length - 1]).to.be.bignumber.equal(tokenCount);
@@ -280,23 +280,23 @@ contract("Tiktoken", (accounts) => {
 
 
     it("tokenCount should return the number of tokens on the contract", async function () {
-      await contractTiktoken.buyTikToken({
+      await contractSmartLP.buySmartLP({
         from: accounts[0],
         value: "5000000000000000000"
       });
-      let tokenCount = await contractTiktoken.tokenCount();
+      let tokenCount = await contractSmartLP.tokenCount();
 
       expect(tokenCount).to.be.bignumber.equal(new BN(1));
     });
 
 
-    it("tikSupplies should return information about the TikToken", async function () {
-      await contractTiktoken.buyTikToken({
+    it("tikSupplies should return information about the SmartLP", async function () {
+      await contractSmartLP.buySmartLP({
         from: accounts[0],
         value: "5000000000000000000"
       });
-      let userTokens = await contractTiktoken.getUserTokens(accounts[0]);
-      let tokenInfo = await contractTiktoken.tikSupplies(userTokens[userTokens.length - 1]);
+      let userTokens = await contractSmartLP.getUserTokens(accounts[0]);
+      let tokenInfo = await contractSmartLP.tikSupplies(userTokens[userTokens.length - 1]);
 
       expect(tokenInfo.ProvidedBnb).to.be.bignumber.equal(new BN("5000000000000000000"));
       expect(tokenInfo.IsActive).to.be.true;
@@ -307,13 +307,13 @@ contract("Tiktoken", (accounts) => {
 
     it("getTokenRewardsAmounts must return the expected amount of rewards", async function () {
       let date = Date.now();
-      await contractTiktoken.buyTikToken({
+      await contractSmartLP.buySmartLP({
         from: accounts[0],
         value: "5000000000000000000"
       });
-      let userTokens = await contractTiktoken.getUserTokens(accounts[0]);
+      let userTokens = await contractSmartLP.getUserTokens(accounts[0]);
       await time.increaseTo(new BN(date + 15));
-      let userRewards = await contractTiktoken.getTokenRewardsAmounts(
+      let userRewards = await contractSmartLP.getTokenRewardsAmounts(
         userTokens[userTokens.length - 1], {
           from: accounts[0]
         }
@@ -326,13 +326,13 @@ contract("Tiktoken", (accounts) => {
 
     it("getTotalAmountsOfRewards must return the expected amount of rewards for lp staking", async function () {
       let date = Date.now();
-      await contractTiktoken.buyTikToken({
+      await contractSmartLP.buySmartLP({
         from: accounts[0],
         value: "5000000000000000000"
       });
-      let userTokens = await contractTiktoken.getUserTokens(accounts[0]);
+      let userTokens = await contractSmartLP.getUserTokens(accounts[0]);
       await time.increaseTo(new BN(date + 15));
-      let userRewards = await contractTiktoken.getTotalAmountsOfRewards(
+      let userRewards = await contractSmartLP.getTotalAmountsOfRewards(
         userTokens[userTokens.length - 1], {
           from: accounts[0]
         }
@@ -342,24 +342,24 @@ contract("Tiktoken", (accounts) => {
     });
 
     it("minPurchaseAmount must return min purchase amount", async function () {
-      let minPurchaseAmount = contractTiktoken.minPurchaseAmount();
+      let minPurchaseAmount = contractSmartLP.minPurchaseAmount();
 
       expect(minPurchaseAmount).to.be.bignumber;
     });
 
     it("rewardDuration should return the duration of rewards", async function () {
-      let rewardDuration = contractTiktoken.rewardDuration();
+      let rewardDuration = contractSmartLP.rewardDuration();
 
       expect(rewardDuration).to.be.bignumber;
     });
 
     it("weightedStakeDate must return the last reward withdrawal date", async function () {
-      await contractTiktoken.buyTikToken({
+      await contractSmartLP.buySmartLP({
         from: accounts[0],
         value: "5000000000000000000"
       });
-      let userTokens = await contractTiktoken.getUserTokens(accounts[0]);
-      let stakeDate = await contractTiktoken.weightedStakeDate(userTokens[userTokens.length - 1]);
+      let userTokens = await contractSmartLP.getUserTokens(accounts[0]);
+      let stakeDate = await contractSmartLP.weightedStakeDate(userTokens[userTokens.length - 1]);
 
       expect(stakeDate).to.be.bignumber;
     });
