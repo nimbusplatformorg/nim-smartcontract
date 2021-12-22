@@ -74,8 +74,7 @@ library Address {
     }
 }
 
-contract NimbusReferralProgramMarketing is Ownable {
-
+contract NimbusReferralProgramMarketingStorage is Ownable {  
     struct Qualification {
         uint Number;
         uint TotalTurnover; 
@@ -83,7 +82,7 @@ contract NimbusReferralProgramMarketing is Ownable {
         uint FixedReward;
     }
 
-    IBEP20 public immutable NBU;
+    IBEP20 public NBU;
     INimbusReferralProgramUsers rpUsers;
     INimbusVesting public vestingContract;
 
@@ -146,9 +145,52 @@ contract NimbusReferralProgramMarketing is Ownable {
     event ImportRegionalManagerTurnoverSet(address indexed headOfLocation, uint turnover);
     event ImportUserHeadOfLocation(address indexed user, address indexed headOfLocation);
     event UpgradeUserQualification(address indexed user, uint indexed previousQualification, uint indexed newQualification, uint previousStructureTurnOver, uint newStructureTurnover);
+    event IncorrectMaxLevelPaymentForUser(address indexed user, uint currentMaxLevelPayment, uint variableReward);
+    event ImportPreviousAirdrop(uint previousTotalFixedAirdropped, uint newTotalFixedAirdropped, uint previousTotalVariableAirdropped, uint newTotalVariableAirdropped);
+}
 
+contract NimbusReferralProgramMarketingProxy is NimbusReferralProgramMarketingStorage {
+    address public target;
+    
+    event SetTarget(address indexed newTarget);
 
-    constructor(address _nbu, address _rpUsers, address _vestingContract) {
+    constructor(address _newTarget) NimbusReferralProgramMarketingStorage() {
+        _setTarget(_newTarget);
+    }
+
+    fallback() external payable {
+        if (gasleft() <= 2300) {
+            return;
+        }
+
+        address target_ = target;
+        bytes memory data = msg.data;
+        assembly {
+            let result := delegatecall(gas(), target_, add(data, 0x20), mload(data), 0, 0)
+            let size := returndatasize()
+            let ptr := mload(0x40)
+            returndatacopy(ptr, 0, size)
+            switch result
+            case 0 { revert(ptr, size) }
+            default { return(ptr, size) }
+        }
+    }
+
+    function setTarget(address _newTarget) external onlyOwner {
+        _setTarget(_newTarget);
+    }
+
+    function _setTarget(address _newTarget) internal {
+        require(Address.isContract(_newTarget), "Target not a contract");
+        target = _newTarget;
+        emit SetTarget(_newTarget);
+    }
+}
+
+contract NimbusReferralProgramMarketing is NimbusReferralProgramMarketingStorage {
+    address public target;
+
+    function initialize(address _nbu, address _rpUsers, address _vestingContract) external onlyOwner {
         require(Address.isContract(_nbu), "NimbusReferralProgramMarketing: _nbu is not a contract");
         require(Address.isContract(_rpUsers), "NimbusReferralProgramMarketing: _rpUsers is not a contract");
         require(Address.isContract(_vestingContract), "NimbusReferralProgramMarketing: _vestingContract is not a contract");
@@ -199,7 +241,9 @@ contract NimbusReferralProgramMarketing is Ownable {
     }
 
     function claimRewards() external {
-        (uint userFixedAirdropAmount, uint userVariableAirdropAmount, uint potentialLevel, bool isMaxLevel) = getUserRewards(msg.sender);
+        (uint userFixedAirdropAmount, uint userVariableAirdropAmount, uint potentialLevel, bool isMaxLevel) = getUserRewards(msg.sender, true);
+        require(userFixedAirdropAmount > 0 || userVariableAirdropAmount > 0 || (potentialLevel > userQualificationLevel[msg.sender]), "NimbusReferralProgramMarketing: No rewards");
+
         if (userFixedAirdropAmount > 0) {
             totalFixedAirdropped += userFixedAirdropAmount;
             vestingContract.vestWithVestType(msg.sender, userFixedAirdropAmount, vestingFirstPeriodDuration, vestingSecondPeriodDuration, 11); 
@@ -251,7 +295,7 @@ contract NimbusReferralProgramMarketing is Ownable {
         uint qualificationLevel = userQualificationLevel[user];
         canQualBeUpgraded = _getUserPotentialQualificationLevel(user, qualificationLevel) > qualificationLevel;
         if (qualificationLevel >= qualificationsCount - 1) {
-            (, uint userVariable, ,)  = getUserRewards(user);
+            (, uint userVariable, ,)  = getUserRewards(user, true);
             canClaimMaxLevelReward = userVariable > 0;
         }
     }
@@ -265,7 +309,7 @@ contract NimbusReferralProgramMarketing is Ownable {
         return userPersonalTurnover[user] + userStructureTurnover[user];
     }
 
-    function getUserRewards(address user) public view returns (uint userFixed, uint userVariable, uint potentialLevel, bool isMaxLevel) {
+    function getUserRewards(address user, bool safeMaxLevelPayment) public view returns (uint userFixed, uint userVariable, uint potentialLevel, bool isMaxLevel) {
         require(rpUsers.userIdByAddress(user) > 0, "NimbusReferralProgramMarketing: User not registered");
         uint qualificationLevel = userQualificationLevel[user];
         isMaxLevel = qualificationLevel >= (qualificationsCount - 1);
@@ -285,10 +329,15 @@ contract NimbusReferralProgramMarketing is Ownable {
             referralAddresses[i] = referralAddress;
         }
         
-        userFixed = _getFixedRewardToBePaidForQualification(user, referralAddresses, userTotalTurnover(user), qualificationLevel, potentialLevel);
+        if (!isMaxLevel) userFixed = _getFixedRewardToBePaidForQualification(user, referralAddresses, userTotalTurnover(user), qualificationLevel, potentialLevel);
         userVariable = _getVariableRewardToBePaidForQualification(referralAddresses, potentialLevel);
         if (isMaxLevel) {
-            if (userVariable > userMaxLevelPayment[user]) userVariable -= userMaxLevelPayment[user];
+            if (safeMaxLevelPayment) {
+                require(userVariable >= userMaxLevelPayment[user], "NimbusReferralProgramMarketing: Incorrect previous userMaxLevelPayment");
+                userVariable -= userMaxLevelPayment[user];
+            } else if (userVariable >= userMaxLevelPayment[user]) {
+                userVariable -= userMaxLevelPayment[user];
+            }
         }
     }
 
@@ -312,7 +361,7 @@ contract NimbusReferralProgramMarketing is Ownable {
             referralAddresses[i] = referralAddress;
         }
 
-        userFixed = _getFixedRewardToBePaidForQualification(user, referralAddresses, userTotalTurnover(user), qualificationLevel, potentialLevel);
+        if (!isMaxLevel) userFixed = _getFixedRewardToBePaidForQualification(user, referralAddresses, userTotalTurnover(user), qualificationLevel, potentialLevel);
         (linePercentages, lineVariables) = _getVariableRewardToBePaidForQualificationByLines(referralAddresses, potentialLevel);
         //don't recalculate for max level users because of impossibility to estimate userMaxLevelPayment impact for the result
     }
@@ -524,7 +573,25 @@ contract NimbusReferralProgramMarketing is Ownable {
         require (headOfLocations.length > index, "NimbusReferralProgramMarketing: Incorrect index");
         address headOfLocation = headOfLocations[index];
         headOfLocations[index] = headOfLocations[headOfLocations.length - 1];
+        headOfLocations.pop();
+        isHeadOfLocation[headOfLocation] = false;
+        emit RemoveHeadOfLocation(headOfLocation);
+    }
+
+    function removeHeadOfLocationByAddress(address headOfLocation) external onlyOwner {
+        uint index;
+        bool isFound;
+        for (uint256 i; i < headOfLocations.length; i++) {
+            if (headOfLocations[i] == headOfLocation) {
+                index = i;
+                isFound = true;
+                break;
+            }
+        }
+        require (isFound, "NimbusReferralProgramMarketing: No such head of location");
+        headOfLocations[index] = headOfLocations[headOfLocations.length - 1];
         headOfLocations.pop(); 
+        isHeadOfLocation[headOfLocation] = false;
         emit RemoveHeadOfLocation(headOfLocation);
     }
 
@@ -543,7 +610,43 @@ contract NimbusReferralProgramMarketing is Ownable {
         address regionalManager = regionalManagers[index];
         regionalManagers[index] = regionalManagers[regionalManagers.length - 1];
         regionalManagers.pop(); 
+        isRegionManager[regionalManager] = false;
         emit RemoveRegionalManager(regionalManager);
+    }
+
+    function removeRegionalManagerByAddress(address regionalManager) external onlyOwner {
+        uint index;
+        bool isFound;
+        for (uint256 i; i < regionalManagers.length; i++) {
+            if (regionalManagers[i] == regionalManager) {
+                index = i;
+                isFound = true;
+                break;
+            }
+        }
+        require (isFound, "NimbusReferralProgramMarketing: No such regional manager");
+        regionalManagers[index] = regionalManagers[regionalManagers.length - 1];
+        regionalManagers.pop(); 
+        isRegionManager[regionalManager] = false;
+        emit RemoveRegionalManager(regionalManager);
+    }
+
+    function importPreviousAirdrop(uint _totalFixedAirdropped, uint _totalVariableAirdropped, bool addTo) external onlyOwner {
+        if (addTo) {
+            uint previousTotalFixedAirdropped = totalFixedAirdropped;
+            uint previousTotalVariableAirdropped = totalVariableAirdropped;
+            emit ImportPreviousAirdrop(
+                previousTotalFixedAirdropped, 
+                previousTotalFixedAirdropped + _totalFixedAirdropped, 
+                previousTotalVariableAirdropped, 
+                previousTotalVariableAirdropped + _totalVariableAirdropped);
+            totalFixedAirdropped += _totalFixedAirdropped;
+            totalVariableAirdropped += _totalVariableAirdropped;
+        } else {
+            emit ImportPreviousAirdrop(totalFixedAirdropped, _totalFixedAirdropped, totalVariableAirdropped, _totalVariableAirdropped);
+            totalFixedAirdropped = _totalFixedAirdropped;
+            totalVariableAirdropped = _totalVariableAirdropped;
+        }
     }
 
     function importUserHeadOfLocation(address user, address headOfLocation) external onlyOwner {

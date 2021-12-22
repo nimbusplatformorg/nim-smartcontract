@@ -193,11 +193,12 @@ contract HeadOfLocationMotivation is Ownable, Pausable {
         require(Address.isContract(referralProgramMarketingAddress), "HeadOfLocationMotivation: ReferralProgramMarketing is not a contract");
         SYSTEM_TOKEN = IBEP20(systemToken);
         referralProgramMarketing = INimbusReferralProgramMarketing(referralProgramMarketingAddress);
+        percent = 300; //3%
     }
 
     function claimReward() external returns (uint) {
         require(referralProgramMarketing.isHeadOfLocation(msg.sender), "HeadOfLocationMotivation: User is not head of location");
-        require(isAllowedToReceiveReward[msg.sender], "HeadOfLocationMotivation: User disallowed to recieve reward");
+        require(isAllowedToReceiveReward[msg.sender], "HeadOfLocationMotivation: User disallowed to receive reward");
         uint turnover = referralProgramMarketing.headOfLocationTurnover(msg.sender);
         uint reward = _getRewardAmount(msg.sender, turnover);
         require(reward > 0, "HeadOfLocationMotivation: Reward amount is zero");
@@ -209,7 +210,7 @@ contract HeadOfLocationMotivation is Ownable, Pausable {
 
     function getRewardAmount(address user) external view returns (uint) {
         require(referralProgramMarketing.isHeadOfLocation(user), "HeadOfLocationMotivation: User is not head of location");
-        require(isAllowedToReceiveReward[user], "HeadOfLocationMotivation: User disallowed to recieve reward");
+        require(isAllowedToReceiveReward[user], "HeadOfLocationMotivation: User disallowed to receive reward");
         uint turnover = referralProgramMarketing.headOfLocationTurnover(user);
         return _getRewardAmount(user,turnover);
     }
@@ -235,7 +236,7 @@ contract HeadOfLocationMotivation is Ownable, Pausable {
     }
 
     function updatePercent(uint newPercent) external onlyOwner {
-        require(newPercent > 0, "HeadOfLocationMotivation: New percent can't be zero");
+        require(newPercent > 0 && newPercent <= 10000, "HeadOfLocationMotivation: Wrong percent amount");
         require(newPercent != percent, "HeadOfLocationMotivation: New percent is the same as the old one");
         percent = newPercent;
         emit UpdatePercent(newPercent);
@@ -255,7 +256,7 @@ contract HeadOfLocationMotivation is Ownable, Pausable {
         emit RescueToken(token, to, amount);
     }
 
-    function importUsers(address[] memory users, uint[] memory amounts, bool[] memory isAllowed, bool addToExistent) external onlyOwner {
+    function importUsers(address[] memory users, uint[] memory amounts, bool[] memory isAllowed, bool addToExistent, bool checkAmount) external onlyOwner {
         require(users.length == amounts.length && users.length == isAllowed.length, "HeadOfLocationMotivation: Wrong lengths");
 
         for (uint256 i = 0; i < users.length; i++) {
@@ -265,8 +266,11 @@ contract HeadOfLocationMotivation is Ownable, Pausable {
             } else {
                 amount = amounts[i];
             } 
+            if (checkAmount) {
+                require(referralProgramMarketing.headOfLocationTurnover(users[i]) >= amount);
+            }
             holLastTurnoverAmount[users[i]] = amount;
-            if (isAllowed[i]) isAllowedToReceiveReward[users[i]] = true;
+            isAllowedToReceiveReward[users[i]] = isAllowed[i];
             emit ImportUser(users[i], amount);
         }
     }
