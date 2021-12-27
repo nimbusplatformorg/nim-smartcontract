@@ -123,14 +123,14 @@ contract NimbusReferralProgramLogic is Ownable {
     }
 
     function distributeEarnedFees(address token, uint userId) external {
-        distributeFees(token, userId);
+        if (_undistributedFees[token][userId] > 0) distributeFees(token, userId);
         uint callerId = users.userIdByAddress(msg.sender);
         if (_undistributedFees[token][callerId] > 0) distributeFees(token, callerId);
     }
 
     function distributeEarnedFees(address token, uint[] memory userIds) external {
         for (uint i; i < userIds.length; i++) {
-            distributeFees(token, userIds[i]);
+            if (_undistributedFees[token][userIds[i]] > 0) distributeFees(token, userIds[i]);
         }
         
         uint callerId = users.userIdByAddress(msg.sender);
@@ -140,7 +140,7 @@ contract NimbusReferralProgramLogic is Ownable {
     function distributeEarnedFees(address[] memory tokens, uint userId) external {
         uint callerId = users.userIdByAddress(msg.sender);
         for (uint i; i < tokens.length; i++) {
-            distributeFees(tokens[i], userId);
+            if (_undistributedFees[tokens[i]][userId] > 0) distributeFees(tokens[i], userId);
             if (_undistributedFees[tokens[i]][callerId] > 0) distributeFees(tokens[i], callerId);
         }
     }
