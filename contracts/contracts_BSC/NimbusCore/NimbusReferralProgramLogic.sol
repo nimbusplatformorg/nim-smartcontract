@@ -170,15 +170,11 @@ contract NimbusReferralProgramLogic is Ownable {
         uint sponsorId = users.userSponsor(userId);
         if (sponsorId < 1000000001) return level;
         address sponsorAddress = users.userAddressById(sponsorId);
-        if (isUserBalanceEnough(sponsorAddress)) {
-            uint bonusAmount = amount * levels[level] / 100;
-            TransferHelper.safeTransfer(token, sponsorAddress, bonusAmount);
-            _recordedBalances[token] = _recordedBalances[token] - bonusAmount;
-            emit DistributeFeesForUser(token, sponsorId, bonusAmount);
-            return transferToSponsor(token, sponsorId, amount, ++level, ++levelGuard);
-        } else {
-            return transferToSponsor(token, sponsorId, amount, level, ++levelGuard);
-        }            
+        uint bonusAmount = amount * levels[level] / 100;
+        TransferHelper.safeTransfer(token, sponsorAddress, bonusAmount);
+        _recordedBalances[token] = _recordedBalances[token] - bonusAmount;
+        emit DistributeFeesForUser(token, sponsorId, bonusAmount);
+        return transferToSponsor(token, sponsorId, amount, ++level, ++levelGuard);         
     }
 
     function isUserBalanceEnough(address user) public view returns (bool) {
