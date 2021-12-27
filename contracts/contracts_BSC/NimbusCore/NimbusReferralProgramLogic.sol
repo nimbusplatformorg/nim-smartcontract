@@ -55,6 +55,11 @@ interface INimbusReferralProgram {
     function userSponsorAddressByAddress(address user) external view returns (address);
 }
 
+interface INimbusInitialAcquisition {
+    function userPurchases(address user) external view returns (uint256);
+    function userPurchasesEquivalent(address user) external view returns (uint256);
+}
+
 interface INimbusStakingPool {
     function balanceOf(address account) external view returns (uint256);
     function stakingToken() external view returns (IBEP20);
@@ -66,6 +71,7 @@ interface INimbusRouter {
 
 contract NimbusReferralProgramLogic is Ownable { 
     INimbusReferralProgram public immutable users;
+    INimbusInitialAcquisition public initialAcquisitionContract;
     IBEP20 public immutable NBU;
     INimbusRouter public swapRouter;
     INimbusStakingPool[] public stakingPools; 
@@ -89,6 +95,7 @@ contract NimbusReferralProgramLogic is Ownable {
     event TransferToNimbusSpecialReserveFund(address indexed token, uint indexed fromUserId, uint undistributedAmount);
     event UpdateLevels(uint[] newLevels);
     event UpdateSpecialReserveFund(address newSpecialReserveFund);
+    event UpdateInitialAcquisitionContract(address indexed initialAcquisitionContractAddress);
 
     uint private unlocked = 1;
     modifier lock() {
@@ -98,12 +105,13 @@ contract NimbusReferralProgramLogic is Ownable {
         unlocked = 1;
     }
 
-    constructor(address referralUsers, address nbu)  {
-        require(referralUsers != address(0) && nbu != address(0), "Nimbus Referral: Address is zero");
+    constructor(address referralUsers, address nbu, address _initialAcquisitionContract)  {
+        require(referralUsers != address(0) && nbu != address(0) && _initialAcquisitionContract != address(0), "Nimbus Referral: Address is zero");
         levels = [40, 20, 13, 10, 10, 7];
         maxLevel = 6;
         NBU = IBEP20(nbu);
         users = INimbusReferralProgram(referralUsers);
+        initialAcquisitionContract = INimbusInitialAcquisition(_initialAcquisitionContract);
 
         minTokenAmountForCheck = 10 * 1e18;
         maxLevelDepth = 25;
@@ -179,10 +187,7 @@ contract NimbusReferralProgramLogic is Ownable {
 
     function isUserBalanceEnough(address user) public view returns (bool) {
         if (user == address(0)) return false;
-        uint amount = NBU.balanceOf(user);
-        for (uint i; i < stakingPools.length; i++) {
-            amount += stakingPools[i].balanceOf(user);
-        }
+        uint amount = initialAcquisitionContract.userPurchases(user);
         if (amount < minTokenAmountForCheck) return false;
         address[] memory path = new address[](2);
         path[0] = address(NBU);
@@ -209,6 +214,11 @@ contract NimbusReferralProgramLogic is Ownable {
         function updateSwapRouter(address newSwapRouter) external onlyOwner {
         require(newSwapRouter != address(0), "Nimbus Referral: Address is zero");
         swapRouter = INimbusRouter(newSwapRouter);
+    }
+
+    function updateInitialAcquisitionContract(address newInitialAcquisitionContract) external onlyOwner {
+        require(newInitialAcquisitionContract != address(0), "Nimbus Referral: Address is zero");
+        initialAcquisitionContract = INimbusInitialAcquisition(newInitialAcquisitionContract);
     }
 
     function updateSwapToken(address newSwapToken) external onlyOwner {
