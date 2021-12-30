@@ -403,8 +403,8 @@ contract SmartLPStorage is Ownable, Context, ERC165, ReentrancyGuard {
     ILending public lendingContract;
     IBEP20 public nbuToken;
     IBEP20 public busdToken;
-    INimbusPair internal nbuBusdPair;
-    // INimbusPair internal bnbNbuPair;
+    address internal nbuBusdPair;
+    address internal bnbNbuPair;
     
 
     uint public tokenCount;
@@ -436,8 +436,7 @@ contract SmartLPStorage is Ownable, Context, ERC165, ReentrancyGuard {
     string internal _name;
     string internal _symbol;
     // address internal token0NbuBusdPair;
-    bool internal token0Nbu;
-    bool internal token0Bnb;
+    // bool internal token0Nbu;
     
 
     // uint public requiredBnb;
@@ -537,19 +536,9 @@ contract SmartLP is SmartLPStorage, IBEP721, IBEP721Metadata {
         lpStakingBnbNbu = ILpStaking(_lpStakingBnbNbu);
         lpStakingNbuBusd = ILpStaking(_lpStakingNbuBusd);
         lendingContract = ILending(_lendingContract);
-        nbuBusdPair = INimbusPair(_nbuBusdPair);
-        // bnbNbuPair = INimbusPair(_bnbNbuPair);
-        // token0NbuBusdPair = INimbusPair(_nbuBusdPair).token0();
-        if(address(INimbusPair(_nbuBusdPair).token0()) == address(nbuToken)) {
-            token0Nbu = true;
-        } else {
-            token0Nbu = false;
-        }
-        // if(address(INimbusPair(_bnbNbuPair).token0()) == address(WBNB)) {
-        //     token0Bnb = true;
-        // } else {
-        //     token0Bnb = false;
-        // }  
+        nbuBusdPair = _nbuBusdPair;
+        bnbNbuPair = _bnbNbuPair;
+       
       
         rewardDuration = ILpStaking(_lpStakingBnbNbu).rewardDuration();
         minPurchaseAmount = 500000000000000000000;
@@ -567,7 +556,8 @@ contract SmartLP is SmartLPStorage, IBEP721, IBEP721Metadata {
     receive() external payable {
         assert(msg.sender == address(WBNB) || msg.sender == address(swapRouter));
     }
-    
+
+
 
 
     // ========================== SmartLP functions ==========================
@@ -589,15 +579,23 @@ contract SmartLP is SmartLPStorage, IBEP721, IBEP721Metadata {
       
       path[0] = address(nbuToken);
       path[1] = address(WBNB);      
-      (uint[] memory amountsNbuBnbSwap) = swapRouter.swapExactTokensForBNB(amountsBusdNbuSwap[1]/3,0, path, address(this), block.timestamp);
+    //   (uint[] memory amountsNbuBnbSwap) = swapRouter.swapExactTokensForBNB(amountsBusdNbuSwap[1]/3,0, path, address(this), block.timestamp);
+        (uint[] memory amountsNbuBnbSwap) = swapRouter.swapTokensForExactBNB(
+            amountsBusdNbuSwap[1]/3,
+            _getRequiredTokenValue(amountsBusdNbuSwap[1]/3, address(nbuToken), address(bnbNbuPair)), 
+            
+            
+            path, 
+            address(this), 
+            block.timestamp);
 
-    amountNbu -= amountsBusdNbuSwap[1]/3;
+        amountNbu -= amountsNbuBnbSwap[0];
 
       
       
       (uint amountBnbNbu, , uint liquidityBnbNbu) = swapRouter.addLiquidityBNB{value: amountsNbuBnbSwap[1]}(address(nbuToken), amountsNbuBnbSwap[0], 0, 0, address(this), block.timestamp);
       amountNbu -= amountBnbNbu;
-    uint requiredTokenAmount = _getRequiredTokenValue(amountNbu);
+    uint requiredTokenAmount = _getRequiredTokenValue(amountNbu, address(nbuToken), address(nbuBusdPair));
       
       (, uint amountBusdNbu, uint liquidityBusdNbu) = swapRouter.addLiquidity(address(nbuToken), address(busdToken),amountNbu,requiredTokenAmount, 0, 0, address(this), block.timestamp);
       amountBusd -= amountBusdNbu;
@@ -693,25 +691,24 @@ contract SmartLP is SmartLPStorage, IBEP721, IBEP721Metadata {
         lendedUserRewards = (userSupply.LendedITokenAmount * lendingContract.tokenPrice() / 1e18) - userSupply.LendedBusdAmount;
     }
     
-    function getTotalAmountsOfRewards(uint tokenId) public view returns (uint nbuReward, uint busdReward) {
-        (uint lpBnbNbuUserRewards, uint lpNbuBusdUserRewards, uint rewardsBusd) = getTokenRewardsAmounts(tokenId);
-        nbuReward = lpBnbNbuUserRewards + lpNbuBusdUserRewards;
-        busdReward = rewardsBusd;
-    }
+    // function getTotalAmountsOfRewards(uint tokenId) public view returns (uint nbuReward, uint busdReward) {
+    //     (uint lpBnbNbuUserRewards, uint lpNbuBusdUserRewards, uint rewardsBusd) = getTokenRewardsAmounts(tokenId);
+    //     nbuReward = lpBnbNbuUserRewards + lpNbuBusdUserRewards;
+    //     busdReward = rewardsBusd;
+    // }
     
     function getUserTokens(address user) public view returns (uint[] memory) {
         return _userTokens[user];
     }
 
-    function _getRequiredTokenValue (uint tokenAmount) internal returns (uint requiredTokenAmount) {
-        uint requiredTokenAmount;
-        (uint112 _reserve0, uint112 _reserve1,) = nbuBusdPair.getReserves();
+    function _getRequiredTokenValue (uint tokenAmount, address token, address pair) internal returns (uint requiredTokenAmount) {
+        (uint112 _reserve0, uint112 _reserve1,) = INimbusPair(address(pair)).getReserves();
 
-        if(token0Nbu) {
-          requiredTokenAmount = tokenAmount * (_reserve0/_reserve1);
-      } else {
-          requiredTokenAmount = tokenAmount * (_reserve1/_reserve0);
-      }
+        if(address(INimbusPair(address(pair)).token0()) == address(token)) {
+            requiredTokenAmount = tokenAmount * (_reserve0/_reserve1);
+        } else {
+            requiredTokenAmount = tokenAmount * (_reserve1/_reserve0);
+        }
       }
 
 
