@@ -756,17 +756,17 @@ contract SmartLP is SmartLPStorage, IBEP721, IBEP721Metadata {
 
     function _transfer(address from, address to, uint256 tokenId) internal virtual {
         require(to != address(0), "ERC721: transfer to the zero address");
-        require(SmartLP.ownerOf(tokenId) == from, "ERC721: transfer of token that is not own");
+        require(SmartLP.ownerOf(tokenId) == from, "ERC721: transfer of token that is not owner");
 
-        for (uint256 i; i < _userTokens[msg.sender].length; i++) {
-            if(_userTokens[msg.sender][i] == tokenId) {
-                _remove(i, msg.sender);
+        for (uint256 i; i < _userTokens[from].length; i++) {
+            if(_userTokens[from][i] == tokenId) {
+                _remove(i, from);
                 break;
             }
         }
         // Clear approvals from the previous owner
         _approve(address(0), tokenId);
-
+        _userTokens[to].push(tokenId);
         _balances[from] -= 1;
         _balances[to] += 1;
         _owners[tokenId] = to;
