@@ -403,10 +403,9 @@ contract SmartLPStorage is Ownable, Context, ERC165, ReentrancyGuard {
     ILending public lendingContract;
     IBEP20 public nbuToken;
     IBEP20 public busdToken;
-    INimbusPair internal nbuBusdPair;
-    // INimbusPair internal bnbNbuPair;
+    address internal nbuBusdPair;
+    address internal bnbNbuPair;
     
-
     uint public tokenCount;
     uint public minPurchaseAmount;
     uint256 public rewardDuration;
@@ -418,7 +417,7 @@ contract SmartLPStorage is Ownable, Context, ERC165, ReentrancyGuard {
       uint LendedBusdAmount;
       uint PoolNbuAmount;
       uint PoolBnbAmount;
-      uint PoolNbuBusdAmount;
+      uint PoolBusdAmount;
       uint LendedITokenAmount;
       uint NbuBnbStakeNonce;
       uint NbuBusdStakeNonce;
@@ -435,15 +434,7 @@ contract SmartLPStorage is Ownable, Context, ERC165, ReentrancyGuard {
 
     string internal _name;
     string internal _symbol;
-    // address internal token0NbuBusdPair;
-    bool internal token0Nbu;
-    bool internal token0Bnb;
-    
 
-    // uint public requiredBnb;
-    // uint public reserve0;
-    // uint public reserve1;
-    // address public tokenBbnbNbu;
     mapping(uint256 => address) internal _owners;
     mapping(address => uint256) internal _balances;
     mapping(uint256 => address) internal _tokenApprovals;
@@ -512,7 +503,7 @@ contract SmartLP is SmartLPStorage, IBEP721, IBEP721Metadata {
         address _nbuToken, 
         address _busdToken, 
         address _bnbNbuPair, 
-        address _nbuBusdPair, 
+        address _nbuBusdPair,
         address _lpStakingBnbNbu, 
         address _lpStakingNbuBusd, 
         address _lendingContract
@@ -537,19 +528,9 @@ contract SmartLP is SmartLPStorage, IBEP721, IBEP721Metadata {
         lpStakingBnbNbu = ILpStaking(_lpStakingBnbNbu);
         lpStakingNbuBusd = ILpStaking(_lpStakingNbuBusd);
         lendingContract = ILending(_lendingContract);
-        nbuBusdPair = INimbusPair(_nbuBusdPair);
-        // bnbNbuPair = INimbusPair(_bnbNbuPair);
-        // token0NbuBusdPair = INimbusPair(_nbuBusdPair).token0();
-        if(address(INimbusPair(_nbuBusdPair).token0()) == address(nbuToken)) {
-            token0Nbu = true;
-        } else {
-            token0Nbu = false;
-        }
-        // if(address(INimbusPair(_bnbNbuPair).token0()) == address(WBNB)) {
-        //     token0Bnb = true;
-        // } else {
-        //     token0Bnb = false;
-        // }  
+        nbuBusdPair = _nbuBusdPair;
+        bnbNbuPair = _bnbNbuPair;
+       
       
         rewardDuration = ILpStaking(_lpStakingBnbNbu).rewardDuration();
         minPurchaseAmount = 500000000000000000000;
@@ -567,7 +548,8 @@ contract SmartLP is SmartLPStorage, IBEP721, IBEP721Metadata {
     receive() external payable {
         assert(msg.sender == address(WBNB) || msg.sender == address(swapRouter));
     }
-    
+
+
 
 
     // ========================== SmartLP functions ==========================
@@ -582,26 +564,24 @@ contract SmartLP is SmartLPStorage, IBEP721, IBEP721Metadata {
       path[0] = address(busdToken);
       path[1] = address(nbuToken);
 
-      
-      (uint[] memory amountsBusdNbuSwap) = swapRouter.swapExactTokensForTokens((amountBusd/6) * 3, 0, path, address(this), block.timestamp);
-      amountBusd -= (amountBusd/6) * 3;
-      uint amountNbu = amountsBusdNbuSwap[1];
-      
+      (uint[] memory amountsBusdNbuSwap) = swapRouter.swapExactTokensForTokens((amount/6), 0, path, address(this), block.timestamp);    
+      (uint[] memory amountsBusdNbuForBnbNbuPair) = swapRouter.swapExactTokensForTokens((amount/6) * 2,0, path, address(this), block.timestamp);
+
+    amountBusd -= (amount/6) * 3;
+       uint amountNbu = amountsBusdNbuSwap[1] + amountsBusdNbuForBnbNbuPair[1];
       path[0] = address(nbuToken);
       path[1] = address(WBNB);      
-      (uint[] memory amountsNbuBnbSwap) = swapRouter.swapExactTokensForBNB(amountsBusdNbuSwap[1]/3,0, path, address(this), block.timestamp);
+      (uint[] memory amountsNbuBnbForBnbNbuPair) = swapRouter.swapExactTokensForBNB(amountsBusdNbuForBnbNbuPair[1]/2,0, path, address(this), block.timestamp);
+    
 
-    amountNbu -= amountsBusdNbuSwap[1]/3;
+        amountNbu -= amountsNbuBnbForBnbNbuPair[0];
 
+      (uint amountNbuBnb, , uint liquidityBnbNbu) = swapRouter.addLiquidityBNB{value: amountsNbuBnbForBnbNbuPair[1]}(address(nbuToken), amountsNbuBnbForBnbNbuPair[0], 0, 0, address(this), block.timestamp);
+      amountNbu -= amountNbuBnb;
       
-      
-      (uint amountBnbNbu, , uint liquidityBnbNbu) = swapRouter.addLiquidityBNB{value: amountsNbuBnbSwap[1]}(address(nbuToken), amountsNbuBnbSwap[0], 0, 0, address(this), block.timestamp);
-      amountNbu -= amountBnbNbu;
-    uint requiredTokenAmount = _getRequiredTokenValue(amountNbu);
-      
-      (, uint amountBusdNbu, uint liquidityBusdNbu) = swapRouter.addLiquidity(address(nbuToken), address(busdToken),amountNbu,requiredTokenAmount, 0, 0, address(this), block.timestamp);
+      ( uint amountNbuBusd, uint amountBusdNbu, uint liquidityBusdNbu) = swapRouter.addLiquidity(address(nbuToken), address(busdToken), amountNbu, amountBusd, 0, 0, address(this), block.timestamp);
       amountBusd -= amountBusdNbu;
-
+      amountNbu -= amountNbuBusd;
       UserSupply storage userSupply = tikSupplies[tokenCount];
       userSupply.NbuBnbStakeNonce = lpStakingBnbNbu.stakeNonces(address(this));
       lpStakingBnbNbu.stake(liquidityBnbNbu);
@@ -630,14 +610,12 @@ contract SmartLP is SmartLPStorage, IBEP721, IBEP721Metadata {
 
       userSupply.ProvidedBusd = amount;
       userSupply.IsActive = true;
-      userSupply.PoolNbuAmount = amountsBusdNbuSwap[1];
-      userSupply.PoolBnbAmount = amountsNbuBnbSwap[1];
+      userSupply.PoolNbuAmount = amountsBusdNbuSwap[1] + amountsBusdNbuForBnbNbuPair[1];
+      userSupply.PoolBnbAmount = amountsNbuBnbForBnbNbuPair[1];
+      userSupply.PoolBusdAmount = amountBusdNbu;
       userSupply.NbuBusdLpAmount = liquidityBusdNbu;
       userSupply.NbuBnbLpAmount = liquidityBnbNbu;
-    //   userSupply.LendedITokenAmount = mintAmount;
       userSupply.LendedBusdAmount = amountBusd;
-    //   userSupply.NbuBnbStakeNonce = noncesBnbNbu;
-    //   userSupply.NbuBusdStakeNonce = noncesBusdNbu;
       userSupply.SupplyTime = block.timestamp;
       userSupply.TokenId = tokenCount;
 
@@ -685,9 +663,7 @@ contract SmartLP is SmartLPStorage, IBEP721, IBEP721Metadata {
     function getTokenRewardsAmounts(uint tokenId) public view returns (uint lpBnbNbuUserRewards, uint lpNbuBusdUserRewards, uint lendedUserRewards) {
         UserSupply memory userSupply = tikSupplies[tokenId];
         require(userSupply.IsActive, "SmartLP: Not active");
-        require(userSupply.LendedBusdAmount < ((userSupply.LendedITokenAmount *lendingContract.tokenPrice()) / 1e18),
-            "SmartLP: lending rewards are not available"
-        );
+
         lpBnbNbuUserRewards = (_balancesRewardEquivalentBnbNbu[tokenId] * ((block.timestamp - weightedStakeDate[tokenId]) * 100)) / (100 * rewardDuration);
         lpNbuBusdUserRewards =(_balancesRewardEquivalentNbuBusd[tokenId] * ((block.timestamp - weightedStakeDate[tokenId]) * 100)) / (100 * rewardDuration);
         lendedUserRewards = (userSupply.LendedITokenAmount * lendingContract.tokenPrice() / 1e18) - userSupply.LendedBusdAmount;
@@ -703,15 +679,14 @@ contract SmartLP is SmartLPStorage, IBEP721, IBEP721Metadata {
         return _userTokens[user];
     }
 
-    function _getRequiredTokenValue (uint tokenAmount) internal returns (uint requiredTokenAmount) {
-        uint requiredTokenAmount;
-        (uint112 _reserve0, uint112 _reserve1,) = nbuBusdPair.getReserves();
+    function _getRequiredTokenValue (uint tokenAmount, address token, address pair) internal returns (uint requiredTokenAmount) {
+        (uint112 _reserve0, uint112 _reserve1,) = INimbusPair(address(pair)).getReserves();
 
-        if(token0Nbu) {
-          requiredTokenAmount = tokenAmount * (_reserve0/_reserve1);
-      } else {
-          requiredTokenAmount = tokenAmount * (_reserve1/_reserve0);
-      }
+        if(address(INimbusPair(address(pair)).token0()) == address(token)) {
+            requiredTokenAmount = tokenAmount * (_reserve0/_reserve1);
+        } else {
+            requiredTokenAmount = tokenAmount * (_reserve1/_reserve0);
+        }
       }
 
 
@@ -864,17 +839,17 @@ contract SmartLP is SmartLPStorage, IBEP721, IBEP721Metadata {
 
     function _transfer(address from, address to, uint256 tokenId) internal virtual {
         require(to != address(0), "ERC721: transfer to the zero address");
-        require(SmartLP.ownerOf(tokenId) == from, "ERC721: transfer of token that is not own");
+        require(SmartLP.ownerOf(tokenId) == from, "ERC721: transfer of token that is not owner");
 
-        for (uint256 i; i < _userTokens[msg.sender].length; i++) {
-            if(_userTokens[msg.sender][i] == tokenId) {
-                _remove(i, msg.sender);
+        for (uint256 i; i < _userTokens[from].length; i++) {
+            if(_userTokens[from][i] == tokenId) {
+                _remove(i, from);
                 break;
             }
         }
         // Clear approvals from the previous owner
         _approve(address(0), tokenId);
-
+        _userTokens[to].push(tokenId);
         _balances[from] -= 1;
         _balances[to] += 1;
         _owners[tokenId] = to;
