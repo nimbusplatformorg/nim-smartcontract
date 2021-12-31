@@ -60,11 +60,6 @@ interface INimbusInitialAcquisition {
     function userPurchasesEquivalent(address user) external view returns (uint256);
 }
 
-interface INimbusStakingPool {
-    function balanceOf(address account) external view returns (uint256);
-    function stakingToken() external view returns (IBEP20);
-}
-
 interface INimbusRouter {
     function getAmountsOut(uint amountIn, address[] calldata path) external  view returns (uint[] memory amounts);
 }
@@ -74,7 +69,6 @@ contract NimbusReferralProgramLogic is Ownable {
     INimbusInitialAcquisition public initialAcquisitionContract;
     IBEP20 public immutable NBU;
     INimbusRouter public swapRouter;
-    INimbusStakingPool[] public stakingPools; 
 
     uint[] public levels;
     uint public maxLevel;
@@ -236,23 +230,6 @@ contract NimbusReferralProgramLogic is Ownable {
 
     function updateMinTokenAmountForCheck(uint newMinTokenAmountForCheck) external onlyOwner {
         minTokenAmountForCheck = newMinTokenAmountForCheck;
-    }
-
-    
-
-    function updateStakingPoolAdd(address newStakingPool) external onlyOwner {
-        INimbusStakingPool pool = INimbusStakingPool(newStakingPool);
-        require (pool.stakingToken() == NBU, "Nimbus Referral: Wrong pool staking tokens");
-
-        for (uint i; i < stakingPools.length; i++) {
-            require (address(stakingPools[i]) != newStakingPool, "Nimbus Referral: Pool exists");
-        }
-        stakingPools.push(INimbusStakingPool(pool));
-    }
-
-    function updateStakingPoolRemove(uint poolIndex) external onlyOwner {
-        stakingPools[poolIndex] = stakingPools[stakingPools.length - 1];
-        stakingPools.pop();
     }
     
     function updateSpecialReserveFund(address newSpecialReserveFund) external onlyOwner {
