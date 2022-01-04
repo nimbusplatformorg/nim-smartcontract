@@ -443,22 +443,6 @@ contract SmartLPProxy is SmartLPStorage {
         target = _newTarget;
         emit SetTarget(_newTarget);
     }
-
-    function rescue(address to, address tokenAddress, uint256 amount) external onlyOwner {
-        require(to != address(0), "SmartLP: Cannot rescue to the zero address");
-        require(amount > 0, "SmartLP: Cannot rescue 0");
-
-        IBEP20(tokenAddress).transfer(to, amount);
-        emit RescueToken(to, address(tokenAddress), amount);
-    }
-
-    function rescue(address payable to, uint256 amount) external onlyOwner {
-        require(to != address(0), "SmartLP: Cannot rescue to the zero address");
-        require(amount > 0, "SmartLP: Cannot rescue 0");
-
-        to.transfer(amount);
-        emit Rescue(to, amount);
-    }
 }
 
 contract SmartLP is SmartLPStorage, IBEP721, IBEP721Metadata {
