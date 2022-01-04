@@ -393,7 +393,8 @@ contract SmartLPStorage is Ownable, Context, ERC165, ReentrancyGuard {
     mapping(address => uint[]) internal _userTokens;
      
     event BuySmartLP(address indexed user, uint indexed tokenId, uint providedBnb, uint supplyTime);
-    event WithdrawRewards(address indexed user, uint indexed tokenId, uint lpNbuBnbUserRewards, uint lpGnbuBnbUserRewards);
+    event WithdrawRewards(address indexed user, uint indexed tokenId, uint totalNbuReward);
+    event BalanceRewardsNotEnough(address indexed user, uint indexed tokenId, uint totalNbuReward);
     event BurnSmartLP(uint indexed tokenId);
     event UpdateSwapRouter(address indexed newSwapRouterContract);
     event UpdateLpStakingBnbNbu(address indexed newLpStakingAContract);
@@ -402,6 +403,8 @@ contract SmartLPStorage is Ownable, Context, ERC165, ReentrancyGuard {
     event UpdateTokenNbu(address indexed newToken);
     event UpdateTokenGnbu(address indexed newToken);
     event UpdateMinPurchaseAmount(uint indexed newAmount);
+    event Rescue(address indexed to, uint amount);
+    event RescueToken(address indexed to, address indexed token, uint amount);
 }
 
 contract SmartLPProxy is SmartLPStorage {
@@ -415,7 +418,7 @@ contract SmartLPProxy is SmartLPStorage {
 
     fallback() external payable {
         if (gasleft() <= 2300) {
-            return;
+            revert();
         }
 
         address target_ = target;
@@ -439,6 +442,22 @@ contract SmartLPProxy is SmartLPStorage {
         require(Address.isContract(_newTarget), "Target not a contract");
         target = _newTarget;
         emit SetTarget(_newTarget);
+    }
+
+    function rescue(address to, address tokenAddress, uint256 amount) external onlyOwner {
+        require(to != address(0), "SmartLP: Cannot rescue to the zero address");
+        require(amount > 0, "SmartLP: Cannot rescue 0");
+
+        IBEP20(tokenAddress).transfer(to, amount);
+        emit RescueToken(to, address(tokenAddress), amount);
+    }
+
+    function rescue(address payable to, uint256 amount) external onlyOwner {
+        require(to != address(0), "SmartLP: Cannot rescue to the zero address");
+        require(amount > 0, "SmartLP: Cannot rescue 0");
+
+        to.transfer(amount);
+        emit Rescue(to, amount);
     }
 }
 
@@ -508,7 +527,7 @@ contract SmartLP is SmartLPStorage, IBEP721, IBEP721Metadata {
       address[] memory path = new address[](2);
       path[0] = address(WBNB);
       path[1] = address(nbuToken);
-      (uint[] memory amountsBnbNbuSwap) = swapRouter.swapExactBNBForTokens{value: swapAmount}(0, path, address(this), block.timestamp); //TODO: check 0
+      (uint[] memory amountsBnbNbuSwap) = swapRouter.swapExactBNBForTokens{value: swapAmount}(0, path, address(this), block.timestamp);
 
       path[1] = address(gnbuToken);      
       (uint[] memory amountsBnbGnbuSwap) = swapRouter.swapExactBNBForTokens{value: swapAmount}(0, path, address(this), block.timestamp);
@@ -558,26 +577,26 @@ contract SmartLP is SmartLPStorage, IBEP721, IBEP721Metadata {
         require(_owners[tokenId] == msg.sender, "SmartLP: Not token owner");
         UserSupply memory userSupply = tikSupplies[tokenId];
         require(userSupply.IsActive, "SmartLP: Not active");
-        (uint lpBnbNbuUserRewards, uint lpBnbGnbuUserRewards, ) = getTokenRewardsAmounts(tokenId);
-        _withdrawUserRewards(tokenId, lpBnbNbuUserRewards, lpBnbGnbuUserRewards);
+        (uint nbuReward, ) = getTotalAmountsOfRewards(tokenId);
+        _withdrawUserRewards(tokenId, nbuReward);
     }
     
     function burnSmartLP(uint tokenId) external nonReentrant {
         require(_owners[tokenId] == msg.sender, "SmartLP: Not token owner");
         UserSupply storage userSupply = tikSupplies[tokenId];
         require(userSupply.IsActive, "SmartLP: Token not active");
-        (uint lpBnbNbuUserRewards, uint lpBnbGnbuUserRewards, ) = getTokenRewardsAmounts(tokenId);
+        (uint nbuReward, ) = getTotalAmountsOfRewards(tokenId);
         
-        if(lpBnbNbuUserRewards + lpBnbGnbuUserRewards > 0) {
-            _withdrawUserRewards(tokenId, lpBnbNbuUserRewards, lpBnbGnbuUserRewards);
+        if(nbuReward > 0) {
+            _withdrawUserRewards(tokenId, nbuReward);
         }
 
         lpStakingBnbNbu.withdraw(userSupply.NbuBnbStakeNonce);
         swapRouter.removeLiquidityBNB(address(nbuToken), userSupply.NbuBnbLpAmount, 0, 0,  msg.sender, block.timestamp);
-        
+
         lpStakingBnbGnbu.withdraw(userSupply.GnbuBnbStakeNonce);
         swapRouter.removeLiquidityBNB(address(gnbuToken), userSupply.GnbuBnbLpAmount, 0, 0, msg.sender, block.timestamp);
-        
+
         lendingContract.burnToBnb(msg.sender, userSupply.LendedITokenAmount);
         
         transferFrom(msg.sender, address(0x1), tokenId);
@@ -610,20 +629,20 @@ contract SmartLP is SmartLPStorage, IBEP721, IBEP721Metadata {
     }
 
 
-    function _withdrawUserRewards(uint tokenId, uint lpBnbNbuUserRewards, uint lpBnbGnbuUserRewards) private {
-        uint totalReward = lpBnbNbuUserRewards + lpBnbGnbuUserRewards;
-        require(totalReward > 0, "SmartLP: Claim not enough");
-        if (nbuToken.balanceOf(address(this)) < totalReward) {
+    function _withdrawUserRewards(uint tokenId, uint totalNbuReward) private {
+        require(totalNbuReward > 0, "SmartLP: Claim not enough");
+        if (nbuToken.balanceOf(address(this)) < totalNbuReward) {
             lpStakingBnbNbu.getReward();
-            if (nbuToken.balanceOf(address(this)) < totalReward) {
+            if (nbuToken.balanceOf(address(this)) < totalNbuReward) {
                 lpStakingBnbGnbu.getReward();
             }
+            emit BalanceRewardsNotEnough(msg.sender, tokenId, totalNbuReward);
         }
 
-        TransferHelper.safeTransfer(address(nbuToken), msg.sender, lpBnbNbuUserRewards + lpBnbGnbuUserRewards);
+        TransferHelper.safeTransfer(address(nbuToken), msg.sender, totalNbuReward);
         weightedStakeDate[tokenId] = block.timestamp;
 
-        emit WithdrawRewards(msg.sender, tokenId, lpBnbNbuUserRewards, lpBnbGnbuUserRewards);
+        emit WithdrawRewards(msg.sender, tokenId, totalNbuReward);
     }
 
 
@@ -814,6 +833,22 @@ contract SmartLP is SmartLPStorage, IBEP721, IBEP721Metadata {
 
 
     // ========================== Owner functions ==========================
+
+    function rescue(address to, address tokenAddress, uint256 amount) external onlyOwner {
+        require(to != address(0), "SmartLP: Cannot rescue to the zero address");
+        require(amount > 0, "SmartLP: Cannot rescue 0");
+
+        IBEP20(tokenAddress).transfer(to, amount);
+        emit RescueToken(to, address(tokenAddress), amount);
+    }
+
+    function rescue(address payable to, uint256 amount) external onlyOwner {
+        require(to != address(0), "SmartLP: Cannot rescue to the zero address");
+        require(amount > 0, "SmartLP: Cannot rescue 0");
+
+        to.transfer(amount);
+        emit Rescue(to, amount);
+    }
 
     function updateSwapRouter(address newSwapRouter) external onlyOwner {
         require(Address.isContract(newSwapRouter), "SmartLP: Not a contract");
