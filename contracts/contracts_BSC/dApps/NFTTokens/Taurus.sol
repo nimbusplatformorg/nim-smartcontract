@@ -395,7 +395,7 @@ interface ILending {
     function burn( address receiver, uint256 burnAmount) external returns (uint256 loanAmountPaid);
 }
 
-contract SmartLPStorage is Ownable, Context, ERC165, ReentrancyGuard {    
+contract SmartLenderStorage is Ownable, Context, ERC165, ReentrancyGuard {    
     IWBNB public WBNB;
     IRouter public swapRouter;
     ILpStaking public lpStakingBnbNbu;
@@ -441,9 +441,9 @@ contract SmartLPStorage is Ownable, Context, ERC165, ReentrancyGuard {
     mapping(address => mapping(address => bool)) internal _operatorApprovals;
     mapping(address => uint[]) internal _userTokens;
      
-    event BuySmartLP(address indexed user, uint indexed tokenId, uint providedBnb, uint supplyTime);
+    event BuySmartLender(address indexed user, uint indexed tokenId, uint providedBnb, uint supplyTime);
     event WithdrawRewards(address indexed user, uint indexed tokenId, uint lpNbuBnbUserRewards, uint lpGnbuBnbUserRewards);
-    event BurnSmartLP(uint indexed tokenId);
+    event BurnSmartLender(uint indexed tokenId);
     event UpdateSwapRouter(address indexed newSwapRouterContract);
     event UpdateLpStakingBnbNbu(address indexed newLpStakingAContract);
     event UpdateLpStakingBnbGnbu(address indexed newLpStakingBContract);
@@ -453,12 +453,12 @@ contract SmartLPStorage is Ownable, Context, ERC165, ReentrancyGuard {
     event UpdateMinPurchaseAmount(uint indexed newAmount);
 }
 
-contract SmartLPProxy is SmartLPStorage {
+contract SmartLenderProxy is SmartLenderStorage {
     address public target;
     
     event SetTarget(address indexed newTarget);
 
-    constructor(address _newTarget) SmartLPStorage() {
+    constructor(address _newTarget) SmartLenderStorage() {
         _setTarget(_newTarget);
     }
 
@@ -491,7 +491,7 @@ contract SmartLPProxy is SmartLPStorage {
     }
 }
 
-contract SmartLP is SmartLPStorage, IBEP721, IBEP721Metadata {
+contract SmartLender is SmartLenderStorage, IBEP721, IBEP721Metadata {
     using Address for address;
     using Strings for uint256;
     
@@ -508,15 +508,15 @@ contract SmartLP is SmartLPStorage, IBEP721, IBEP721Metadata {
         address _lpStakingNbuBusd, 
         address _lendingContract
     ) external onlyOwner {
-        require(Address.isContract(_swapRouter), "NimbusSmartLP_V1: Not contract");
-        require(Address.isContract(_wbnb), "NimbusSmartLP_V1: Not contract");
-        require(Address.isContract(_nbuToken), "NimbusSmartLP_V1: Not contract");
-        require(Address.isContract(_busdToken), "NimbusSmartLP_V1: Not contract");
-        require(Address.isContract(_bnbNbuPair), "NimbusSmartLP_V1: Not contract");
-        require(Address.isContract(_nbuBusdPair), "NimbusSmartLP_V1: Not contract");
-        require(Address.isContract(_lpStakingBnbNbu), "NimbusSmartLP_V1: Not contract");
-        require(Address.isContract(_lpStakingNbuBusd), "NimbusSmartLP_V1: Not contract");
-        require(Address.isContract(_lendingContract), "NimbusSmartLP_V1: Not contract");
+        require(Address.isContract(_swapRouter), "NimbusSmartLender_V1: Not contract");
+        require(Address.isContract(_wbnb), "NimbusSmartLender_V1: Not contract");
+        require(Address.isContract(_nbuToken), "NimbusSmartLender_V1: Not contract");
+        require(Address.isContract(_busdToken), "NimbusSmartLender_V1: Not contract");
+        require(Address.isContract(_bnbNbuPair), "NimbusSmartLender_V1: Not contract");
+        require(Address.isContract(_nbuBusdPair), "NimbusSmartLender_V1: Not contract");
+        require(Address.isContract(_lpStakingBnbNbu), "NimbusSmartLender_V1: Not contract");
+        require(Address.isContract(_lpStakingNbuBusd), "NimbusSmartLender_V1: Not contract");
+        require(Address.isContract(_lendingContract), "NimbusSmartLender_V1: Not contract");
 
         _name = "Smart LP";
         _symbol = "SL";
@@ -552,10 +552,10 @@ contract SmartLP is SmartLPStorage, IBEP721, IBEP721Metadata {
 
 
 
-    // ========================== SmartLP functions ==========================
+    // ========================== SmartLender functions ==========================
 
-    function buySmartLP(uint amount) external {
-      require(amount >= minPurchaseAmount, 'SmartLP: Token price is more than sent');
+    function buySmartLender(uint amount) external {
+      require(amount >= minPurchaseAmount, 'SmartLender: Token price is more than sent');
       TransferHelper.safeTransferFrom(address(busdToken), msg.sender, address(this), amount); 
       uint amountBusd = amount;
       tokenCount = ++tokenCount;
@@ -623,21 +623,21 @@ contract SmartLP is SmartLPStorage, IBEP721, IBEP721Metadata {
       _userTokens[msg.sender].push(tokenCount); 
       _mint(msg.sender, tokenCount);
       
-      emit BuySmartLP(msg.sender, tokenCount, amount, block.timestamp);
+      emit BuySmartLender(msg.sender, tokenCount, amount, block.timestamp);
     }
     
     function withdrawUserRewards(uint tokenId) external nonReentrant {
-        require(_owners[tokenId] == msg.sender, "SmartLP: Not token owner");
+        require(_owners[tokenId] == msg.sender, "SmartLender: Not token owner");
         UserSupply memory userSupply = tikSupplies[tokenId];
-        require(userSupply.IsActive, "SmartLP: Not active");
+        require(userSupply.IsActive, "SmartLender: Not active");
         (uint lpBnbNbuUserRewards, uint lpNbuBusdUserRewards, ) = getTokenRewardsAmounts(tokenId);
         _withdrawUserRewards(tokenId, lpBnbNbuUserRewards, lpNbuBusdUserRewards);
     }
     
-    function burnSmartLP(uint tokenId) external nonReentrant {
-        require(_owners[tokenId] == msg.sender, "SmartLP: Not token owner");
+    function burnSmartLender(uint tokenId) external nonReentrant {
+        require(_owners[tokenId] == msg.sender, "SmartLender: Not token owner");
         UserSupply storage userSupply = tikSupplies[tokenId];
-        require(userSupply.IsActive, "SmartLP: Token not active");
+        require(userSupply.IsActive, "SmartLender: Token not active");
         (uint lpBnbNbuUserRewards, uint lpNbuBusdUserRewards, ) = getTokenRewardsAmounts(tokenId);
         
         if(lpBnbNbuUserRewards + lpNbuBusdUserRewards > 0) {
@@ -655,14 +655,14 @@ contract SmartLP is SmartLPStorage, IBEP721, IBEP721Metadata {
         transferFrom(msg.sender, address(0x1), tokenId);
         userSupply.IsActive = false;
         
-        emit BurnSmartLP(tokenId);      
+        emit BurnSmartLender(tokenId);      
     }
 
 
 
     function getTokenRewardsAmounts(uint tokenId) public view returns (uint lpBnbNbuUserRewards, uint lpNbuBusdUserRewards, uint lendedUserRewards) {
         UserSupply memory userSupply = tikSupplies[tokenId];
-        require(userSupply.IsActive, "SmartLP: Not active");
+        require(userSupply.IsActive, "SmartLender: Not active");
 
         lpBnbNbuUserRewards = (_balancesRewardEquivalentBnbNbu[tokenId] * ((block.timestamp - weightedStakeDate[tokenId]) * 100)) / (100 * rewardDuration);
         lpNbuBusdUserRewards =(_balancesRewardEquivalentNbuBusd[tokenId] * ((block.timestamp - weightedStakeDate[tokenId]) * 100)) / (100 * rewardDuration);
@@ -692,7 +692,7 @@ contract SmartLP is SmartLPStorage, IBEP721, IBEP721Metadata {
 
     function _withdrawUserRewards(uint tokenId, uint lpBnbNbuUserRewards, uint lpNbuBusdUserRewards) private {
         uint totalReward = lpBnbNbuUserRewards + lpNbuBusdUserRewards;
-        require(totalReward > 0, "SmartLP: Claim not enough");
+        require(totalReward > 0, "SmartLender: Claim not enough");
         if (nbuToken.balanceOf(address(this)) < totalReward) {
             lpStakingBnbNbu.getReward();
             if (nbuToken.balanceOf(address(this)) < totalReward) {
@@ -743,7 +743,7 @@ contract SmartLP is SmartLPStorage, IBEP721, IBEP721Metadata {
     }
 
     function approve(address to, uint256 tokenId) public virtual override {
-        address owner = SmartLP.ownerOf(tokenId);
+        address owner = SmartLender.ownerOf(tokenId);
         require(to != owner, "ERC721: approval to current owner");
 
         require(
@@ -799,7 +799,7 @@ contract SmartLP is SmartLPStorage, IBEP721, IBEP721Metadata {
 
     function _isApprovedOrOwner(address spender, uint256 tokenId) internal view virtual returns (bool) {
         require(_exists(tokenId), "ERC721: operator query for nonexistent token");
-        address owner = SmartLP.ownerOf(tokenId);
+        address owner = SmartLender.ownerOf(tokenId);
         return (spender == owner || getApproved(tokenId) == spender || isApprovedForAll(owner, spender));
     }
 
@@ -826,7 +826,7 @@ contract SmartLP is SmartLPStorage, IBEP721, IBEP721Metadata {
     }
 
     function _burn(uint256 tokenId) internal virtual {
-        address owner = SmartLP.ownerOf(tokenId);
+        address owner = SmartLender.ownerOf(tokenId);
 
         // Clear approvals
         _approve(address(0), tokenId);
@@ -839,7 +839,7 @@ contract SmartLP is SmartLPStorage, IBEP721, IBEP721Metadata {
 
     function _transfer(address from, address to, uint256 tokenId) internal virtual {
         require(to != address(0), "ERC721: transfer to the zero address");
-        require(SmartLP.ownerOf(tokenId) == from, "ERC721: transfer of token that is not owner");
+        require(SmartLender.ownerOf(tokenId) == from, "ERC721: transfer of token that is not owner");
 
         for (uint256 i; i < _userTokens[from].length; i++) {
             if(_userTokens[from][i] == tokenId) {
@@ -864,7 +864,7 @@ contract SmartLP is SmartLPStorage, IBEP721, IBEP721Metadata {
 
     function _approve(address to, uint256 tokenId) internal virtual {
         _tokenApprovals[tokenId] = to;
-        emit Approval(SmartLP.ownerOf(tokenId), to, tokenId);
+        emit Approval(SmartLender.ownerOf(tokenId), to, tokenId);
     }
 
     function _setApprovalForAll( address owner, address operator, bool approved) internal virtual {
@@ -896,31 +896,31 @@ contract SmartLP is SmartLPStorage, IBEP721, IBEP721Metadata {
     // ========================== Owner functions ==========================
 
     function updateSwapRouter(address newSwapRouter) external onlyOwner {
-        require(Address.isContract(newSwapRouter), "SmartLP: Not a contract");
+        require(Address.isContract(newSwapRouter), "SmartLender: Not a contract");
         swapRouter = IRouter(newSwapRouter);
         emit UpdateSwapRouter(newSwapRouter);
     }
     
     function updateLpStakingBnbNbu(address newLpStaking) external onlyOwner {
-        require(Address.isContract(newLpStaking), "SmartLP: Not a contract");
+        require(Address.isContract(newLpStaking), "SmartLender: Not a contract");
         lpStakingBnbNbu = ILpStaking(newLpStaking);
         emit UpdateLpStakingBnbNbu(newLpStaking);
     }
     
     function updateLpStakingBnbGnbu(address newLpStaking) external onlyOwner {
-        require(Address.isContract(newLpStaking), "SmartLP: Not a contract");
+        require(Address.isContract(newLpStaking), "SmartLender: Not a contract");
         lpStakingNbuBusd = ILpStaking(newLpStaking);
         emit UpdateLpStakingBnbGnbu(newLpStaking);
     }
     
     function updateLendingContract(address newLendingContract) external onlyOwner {
-        require(Address.isContract(newLendingContract), "SmartLP: Not a contract");
+        require(Address.isContract(newLendingContract), "SmartLender: Not a contract");
         lendingContract = ILending(newLendingContract);
         emit UpdateLendingContract(newLendingContract);
     }
     
     function updateTokenAllowance(address token, address spender, int amount) external onlyOwner {
-        require(Address.isContract(token), "SmartLP: Not a contract");
+        require(Address.isContract(token), "SmartLender: Not a contract");
         uint allowance;
         if (amount < 0) {
             allowance = type(uint256).max;
@@ -931,7 +931,7 @@ contract SmartLP is SmartLPStorage, IBEP721, IBEP721Metadata {
     }
     
     function updateMinPurchaseAmount (uint newAmount) external onlyOwner {
-        require(newAmount > 0, "SmartLP: Amount must be greater than zero");
+        require(newAmount > 0, "SmartLender: Amount must be greater than zero");
         minPurchaseAmount = newAmount;
         emit UpdateMinPurchaseAmount(newAmount);
     }
