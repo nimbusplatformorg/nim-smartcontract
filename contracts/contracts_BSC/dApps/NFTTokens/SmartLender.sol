@@ -566,9 +566,6 @@ contract SmartLP is SmartLPStorage, IBEP721, IBEP721Metadata {
         require(_owners[tokenId] == msg.sender, "SmartLP: Not token owner");
         UserSupply storage userSupply = tikSupplies[tokenId];
         require(userSupply.IsActive, "SmartLP: Token not active");
-        require(userSupply.LendedBNBAmount < ((userSupply.LendedITokenAmount *lendingContract.tokenPrice()) / 1e18),
-            "SmartLP: lending rewards are not available"
-        );
         (uint lpBnbNbuUserRewards, uint lpBnbGnbuUserRewards, ) = getTokenRewardsAmounts(tokenId);
         
         if(lpBnbNbuUserRewards + lpBnbGnbuUserRewards > 0) {
@@ -594,7 +591,9 @@ contract SmartLP is SmartLPStorage, IBEP721, IBEP721Metadata {
     function getTokenRewardsAmounts(uint tokenId) public view returns (uint lpBnbNbuUserRewards, uint lpBnbGnbuUserRewards, uint lendedUserRewards) {
         UserSupply memory userSupply = tikSupplies[tokenId];
         require(userSupply.IsActive, "SmartLP: Not active");
-
+        require(userSupply.LendedBNBAmount < ((userSupply.LendedITokenAmount *lendingContract.tokenPrice()) / 1e18),
+            "SmartLP: lending rewards are not available"
+        );
         lpBnbNbuUserRewards = (_balancesRewardEquivalentBnbNbu[tokenId] * ((block.timestamp - weightedStakeDate[tokenId]) * 100)) / (100 * rewardDuration);
         lpBnbGnbuUserRewards = (_balancesRewardEquivalentBnbGnbu[tokenId] * ((block.timestamp - weightedStakeDate[tokenId]) * 100)) / (100 * rewardDuration);
         lendedUserRewards = (userSupply.LendedITokenAmount * lendingContract.tokenPrice() / 1e18) - userSupply.LendedBNBAmount;
@@ -759,10 +758,8 @@ contract SmartLP is SmartLPStorage, IBEP721, IBEP721Metadata {
     }
 
     function _transfer(address from, address to, uint256 tokenId) internal virtual {
-        require(SmartLP.ownerOf(tokenId) == from, "ERC721: transfer of token that is not own");
         require(to != address(0), "ERC721: transfer to the zero address");
-
-        _userTokens[msg.sender];
+        require(SmartLP.ownerOf(tokenId) == from, "ERC721: transfer of token that is not own");
 
         for (uint256 i; i < _userTokens[msg.sender].length; i++) {
             if(_userTokens[msg.sender][i] == tokenId) {
