@@ -591,7 +591,7 @@ contract SmartLP is SmartLPStorage, IBEP721, IBEP721Metadata {
     function getTokenRewardsAmounts(uint tokenId) public view returns (uint lpBnbNbuUserRewards, uint lpBnbGnbuUserRewards, uint lendedUserRewards) {
         UserSupply memory userSupply = tikSupplies[tokenId];
         require(userSupply.IsActive, "SmartLP: Not active");
-        require(userSupply.LendedBNBAmount < ((userSupply.LendedITokenAmount *lendingContract.tokenPrice()) / 1e18),
+        require(userSupply.LendedBNBAmount < ((userSupply.LendedITokenAmount * lendingContract.tokenPrice()) / 1e18),
             "SmartLP: lending rewards are not available"
         );
         lpBnbNbuUserRewards = (_balancesRewardEquivalentBnbNbu[tokenId] * ((block.timestamp - weightedStakeDate[tokenId]) * 100)) / (100 * rewardDuration);

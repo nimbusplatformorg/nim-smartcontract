@@ -99,6 +99,7 @@ contract MockLendingforTiktoken {
      address public immutable NBU_WBNB;
      address public immutable I_TOKEN;
      address public immutable OWNER;
+     uint256 public price = 1;
     
     modifier ensure(uint deadline) {
         require(deadline >= block.timestamp, 'NimbusRouter: EXPIRED');
@@ -109,6 +110,7 @@ contract MockLendingforTiktoken {
         NBU_WBNB = _NBU_WBNB;
         I_TOKEN = _I_TOKEN;
         OWNER = _OWNER;
+        // price = 1;
     }
 
     receive() external payable {
@@ -130,11 +132,15 @@ contract MockLendingforTiktoken {
     function tokenPrice()
         public
         view
-        returns (uint256) // price
+        returns (uint256) 
     {
-        uint price = 1;
+        // uint price = 0;
 
         return price;
+    }
+
+    function setTokenPrice(uint newPrice) external {
+        price = newPrice;
     }
 
      function burnToBnb(

@@ -147,6 +147,89 @@ contract("SmartLP", (accounts) => {
 
   });
 
+  describe("test new require for Lending", async function () {
+    
+    it("if there are no lend rewards, require should be triggered in getTokenRewardsAmounts", async function () {
+      await lending.setTokenPrice(0, {
+        from: accounts[0]
+      })
+      await contractSmartLP.buySmartLP({
+        from: accounts[0],
+        value: "5000000000000000000"
+      });
+
+      let userTokens = await contractSmartLP.getUserTokens(accounts[0]);
+
+      await expectRevert(
+        contractSmartLP.getTokenRewardsAmounts(userTokens[userTokens.length - 1], {
+          from: accounts[0]
+        }),
+        "SmartLP: lending rewards are not available"
+      );
+    
+    });
+
+    it("if there are no lend rewards, require should be triggered in getTotalAmountsOfRewards", async function () {
+      await lending.setTokenPrice(0, {
+        from: accounts[0]
+      })
+      await contractSmartLP.buySmartLP({
+        from: accounts[0],
+        value: "5000000000000000000"
+      });
+
+      let userTokens = await contractSmartLP.getUserTokens(accounts[0]);
+
+      await expectRevert(
+        contractSmartLP.getTotalAmountsOfRewards(userTokens[userTokens.length - 1], {
+          from: accounts[0]
+        }),
+        "SmartLP: lending rewards are not available"
+      );
+    
+    });
+
+    it("if there are no lend rewards, require should be triggered in burnSmartLP", async function () {
+      await lending.setTokenPrice(0, {
+        from: accounts[0]
+      })
+      await contractSmartLP.buySmartLP({
+        from: accounts[0],
+        value: "5000000000000000000"
+      });
+
+      let userTokens = await contractSmartLP.getUserTokens(accounts[0]);
+
+      await expectRevert(
+        contractSmartLP.burnSmartLP(userTokens[userTokens.length - 1], {
+          from: accounts[0]
+        }),
+        "SmartLP: lending rewards are not available"
+      );
+    
+    });
+
+    it("if there are no lend rewards, require should be triggered in withdrawUserRewards", async function () {
+      await lending.setTokenPrice(0, {
+        from: accounts[0]
+      })
+      await contractSmartLP.buySmartLP({
+        from: accounts[0],
+        value: "5000000000000000000"
+      });
+
+      let userTokens = await contractSmartLP.getUserTokens(accounts[0]);
+
+      await expectRevert(
+        contractSmartLP.withdrawUserRewards(userTokens[userTokens.length - 1], {
+          from: accounts[0]
+        }),
+        "SmartLP: lending rewards are not available"
+      );
+    
+    });
+  });
+
   describe("test buySmartLP method", async function () {
     it("purchase should not take place if the amount is less than the min purchase amount", async function () {
       await expectRevert(
