@@ -3,8 +3,8 @@ const TT = artifacts.require("ERC20TestToken");
 const MockRouter = artifacts.require("MockRouterforTiktoken");
 const MockLpStaking = artifacts.require("MockLpStakingforTiktoken");
 const MockLending = artifacts.require("MockLendingforTiktoken");
-const SmartLP = artifacts.require("SmartLP")
-const SmartLPProxy = artifacts.require("SmartLPProxy");
+const SmartLP = artifacts.require("OldSmartLP")
+const SmartLPProxy = artifacts.require("OldSmartLPProxy");
 
 const {
   BN,
