@@ -597,19 +597,6 @@ contract SmartLender is SmartLenderStorage, IBEP721, IBEP721Metadata {
       
       userSupply.LendedITokenAmount = lendingContract.mint(address(this), amountBusd);
 
-      // 0x2C6cF65f3cD32a9Be1822855AbF2321F6F8f6b24
-      // 0xA2CA18FC541B7B101c64E64bBc2834B05066248b
-      // 0x5f20559235479F5B6abb40dFC6f55185b74E7b55
-      // 0x55eA8396Df26cc5f990AFACb79C1874106F2Fd93
-      // 0x016AAECe9C13F09aD8FAD1A104266795df97d3a7
-      // 0xD62579B91992B63789d0149333Ff65798795C5C8
-      // 0x635F1b8c937E328A5715e7630521ABD3192DBdb3
-      // 0xd8BbeAdE38D9154299394c652157b2AA26C49251
-      // 0x87C319e44BDbCC9588c4ca457c74db3151d86428
-
-      // 500000000000000000000
-
-
       userSupply.ProvidedBusd = amount;
       userSupply.IsActive = true;
       userSupply.PoolNbuAmount = amountsBusdNbuSwap[1] + amountsBusdNbuForBnbNbuPair[1];
