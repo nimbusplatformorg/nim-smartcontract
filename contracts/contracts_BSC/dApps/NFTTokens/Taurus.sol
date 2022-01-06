@@ -442,7 +442,8 @@ contract SmartLenderStorage is Ownable, Context, ERC165, ReentrancyGuard {
     mapping(address => uint[]) internal _userTokens;
      
     event BuySmartLender(address indexed user, uint indexed tokenId, uint providedBnb, uint supplyTime);
-    event WithdrawRewards(address indexed user, uint indexed tokenId, uint lpNbuBnbUserRewards, uint lpGnbuBnbUserRewards);
+    event WithdrawRewards(address indexed user, uint indexed tokenId, uint totalNbuReward);
+    event BalanceRewardsNotEnough(address indexed user, uint indexed tokenId, uint totalNbuReward);
     event BurnSmartLender(uint indexed tokenId);
     event UpdateSwapRouter(address indexed newSwapRouterContract);
     event UpdateLpStakingBnbNbu(address indexed newLpStakingAContract);
@@ -451,6 +452,8 @@ contract SmartLenderStorage is Ownable, Context, ERC165, ReentrancyGuard {
     event UpdateTokenNbu(address indexed newToken);
     event UpdateTokenGnbu(address indexed newToken);
     event UpdateMinPurchaseAmount(uint indexed newAmount);
+    event Rescue(address indexed to, uint amount);
+    event RescueToken(address indexed to, address indexed token, uint amount);
 }
 
 contract SmartLenderProxy is SmartLenderStorage {
@@ -567,14 +570,13 @@ contract SmartLender is SmartLenderStorage, IBEP721, IBEP721Metadata {
       (uint[] memory amountsBusdNbuSwap) = swapRouter.swapExactTokensForTokens((amount/6), 0, path, address(this), block.timestamp);    
       (uint[] memory amountsBusdNbuForBnbNbuPair) = swapRouter.swapExactTokensForTokens((amount/6) * 2,0, path, address(this), block.timestamp);
 
-    amountBusd -= (amount/6) * 3;
-       uint amountNbu = amountsBusdNbuSwap[1] + amountsBusdNbuForBnbNbuPair[1];
+      amountBusd -= (amount/6) * 3;
+      uint amountNbu = amountsBusdNbuSwap[1] + amountsBusdNbuForBnbNbuPair[1];
       path[0] = address(nbuToken);
       path[1] = address(WBNB);      
       (uint[] memory amountsNbuBnbForBnbNbuPair) = swapRouter.swapExactTokensForBNB(amountsBusdNbuForBnbNbuPair[1]/2,0, path, address(this), block.timestamp);
     
-
-        amountNbu -= amountsNbuBnbForBnbNbuPair[0];
+      amountNbu -= amountsNbuBnbForBnbNbuPair[0];
 
       (uint amountNbuBnb, , uint liquidityBnbNbu) = swapRouter.addLiquidityBNB{value: amountsNbuBnbForBnbNbuPair[1]}(address(nbuToken), amountsNbuBnbForBnbNbuPair[0], 0, 0, address(this), block.timestamp);
       amountNbu -= amountNbuBnb;
@@ -586,7 +588,7 @@ contract SmartLender is SmartLenderStorage, IBEP721, IBEP721Metadata {
       userSupply.NbuBnbStakeNonce = lpStakingBnbNbu.stakeNonces(address(this));
       lpStakingBnbNbu.stake(liquidityBnbNbu);
 
-       _balancesRewardEquivalentBnbNbu[tokenCount] += lpStakingBnbNbu.getCurrentLPPrice() * liquidityBnbNbu / 1e18;
+      _balancesRewardEquivalentBnbNbu[tokenCount] += lpStakingBnbNbu.getCurrentLPPrice() * liquidityBnbNbu / 1e18;
 
       userSupply.NbuBusdStakeNonce = lpStakingNbuBusd.stakeNonces(address(this));
       lpStakingNbuBusd.stake(liquidityBusdNbu);
@@ -630,18 +632,18 @@ contract SmartLender is SmartLenderStorage, IBEP721, IBEP721Metadata {
         require(_owners[tokenId] == msg.sender, "SmartLender: Not token owner");
         UserSupply memory userSupply = tikSupplies[tokenId];
         require(userSupply.IsActive, "SmartLender: Not active");
-        (uint lpBnbNbuUserRewards, uint lpNbuBusdUserRewards, ) = getTokenRewardsAmounts(tokenId);
-        _withdrawUserRewards(tokenId, lpBnbNbuUserRewards, lpNbuBusdUserRewards);
+        (uint nbuReward, ) = getTotalAmountsOfRewards(tokenId);
+        _withdrawUserRewards(tokenId, nbuReward);
     }
     
     function burnSmartLender(uint tokenId) external nonReentrant {
         require(_owners[tokenId] == msg.sender, "SmartLender: Not token owner");
         UserSupply storage userSupply = tikSupplies[tokenId];
         require(userSupply.IsActive, "SmartLender: Token not active");
-        (uint lpBnbNbuUserRewards, uint lpNbuBusdUserRewards, ) = getTokenRewardsAmounts(tokenId);
+        (uint nbuReward, ) = getTotalAmountsOfRewards(tokenId);
         
-        if(lpBnbNbuUserRewards + lpNbuBusdUserRewards > 0) {
-            _withdrawUserRewards(tokenId, lpBnbNbuUserRewards, lpNbuBusdUserRewards);
+        if(nbuReward > 0) {
+            _withdrawUserRewards(tokenId, nbuReward);
         }
 
         lpStakingBnbNbu.withdraw(userSupply.NbuBnbStakeNonce);
@@ -690,20 +692,21 @@ contract SmartLender is SmartLenderStorage, IBEP721, IBEP721Metadata {
       }
 
 
-    function _withdrawUserRewards(uint tokenId, uint lpBnbNbuUserRewards, uint lpNbuBusdUserRewards) private {
-        uint totalReward = lpBnbNbuUserRewards + lpNbuBusdUserRewards;
-        require(totalReward > 0, "SmartLender: Claim not enough");
-        if (nbuToken.balanceOf(address(this)) < totalReward) {
+    function _withdrawUserRewards(uint tokenId, uint totalNbuReward) private {
+        require(totalNbuReward > 0, "SmartLender: Claim not enough");
+        if (nbuToken.balanceOf(address(this)) < totalNbuReward) {
             lpStakingBnbNbu.getReward();
-            if (nbuToken.balanceOf(address(this)) < totalReward) {
+            if (nbuToken.balanceOf(address(this)) < totalNbuReward) {
                 lpStakingNbuBusd.getReward();
             }
+
+            emit BalanceRewardsNotEnough(msg.sender, tokenId, totalNbuReward);
         }
 
-        TransferHelper.safeTransfer(address(nbuToken), msg.sender, lpBnbNbuUserRewards + lpNbuBusdUserRewards);
+        TransferHelper.safeTransfer(address(nbuToken), msg.sender, totalNbuReward);
         weightedStakeDate[tokenId] = block.timestamp;
 
-        emit WithdrawRewards(msg.sender, tokenId, lpBnbNbuUserRewards, lpNbuBusdUserRewards);
+        emit WithdrawRewards(msg.sender, tokenId, totalNbuReward);
     }
 
 
@@ -894,6 +897,22 @@ contract SmartLender is SmartLenderStorage, IBEP721, IBEP721Metadata {
 
 
     // ========================== Owner functions ==========================
+
+    function rescue(address to, address tokenAddress, uint256 amount) external onlyOwner {
+        require(to != address(0), "SmartLP: Cannot rescue to the zero address");
+        require(amount > 0, "SmartLP: Cannot rescue 0");
+
+        IBEP20(tokenAddress).transfer(to, amount);
+        emit RescueToken(to, address(tokenAddress), amount);
+    }
+
+    function rescue(address payable to, uint256 amount) external onlyOwner {
+        require(to != address(0), "SmartLP: Cannot rescue to the zero address");
+        require(amount > 0, "SmartLP: Cannot rescue 0");
+
+        to.transfer(amount);
+        emit Rescue(to, amount);
+    }
 
     function updateSwapRouter(address newSwapRouter) external onlyOwner {
         require(Address.isContract(newSwapRouter), "SmartLender: Not a contract");
