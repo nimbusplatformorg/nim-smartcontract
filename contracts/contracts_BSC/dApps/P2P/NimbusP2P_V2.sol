@@ -123,7 +123,7 @@ contract NimbusP2P_V2Storage is Ownable {
         Overdue
     }
 
-    IWBNB public constant WBNB = IWBNB(0xA2CA18FC541B7B101c64E64bBc2834B05066248b);
+    IWBNB public WBNB = IWBNB(0xA2CA18FC541B7B101c64E64bBc2834B05066248b);
     uint public tradeCount;
     mapping(uint => TradeSingle) public tradesSingle;
     mapping(uint => TradeMulti) public tradesMulti;
@@ -184,6 +184,13 @@ contract NimbusP2P_V2Proxy is NimbusP2P_V2Storage {
 
 contract NimbusP2P_V2 is NimbusP2P_V2Storage, IERC721Receiver {    
     address public target;
+
+    function initialize(
+        address _wbnb 
+    ) external onlyOwner {
+        require(Address.isContract(_wbnb), "NimbusP2P_V2: Not contract");
+        WBNB = IWBNB(_wbnb);
+    }
 
     receive() external payable {
         assert(msg.sender == address(WBNB)); // only accept ETH via fallback from the WBNB contract
@@ -341,7 +348,7 @@ contract NimbusP2P_V2 is NimbusP2P_V2Storage, IERC721Receiver {
         tradeId = _createTradeSingle(proposedAsset, proposedAmount, 0, askedAsset, askedAmount, 0, deadline, false);   
     }
 
-    function createTradeEIP20ToNFT(
+    function createTradeEIP20ToNFTpermit(
         address proposedAsset, 
         uint proposedAmount, 
         address askedAsset, 
@@ -359,7 +366,7 @@ contract NimbusP2P_V2 is NimbusP2P_V2Storage, IERC721Receiver {
         tradeId = _createTradeSingle(proposedAsset, proposedAmount, 0, askedAsset, 0, tokenId, deadline, true);   
     }
 
-    function createTradeEIP20ToNFTs(
+    function createTradeEIP20ToNFTsPermit(
         address proposedAsset, 
         uint proposedAmount, 
         address[] memory askedAssets, 
