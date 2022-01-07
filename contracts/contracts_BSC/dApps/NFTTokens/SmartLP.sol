@@ -594,12 +594,13 @@ contract SmartLP is SmartLPStorage, IBEP721, IBEP721Metadata {
     function getTokenRewardsAmounts(uint tokenId) public view returns (uint lpBnbNbuUserRewards, uint lpBnbGnbuUserRewards, uint lendedUserRewards) {
         UserSupply memory userSupply = tikSupplies[tokenId];
         require(userSupply.IsActive, "SmartLP: Not active");
-        require(userSupply.LendedBNBAmount <= ((userSupply.LendedITokenAmount *lendingContract.tokenPrice()) / 1e18),
+        uint convertITokenToBNB = ((userSupply.LendedITokenAmount * lendingContract.tokenPrice()) / 1e18) + 1;
+        require(userSupply.LendedBNBAmount <= convertITokenToBNB,
             "SmartLP: lending rewards are not available"
         );
         lpBnbNbuUserRewards = (_balancesRewardEquivalentBnbNbu[tokenId] * ((block.timestamp - weightedStakeDate[tokenId]) * 100)) / (100 * rewardDuration);
         lpBnbGnbuUserRewards = (_balancesRewardEquivalentBnbGnbu[tokenId] * ((block.timestamp - weightedStakeDate[tokenId]) * 100)) / (100 * rewardDuration);
-        lendedUserRewards = (userSupply.LendedITokenAmount * lendingContract.tokenPrice() / 1e18) - userSupply.LendedBNBAmount;
+        lendedUserRewards = convertITokenToBNB - userSupply.LendedBNBAmount;
     }
     
     function getTotalAmountsOfRewards(uint tokenId) public view returns (uint nbuReward, uint bnbReward) {
