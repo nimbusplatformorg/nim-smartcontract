@@ -155,13 +155,7 @@ contract NimbusP2P_V2Proxy is NimbusP2P_V2Storage {
     
     event SetTarget(address indexed newTarget);
 
-    constructor(address _newTarget, address[] memory _allowedEIP20Tokens) NimbusP2P_V2Storage() {
-        isAnyNFTAllowed = true;
-        for (uint256 i; i < _allowedEIP20Tokens.length; i++) {
-            require(Address.isContract(_allowedEIP20Tokens[i]));
-            allowedEIP20[_allowedEIP20Tokens[i]] = true;
-            emit UpdateAllowedEIP20Tokens(_allowedEIP20Tokens[i], true);
-        }
+    constructor(address _newTarget) NimbusP2P_V2Storage() {
         _setTarget(_newTarget);
     }
 
@@ -196,6 +190,18 @@ contract NimbusP2P_V2Proxy is NimbusP2P_V2Storage {
 
 contract NimbusP2P_V2 is NimbusP2P_V2Storage, IERC721Receiver {    
     address public target;
+
+    function initialize(
+        address[] memory _allowedEIP20Tokens
+    ) external onlyOwner {
+        for (uint256 i; i < _allowedEIP20Tokens.length; i++) {
+            require(Address.isContract(_allowedEIP20Tokens[i]));
+            allowedEIP20[_allowedEIP20Tokens[i]] = true;
+            emit UpdateAllowedEIP20Tokens(_allowedEIP20Tokens[i], true);
+        }
+        isAnyNFTAllowed = true;
+        emit UpdateIsAnyNFTAllowed(isAnyNFTAllowed);
+    }
 
     receive() external payable {
         assert(msg.sender == address(WBNB)); // only accept ETH via fallback from the WBNB contract
@@ -265,7 +271,6 @@ contract NimbusP2P_V2 is NimbusP2P_V2Storage, IERC721Receiver {
     ) external returns (uint tradeId) {
         require(Address.isContract(proposedAsset), "NimbusP2P_V2: Not contracts");
         require(proposedAmount > 0, "NimbusP2P_V2: Zero amount not allowed");
-        require(askedAssets.length > 0,"NimbusP2P_V2: askedAssets empty!");
         require(askedAssets.length == askedTokenIds.length, "NimbusP2P_V2: Wrong lengths");
         _requireAllowedEIP20(proposedAsset);
         for (uint256 i; i < askedAssets.length; i++) {
@@ -291,7 +296,6 @@ contract NimbusP2P_V2 is NimbusP2P_V2Storage, IERC721Receiver {
     ) external returns (uint tradeId) {
         require(Address.isContract(askedAsset), "NimbusP2P_V2: Not contracts");
         require(proposedAssets.length == proposedTokenIds.length, "NimbusP2P_V2: Wrong lengths");
-        require(proposedAssets.length > 0, "NimbusP2P_V2: proposedAssets empty!");
         _requireAllowedEIP20(askedAsset);
         for (uint i; i < proposedAssets.length; i++) {
           require(Address.isContract(proposedAssets[i]), "NimbusP2P_V2: Not contracts");
@@ -713,7 +717,7 @@ contract NimbusP2P_V2 is NimbusP2P_V2Storage, IERC721Receiver {
         emit UpdateAllowedEIP20Tokens(token, isAllowed);
     }
 
-        function rescue(address to, address tokenAddress, uint256 amount) external onlyOwner {
+    function rescue(address to, address tokenAddress, uint256 amount) external onlyOwner {
         require(to != address(0), "SmartLP: Cannot rescue to the zero address");
         require(amount > 0, "SmartLP: Cannot rescue 0");
 
