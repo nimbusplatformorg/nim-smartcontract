@@ -176,6 +176,46 @@ contract("SmartLP", (accounts) => {
     });
   });
 
+  describe("testing of zero rewards for lend", async function () {
+
+    it("if there are no lend rewards, lend rewards must be zero in getTokenRewardsAmounts",
+      async function () {
+        await lending.setTokenPrice(0, {
+          from: accounts[0]
+        })
+        await contractSmartLP.buySmartLP({
+          from: accounts[0],
+          value: "5000000000000000000"
+        });
+
+        let userTokens = await contractSmartLP.getUserTokens(accounts[0]);
+        const userRewards = await contractSmartLP.getTokenRewardsAmounts(userTokens[userTokens.length - 1], {
+          from: accounts[0]
+        })
+
+        expect(userRewards["2"]).to.be.bignumber.equal(new BN(0));
+      });
+
+    it("if there are no lend rewards, lend rewards must be zero in getTotalAmountsOfRewards",
+      async function () {
+        await lending.setTokenPrice(0, {
+          from: accounts[0]
+        })
+        await contractSmartLP.buySmartLP({
+          from: accounts[0],
+          value: "5000000000000000000"
+        });
+
+        let userTokens = await contractSmartLP.getUserTokens(accounts[0]);
+        const userRewards = await contractSmartLP.getTotalAmountsOfRewards(userTokens[userTokens.length - 1], {
+          from: accounts[0]
+        })
+
+        expect(userRewards["1"]).to.be.bignumber.equal(new BN(0));
+      });
+
+  });
+
   describe("test withdrawUserRewards method", async function () {
     it("should send the owner of the token his reward", async function () {
       let date = Date.now()
