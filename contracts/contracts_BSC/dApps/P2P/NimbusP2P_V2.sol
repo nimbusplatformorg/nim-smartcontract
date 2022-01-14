@@ -271,6 +271,7 @@ contract NimbusP2P_V2 is NimbusP2P_V2Storage, IERC721Receiver {
     ) external returns (uint tradeId) {
         require(Address.isContract(proposedAsset), "NimbusP2P_V2: Not contracts");
         require(proposedAmount > 0, "NimbusP2P_V2: Zero amount not allowed");
+        require(askedAssets.length > 0,"NimbusP2P_V2: askedAssets empty");
         require(askedAssets.length == askedTokenIds.length, "NimbusP2P_V2: Wrong lengths");
         _requireAllowedEIP20(proposedAsset);
         for (uint256 i; i < askedAssets.length; i++) {
@@ -296,6 +297,7 @@ contract NimbusP2P_V2 is NimbusP2P_V2Storage, IERC721Receiver {
     ) external returns (uint tradeId) {
         require(Address.isContract(askedAsset), "NimbusP2P_V2: Not contracts");
         require(proposedAssets.length == proposedTokenIds.length, "NimbusP2P_V2: Wrong lengths");
+        require(proposedAssets.length > 0, "NimbusP2P_V2: proposedAssets empty");
         _requireAllowedEIP20(askedAsset);
         for (uint i; i < proposedAssets.length; i++) {
           require(Address.isContract(proposedAssets[i]), "NimbusP2P_V2: Not contracts");
