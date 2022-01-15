@@ -598,7 +598,7 @@ contract SmartLP is SmartLPStorage, IBEP721, IBEP721Metadata {
         
         lpBnbNbuUserRewards = (_balancesRewardEquivalentBnbNbu[tokenId] * ((block.timestamp - weightedStakeDate[tokenId]) * 100)) / (100 * rewardDuration);
         lpBnbGnbuUserRewards = (_balancesRewardEquivalentBnbGnbu[tokenId] * ((block.timestamp - weightedStakeDate[tokenId]) * 100)) / (100 * rewardDuration);
-        lendedUserRewards = (convertITokenToBNB - userSupply.LendedBNBAmount >= 0) ? (convertITokenToBNB - userSupply.LendedBNBAmount) : 0;
+        lendedUserRewards = (convertITokenToBNB > userSupply.LendedBNBAmount) ? (convertITokenToBNB - userSupply.LendedBNBAmount) : 0;
     }
     
     function getTotalAmountsOfRewards(uint tokenId) public view returns (uint nbuReward, uint bnbReward) {
