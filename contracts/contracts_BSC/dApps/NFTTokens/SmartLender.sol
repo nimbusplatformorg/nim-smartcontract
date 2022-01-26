@@ -652,14 +652,11 @@ contract SmartLender is SmartLenderStorage, IBEP721, IBEP721Metadata {
     function getTokenRewardsAmounts(uint tokenId) public view returns (uint lpBnbNbuUserRewards, uint lpNbuBusdUserRewards, uint lendedUserRewards) {
         UserSupply memory userSupply = tikSupplies[tokenId];
         require(userSupply.IsActive, "SmartLender: Not active");
-        uint convertITokenToBusd = ((userSupply.LendedITokenAmount * lendingContract.tokenPrice()) / 1e18) + 1;
-        require(userSupply.LendedBusdAmount <= convertITokenToBusd,
-            "SmartLender: lending rewards are not available"
-        );
+        uint convertITokenToBusd = (userSupply.LendedITokenAmount * lendingContract.tokenPrice()) / 1e18;
 
         lpBnbNbuUserRewards = (_balancesRewardEquivalentBnbNbu[tokenId] * ((block.timestamp - weightedStakeDate[tokenId]) * 100)) / (100 * rewardDuration);
         lpNbuBusdUserRewards =(_balancesRewardEquivalentNbuBusd[tokenId] * ((block.timestamp - weightedStakeDate[tokenId]) * 100)) / (100 * rewardDuration);
-        lendedUserRewards = convertITokenToBusd - userSupply.LendedBusdAmount;
+        lendedUserRewards = (convertITokenToBusd > userSupply.LendedBusdAmount) ? (convertITokenToBusd - userSupply.LendedBusdAmount) : 0;
     }
     
     function getTotalAmountsOfRewards(uint tokenId) public view returns (uint nbuReward, uint busdReward) {
