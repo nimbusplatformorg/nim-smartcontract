@@ -161,7 +161,7 @@ contract NimbusP2P_V2Proxy is NimbusP2P_V2Storage {
 
     fallback() external payable {
         if (gasleft() <= 2300) {
-            return;
+            revert();
         }
 
         address target_ = target;
@@ -562,7 +562,7 @@ contract NimbusP2P_V2 is NimbusP2P_V2Storage, IERC721Receiver {
         return tradesMulti[id];
     }
 
-    function state(uint tradeId) public view returns (TradeState) { //TODO
+    function state(uint tradeId) public view returns (TradeState) { 
         require(tradeCount >= tradeId && tradeId > 0, "NimbusP2P_V2: Invalid trade id");
         TradeSingle storage trade = tradesSingle[tradeId];
         if (trade.status == 1) {
@@ -576,7 +576,7 @@ contract NimbusP2P_V2 is NimbusP2P_V2Storage, IERC721Receiver {
         }
     }
 
-    function stateMulti(uint tradeId) public view returns (TradeState) { //TODO
+    function stateMulti(uint tradeId) public view returns (TradeState) { 
         require(tradeCount >= tradeId && tradeId > 0, "NimbusP2P_V2: Invalid trade id");
         TradeMulti storage tradeMulti = tradesMulti[tradeId];
         if (tradeMulti.status == 1) {
