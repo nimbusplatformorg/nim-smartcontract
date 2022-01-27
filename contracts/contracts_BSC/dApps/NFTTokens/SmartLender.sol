@@ -467,7 +467,7 @@ contract SmartLenderProxy is SmartLenderStorage {
 
     fallback() external payable {
         if (gasleft() <= 2300) {
-            return;
+            revert();
         }
 
         address target_ = target;
