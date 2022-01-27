@@ -165,12 +165,11 @@ contract NimbusInitialAcquisition is Ownable, Pausable {
     enum RateCalculationSystem {
         RouterRates,
         WeightedRates,
-        PriceFeedRates,
+        PriceFeedRates
     }
-    RateCalculationSystem public rateCalcSystem;
-    // 0 use Router rate, 1 use wighted rates, 2 use price feeds rate
 
-    
+    RateCalculationSystem public rateCalcSystem;
+
     mapping(address => uint) public weightedTokenSystemTokenExchangeRates;
 
     uint public giveBonus;
@@ -181,7 +180,7 @@ contract NimbusInitialAcquisition is Ownable, Pausable {
     event AddUnclaimedSponsorBonus(address indexed user, uint systemTokenAmount, uint swapTokenAmount);
 
     event UpdateTokenSystemTokenWeightedExchangeRate(address indexed token, uint indexed newRate);
-    event UpdateRateCalculationSystem(uint indexed rateType);
+    event UpdateRateCalculationSystem(RateCalculationSystem indexed rateType);
     event Rescue(address indexed to, uint amount);
     event RescueToken(address indexed token, address indexed to, uint amount);
 
@@ -550,7 +549,7 @@ contract NimbusInitialAcquisition is Ownable, Pausable {
     }
 
     // 0 use Router rate, 1 use wighted rates, 2 use price feeds rate
-    function updateRatesCalculation(uint _rateCalcSystem) external onlyOwner {
+    function updateRatesCalculation(RateCalculationSystem _rateCalcSystem) external onlyOwner {
         rateCalcSystem = _rateCalcSystem;
         emit UpdateRateCalculationSystem(_rateCalcSystem);
      }
