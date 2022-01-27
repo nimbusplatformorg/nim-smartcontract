@@ -162,9 +162,15 @@ contract NimbusInitialAcquisition is Ownable, Pausable {
     uint public sponsorBonus;
     mapping(address => uint) public unclaimedBonusBases;
     mapping(address => uint) public unclaimedBonusBasesEquivalent;
+    enum RateCalculationSystem {
+        RouterRates,
+        WeightedRates,
+        PriceFeedRates,
+    }
+    RateCalculationSystem public rateCalcSystem;
+    // 0 use Router rate, 1 use wighted rates, 2 use price feeds rate
 
-    bool public useWeightedRates;
-    bool public usePriceFeedsRates;
+    
     mapping(address => uint) public weightedTokenSystemTokenExchangeRates;
 
     uint public giveBonus;
@@ -175,8 +181,7 @@ contract NimbusInitialAcquisition is Ownable, Pausable {
     event AddUnclaimedSponsorBonus(address indexed user, uint systemTokenAmount, uint swapTokenAmount);
 
     event UpdateTokenSystemTokenWeightedExchangeRate(address indexed token, uint indexed newRate);
-    // event ToggleUseWeightedRates(bool indexed useWeightedRates);
-    event UpdateRateCalculation(uint indexed rateType);
+    event UpdateRateCalculationSystem(uint indexed rateType);
     event Rescue(address indexed to, uint amount);
     event RescueToken(address indexed token, address indexed to, uint amount);
 
@@ -328,20 +333,12 @@ contract NimbusInitialAcquisition is Ownable, Pausable {
     }
 
     function getSystemTokenAmountForToken(address token, uint tokenAmount) public view returns (uint) { 
-        // if (!useWeightedRates) {
-        //     address[] memory path = new address[](2);
-        //     path[0] = token;
-        //     path[1] = address(SYSTEM_TOKEN);
-        //     return swapRouter.getAmountsOut(tokenAmount, path)[1];
-        // } else {
-        //     return tokenAmount * weightedTokenSystemTokenExchangeRates[token] / 1e18;
-        // }
-        if(usePriceFeedsRates) {
+        if(rateCalcSystem == RateCalculationSystem.PriceFeedRates) {
             (uint256 rate, uint256 precision) = priceFeed.queryRate(token, address(SYSTEM_TOKEN));
             return tokenAmount * rate/ precision;
-        } else if(useWeightedRates) {
+        } else if(rateCalcSystem == RateCalculationSystem.WeightedRates) {
             return tokenAmount * weightedTokenSystemTokenExchangeRates[token] / 1e18;
-        } else if(!useWeightedRates && !usePriceFeedsRates) {
+        } else if(rateCalcSystem == RateCalculationSystem.RouterRates) {
             address[] memory path = new address[](2);
             path[0] = token;
             path[1] = address(SYSTEM_TOKEN);
@@ -354,26 +351,17 @@ contract NimbusInitialAcquisition is Ownable, Pausable {
     }
 
     function getTokenAmountForSystemToken(address token, uint systemTokenAmount) public view returns (uint) { 
-        if(usePriceFeedsRates) {
+        if(rateCalcSystem == RateCalculationSystem.PriceFeedRates) {
             (uint256 rate, uint256 precision) = priceFeed.queryRate(token, address(SYSTEM_TOKEN));
             return systemTokenAmount * precision/ rate;
-        } else if(useWeightedRates) {
+        } else if(rateCalcSystem == RateCalculationSystem.WeightedRates) {
             return systemTokenAmount * 1e18 / weightedTokenSystemTokenExchangeRates[token];
-        } else if(!useWeightedRates && !usePriceFeedsRates) {
+        } else if(rateCalcSystem == RateCalculationSystem.RouterRates) {
             address[] memory path = new address[](2);
             path[0] = token;
             path[1] = address(SYSTEM_TOKEN);
             return swapRouter.getAmountsIn(systemTokenAmount, path)[0];
         }
-        
-        // if (!useWeightedRates) { 
-        //     address[] memory path = new address[](2);
-        //     path[0] = token;
-        //     path[1] = address(SYSTEM_TOKEN);
-        //     return swapRouter.getAmountsIn(systemTokenAmount, path)[0];
-        // } else {
-        //     return systemTokenAmount * 1e18 / weightedTokenSystemTokenExchangeRates[token];
-        // }
     }
 
     function getBnbAmountForSystemToken(uint systemTokenAmount) public view returns (uint) { 
@@ -561,26 +549,10 @@ contract NimbusInitialAcquisition is Ownable, Pausable {
         emit UpdateTokenSystemTokenWeightedExchangeRate(token, rate);
     }
 
-    // function toggleUseWeightedRates() external onlyOwner {
-    //     useWeightedRates = !useWeightedRates;
-    //     emit ToggleUseWeightedRates(useWeightedRates);
-    // }
     // 0 use Router rate, 1 use wighted rates, 2 use price feeds rate
-    function updateRatesCalculation(uint rateCalcSystem) external onlyOwner {
-        require(rateCalcSystem <= 2,"NimbusInitialAcquisition: unsupported rate calculation type");
-        if (rateCalcSystem == 0) {
-            useWeightedRates = false;
-            usePriceFeedsRates = false;
-            emit UpdateRateCalculation(0);
-        } else if (rateCalcSystem == 1) {
-            useWeightedRates = true;
-            usePriceFeedsRates = false;
-            emit UpdateRateCalculation(1);
-        } else if (rateCalcSystem == 2) {
-            usePriceFeedsRates = true;
-            useWeightedRates = false;
-            emit UpdateRateCalculation(2);         
-        }
+    function updateRatesCalculation(uint _rateCalcSystem) external onlyOwner {
+        rateCalcSystem = _rateCalcSystem;
+        emit UpdateRateCalculationSystem(_rateCalcSystem);
      }
 
     function _updateStakingPool(uint id, address stakingPool) private {
