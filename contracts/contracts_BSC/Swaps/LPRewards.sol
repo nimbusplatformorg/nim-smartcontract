@@ -48,7 +48,7 @@ contract Ownable {
 
 interface INimbusRouter {
     function getAmountsOut(uint amountIn, address[] calldata path) external  view returns (uint[] memory amounts);
-    function getAmountOut(uint amountIn, uint reserveIn, uint reserveOut) external pure returns (uint amountOut);
+    function getAmountOut(uint amountIn, uint reserveIn, uint reserveOut) external pure override returns (uint amountOut);
 }
 
 interface INimbusFactory {
@@ -142,7 +142,7 @@ contract LPReward is Ownable {
 
     function recordRemoveLiquidity(address recipient, address tokenA, address tokenB, uint amountA, uint amountB, uint liquidity) external lock onlyRouter { 
         address pair = swapFactory.getPair(tokenA, tokenB);
-        // (uint112[2] memory current_reserve) = INimbusPair(pair).getCurrentReserve(); 
+
         if (!allowedPairs[pair]) return;
         uint amount0;
         uint amount1;
@@ -164,17 +164,14 @@ contract LPReward is Ownable {
         if (tokenA != NBU && tokenB != NBU) {
             address tokenToNbuPair = swapFactory.getPair(tokenA, NBU);
             if (tokenToNbuPair != address(0)) {
-                // amountNbu = INimbusRouter(swapRouter).getAmountsOut(amount0, getPathForToken(tokenA))[1];
                 amountNbu = INimbusRouter(swapRouter).getAmountOut(amount0, INimbusPair(pair).getCurrentReserve()[0], INimbusPair(pair).getCurrentReserve()[1]);
             }
 
             tokenToNbuPair = swapFactory.getPair(tokenB, NBU);
             if (tokenToNbuPair != address(0)) {
                 if (amountNbu != 0) {
-                    // amountNbu = amountNbu + INimbusRouter(swapRouter).getAmountsOut(amount1, getPathForToken(tokenB))[1];
                     amountNbu = amountNbu + INimbusRouter(swapRouter).getAmountOut(amount1, INimbusPair(pair).getCurrentReserve()[0], INimbusPair(pair).getCurrentReserve()[1]);
                 } else  {
-                    // amountNbu = INimbusRouter(swapRouter).getAmountsOut(amount1, getPathForToken(tokenB))[1] * 2;
                     amountNbu = INimbusRouter(swapRouter).getAmountOut(amount1, INimbusPair(pair).getCurrentReserve()[0], INimbusPair(pair).getCurrentReserve()[1]) * 2;
                 }
             } else {
