@@ -135,7 +135,7 @@ library Address {
     }
 }
 
-contract NimbusInitialAcquisition is Ownable, Pausable {
+contract NimbusInitialAcquisitionNew is Ownable, Pausable {
     IBEP20 public immutable SYSTEM_TOKEN;
     address public immutable NBU_WBNB;
     INimbusReferralProgram public referralProgram;
