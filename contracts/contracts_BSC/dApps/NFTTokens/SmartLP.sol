@@ -576,13 +576,19 @@ contract SmartLP is SmartLPStorage, IBEP721, IBEP721Metadata {
         }
 
         lpStakingBnbNbu.withdraw(userSupply.NbuBnbStakeNonce);
-        swapRouter.removeLiquidityBNB(address(nbuToken), userSupply.NbuBnbLpAmount, 0, 0,  msg.sender, block.timestamp);
+        (uint amountNbu,) = swapRouter.removeLiquidityBNB(address(nbuToken), userSupply.NbuBnbLpAmount, 0, 0,  msg.sender, block.timestamp);
+        uint poolBnbNbuRewards = (amountNbu > userSupply.PoolNbuAmount) ? (amountNbu - userSupply.PoolNbuAmount) : 0;
+        require(poolBnbNbuRewards >= 0, "SmartLP: Pool rewards not avaliable");
 
         lpStakingBnbGnbu.withdraw(userSupply.GnbuBnbStakeNonce);
-        swapRouter.removeLiquidityBNB(address(gnbuToken), userSupply.GnbuBnbLpAmount, 0, 0, msg.sender, block.timestamp);
 
-        lendingContract.burnToBnb(msg.sender, userSupply.LendedITokenAmount);
-        
+        (uint amountGnbu,) = swapRouter.removeLiquidityBNB(address(gnbuToken), userSupply.GnbuBnbLpAmount, 0, 0, msg.sender, block.timestamp);
+        uint poolBnbGnbuRewards = (amountGnbu > userSupply.PoolGnbuAmount) ? (amountGnbu - userSupply.PoolGnbuAmount) : 0;
+        require(poolBnbGnbuRewards >= 0, "SmartLP: Pool rewards not avaliable");
+
+        (uint amountBnb) = lendingContract.burnToBnb(msg.sender, userSupply.LendedITokenAmount);
+        uint lendedBnbRewards = (amountBnb > userSupply.LendedBNBAmount) ? (amountBnb - userSupply.LendedBNBAmount) : 0;
+        require( lendedBnbRewards >= 0, "SmartLP: Lend rewards not avaliable");
         transferFrom(msg.sender, address(0x1), tokenId);
         userSupply.IsActive = false;
         
