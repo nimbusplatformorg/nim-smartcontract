@@ -267,6 +267,8 @@ contract GNBU is Ownable, Pausable {
             _unvestedAmounts[msg.sender][i] = safe96(totalUnvestedForNonce, "GNBU::unvest: amount exceeds 96 bits");
         }
         _unfrozenBalances[msg.sender] = add96(_unfrozenBalances[msg.sender], safe96(unvested, "GNBU::unvest: amount exceeds 96 bits"), "GNBU::unvest: adding overflow");
+        uint96 votes = safe96(unvested, "GNBU::unvest: votes amount exceeds 96 bits");
+        _moveDelegates(address(0), delegates[msg.sender], votes);
         emit Unvest(msg.sender, unvested);
     }
     
@@ -399,6 +401,8 @@ contract GNBU is Ownable, Pausable {
         _unfrozenBalances[owner] = sub96(_unfrozenBalances[owner], _sum, "GNBU::_transferTokens: transfer amount exceeds balance");
         for (uint i; i < to.length; i++) {
             _unfrozenBalances[to[i]] = add96(_unfrozenBalances[to[i]], uint96(values[i]), "GNBU::_transferTokens: transfer amount exceeds balance");
+            uint96 votes = safe96(values[i], "GNBU::unvest: votes amount exceeds 96 bits");
+            _moveDelegates(delegates[msg.sender], delegates[to[i]], votes);
             emit Transfer(owner, to[i], values[i]);
         }
         return(to.length);
