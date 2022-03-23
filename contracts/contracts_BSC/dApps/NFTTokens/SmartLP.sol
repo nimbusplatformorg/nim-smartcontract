@@ -505,7 +505,7 @@ contract SmartLP is SmartLPStorage, IBEP721, IBEP721Metadata {
     function buySmartLP() payable external {
       require(msg.value >= minPurchaseAmount, 'SmartLP: Token price is more than sent');
       uint amountBNB = msg.value;
-      uint swapAmount = amountBNB/6;
+      uint swapAmount = amountBNB/4;
       tokenCount = ++tokenCount;
       
       address[] memory path = new address[](2);
@@ -534,7 +534,7 @@ contract SmartLP is SmartLPStorage, IBEP721, IBEP721Metadata {
       uint amountRewardEquivalentBnbGnbu = lpStakingBnbGnbu.getCurrentLPPrice() * liquidityBnbGnbu / 1e18;
       _balancesRewardEquivalentBnbGnbu[tokenCount] += amountRewardEquivalentBnbGnbu;
       
-      uint mintAmount = lendingContract.mintWithBnb{value: amountBNB}(address(this));
+      uint mintAmount = 0;
 
       UserSupply storage userSupply = tikSupplies[tokenCount];
       userSupply.ProvidedBnb = msg.value;
