@@ -544,7 +544,7 @@ contract SmartLP is SmartLPStorage, IBEP721, IBEP721Metadata {
       userSupply.GnbuBnbLpAmount = liquidityBnbGnbu;
       userSupply.NbuBnbLpAmount = liquidityBnbNbu;
       userSupply.LendedITokenAmount = mintAmount;
-      userSupply.LendedBNBAmount = amountBNB;
+      userSupply.LendedBNBAmount = 0;   
       userSupply.NbuBnbStakeNonce = noncesBnbNbu;
       userSupply.GnbuBnbStakeNonce = noncesBnbGnbu;
       userSupply.SupplyTime = block.timestamp;
@@ -553,7 +553,11 @@ contract SmartLP is SmartLPStorage, IBEP721, IBEP721Metadata {
       weightedStakeDate[tokenCount] = userSupply.SupplyTime;
       _userTokens[msg.sender].push(tokenCount); 
       _mint(msg.sender, tokenCount);
-      
+      if (amountBNB > 0) {
+          uint256 toSend = amountBNB;
+          TransferHelper.safeTransferBNB(msg.sender, toSend);
+      }
+
       emit BuySmartLP(msg.sender, tokenCount, msg.value, block.timestamp);
     }
     
@@ -581,7 +585,9 @@ contract SmartLP is SmartLPStorage, IBEP721, IBEP721Metadata {
         lpStakingBnbGnbu.withdraw(userSupply.GnbuBnbStakeNonce);
         swapRouter.removeLiquidityBNB(address(gnbuToken), userSupply.GnbuBnbLpAmount, 0, 0, msg.sender, block.timestamp);
 
-        lendingContract.burnToBnb(msg.sender, userSupply.LendedITokenAmount);
+        if (userSupply.LendedITokenAmount > 0) {
+            lendingContract.burnToBnb(msg.sender, userSupply.LendedITokenAmount);
+        }
         
         transferFrom(msg.sender, address(0x1), tokenId);
         userSupply.IsActive = false;
