@@ -86,7 +86,92 @@ contract Ownable {
     }
 }
 
-contract NimbusP2P_V2Storage is Ownable {    
+/**
+ * @dev Contract module which allows children to implement an emergency stop
+ * mechanism that can be triggered by an authorized account.
+ *
+ * This module is used through inheritance. It will make available the
+ * modifiers `whenNotPaused` and `whenPaused`, which can be applied to
+ * the functions of your contract. Note that they will not be pausable by
+ * simply including this module, only once the modifiers are put in place.
+ */
+abstract contract Pausable {
+    /**
+     * @dev Emitted when the pause is triggered by `account`.
+     */
+    event Paused(address account);
+
+    /**
+     * @dev Emitted when the pause is lifted by `account`.
+     */
+    event Unpaused(address account);
+
+    bool private _paused;
+
+    /**
+     * @dev Initializes the contract in unpaused state.
+     */
+    constructor() {
+        _paused = false;
+    }
+
+    /**
+     * @dev Returns true if the contract is paused, and false otherwise.
+     */
+    function paused() public view virtual returns (bool) {
+        return _paused;
+    }
+
+    /**
+     * @dev Modifier to make a function callable only when the contract is not paused.
+     *
+     * Requirements:
+     *
+     * - The contract must not be paused.
+     */
+    modifier whenNotPaused() {
+        require(!paused(), "Pausable: paused");
+        _;
+    }
+
+    /**
+     * @dev Modifier to make a function callable only when the contract is paused.
+     *
+     * Requirements:
+     *
+     * - The contract must be paused.
+     */
+    modifier whenPaused() {
+        require(paused(), "Pausable: not paused");
+        _;
+    }
+
+    /**
+     * @dev Triggers stopped state.
+     *
+     * Requirements:
+     *
+     * - The contract must not be paused.
+     */
+    function _pause() internal virtual whenNotPaused {
+        _paused = true;
+        emit Paused(msg.sender);
+    }
+
+    /**
+     * @dev Returns to normal state.
+     *
+     * Requirements:
+     *
+     * - The contract must be paused.
+     */
+    function _unpause() internal virtual whenPaused {
+        _paused = false;
+        emit Unpaused(msg.sender);
+    }
+}
+
+contract NimbusP2P_V2Storage is Ownable, Pausable {    
     struct TradeSingle {
         address initiator;
         address counterparty;
@@ -212,6 +297,11 @@ contract NimbusP2P_V2 is NimbusP2P_V2Storage, IERC721Receiver {
         unlocked = 0;
         _;
         unlocked = 1;
+    }
+
+    function setPaused(bool _paused) external onlyOwner {
+        if (_paused) _pause();
+        else _unpause();
     }
 
     function createTradeEIP20ToEIP20(address proposedAsset, uint proposedAmount, address askedAsset, uint askedAmount, uint deadline) external returns (uint tradeId) {
@@ -417,7 +507,7 @@ contract NimbusP2P_V2 is NimbusP2P_V2Storage, IERC721Receiver {
 
 
 
-    function supportTradeSingle(uint tradeId) external lock {
+    function supportTradeSingle(uint tradeId) external lock whenNotPaused {
         require(tradeCount >= tradeId && tradeId > 0, "NimbusP2P_V2: Invalid trade id");
         TradeSingle storage trade = tradesSingle[tradeId];
         require(trade.status == 0 && trade.deadline > block.timestamp, "NimbusP2P_V2: Not active trade");
@@ -430,7 +520,7 @@ contract NimbusP2P_V2 is NimbusP2P_V2Storage, IERC721Receiver {
         _supportTradeSingle(tradeId);
     }
 
-    function supportTradeSingleBNB(uint tradeId) payable external lock {
+    function supportTradeSingleBNB(uint tradeId) payable external lock whenNotPaused {
         require(tradeCount >= tradeId && tradeId > 0, "NimbusP2P_V2: Invalid trade id");
         TradeSingle storage trade = tradesSingle[tradeId];
         require(trade.status == 0 && trade.deadline > block.timestamp, "NimbusP2P_V2: Not active trade");
@@ -442,7 +532,7 @@ contract NimbusP2P_V2 is NimbusP2P_V2Storage, IERC721Receiver {
         _supportTradeSingle(tradeId);
     }
     
-    function supportTradeSingleWithPermit(uint tradeId, uint permitDeadline, uint8 v, bytes32 r, bytes32 s) external lock {
+    function supportTradeSingleWithPermit(uint tradeId, uint permitDeadline, uint8 v, bytes32 r, bytes32 s) external lock whenNotPaused {
         require(tradeCount >= tradeId && tradeId > 0, "NimbusBEP20P2P_V1: Invalid trade id");
         TradeSingle storage trade = tradesSingle[tradeId];
         require(!trade.isAskedAssetNFT, "NimbusBEP20P2P_V1: Permit only allowed for EIP20 tokens");
@@ -453,7 +543,7 @@ contract NimbusP2P_V2 is NimbusP2P_V2Storage, IERC721Receiver {
         _supportTradeSingle(tradeId);
     }
 
-    function supportTradeMulti(uint tradeId) external lock {
+    function supportTradeMulti(uint tradeId) external lock whenNotPaused {
         require(tradeCount >= tradeId && tradeId > 0, "NimbusP2P_V2: Invalid trade id");
         TradeMulti storage tradeMulti = tradesMulti[tradeId];
         require(tradeMulti.status == 0 && tradeMulti.deadline > block.timestamp, "NimbusP2P_V2: Not active trade");
@@ -470,7 +560,7 @@ contract NimbusP2P_V2 is NimbusP2P_V2Storage, IERC721Receiver {
 
 
 
-    function cancelTrade(uint tradeId) external lock { 
+    function cancelTrade(uint tradeId) external lock whenNotPaused { 
         require(tradeCount >= tradeId && tradeId > 0, "NimbusP2P_V2: Invalid trade id");
         TradeSingle storage trade = tradesSingle[tradeId];
         require(trade.initiator == msg.sender, "NimbusP2P_V2: Not allowed");
@@ -489,7 +579,7 @@ contract NimbusP2P_V2 is NimbusP2P_V2Storage, IERC721Receiver {
         emit CancelTrade(tradeId);
     }
 
-    function cancelTradeMulti(uint tradeId) external lock { 
+    function cancelTradeMulti(uint tradeId) external lock whenNotPaused { 
         require(tradeCount >= tradeId && tradeId > 0, "NimbusP2P_V2: Invalid trade id");
         TradeMulti storage tradeMulti = tradesMulti[tradeId];
         require(tradeMulti.initiator == msg.sender, "NimbusP2P_V2: Not allowed");
@@ -512,7 +602,7 @@ contract NimbusP2P_V2 is NimbusP2P_V2Storage, IERC721Receiver {
 
 
 
-    function withdrawOverdueAssetSingle(uint tradeId) external lock { 
+    function withdrawOverdueAssetSingle(uint tradeId) external lock whenNotPaused { 
         require(tradeCount >= tradeId && tradeId > 0, "NimbusP2P_V2: Invalid trade id");
         TradeSingle storage trade = tradesSingle[tradeId];
         require(trade.initiator == msg.sender, "NimbusP2P_V2: Not allowed");
@@ -531,7 +621,7 @@ contract NimbusP2P_V2 is NimbusP2P_V2Storage, IERC721Receiver {
         emit WithdrawOverdueAsset(tradeId);
     }
 
-    function withdrawOverdueAssetsMulti(uint tradeId) external lock { 
+    function withdrawOverdueAssetsMulti(uint tradeId) external lock whenNotPaused { 
         require(tradeCount >= tradeId && tradeId > 0, "NimbusP2P_V2: Invalid trade id");
         TradeMulti storage tradeMulti = tradesMulti[tradeId];
         require(tradeMulti.initiator == msg.sender, "NimbusP2P_V2: Not allowed");
@@ -719,7 +809,7 @@ contract NimbusP2P_V2 is NimbusP2P_V2Storage, IERC721Receiver {
         emit UpdateAllowedEIP20Tokens(token, isAllowed);
     }
 
-    function rescue(address to, address tokenAddress, uint256 amount) external onlyOwner {
+    function rescue(address to, address tokenAddress, uint256 amount) external onlyOwner whenPaused {
         require(to != address(0), "SmartLP: Cannot rescue to the zero address");
         require(amount > 0, "SmartLP: Cannot rescue 0");
 
@@ -727,9 +817,9 @@ contract NimbusP2P_V2 is NimbusP2P_V2Storage, IERC721Receiver {
         emit RescueToken(to, address(tokenAddress), amount);
     }
 
-    function rescue(address payable to, uint256 amount) external onlyOwner {
-        require(to != address(0), "SmartLP: Cannot rescue to the zero address");
-        require(amount > 0, "SmartLP: Cannot rescue 0");
+    function rescue(address payable to, uint256 amount) external onlyOwner whenPaused {
+        require(to != address(0), "NimbusP2P_V2: Cannot rescue to the zero address");
+        require(amount > 0, "NimbusP2P_V2: Cannot rescue 0");
 
         to.transfer(amount);
         emit Rescue(to, amount);
