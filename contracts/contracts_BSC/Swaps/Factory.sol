@@ -57,6 +57,7 @@ interface INimbusPair is INimbusBEP20 {
     function token0() external view returns (address);
     function token1() external view returns (address);
     function getReserves() external view returns (uint112 reserve0, uint112 reserve1, uint32 blockTimestampLast);
+    function getCurrentReserve() external view returns (uint112[2] memory);
     function price0CumulativeLast() external view returns (uint);
     function price1CumulativeLast() external view returns (uint);
     function kLast() external view returns (uint);
@@ -221,9 +222,11 @@ contract NimbusPair is INimbusPair, NimbusBEP20 {
     address public override token0;
     address public override token1;
 
+    uint112[2] private current_reserve; // uses single storage slot, accessible via getReserves
     uint112 private reserve0;           // uses single storage slot, accessible via getReserves
     uint112 private reserve1;           // uses single storage slot, accessible via getReserves
     uint32  private blockTimestampLast; // uses single storage slot, accessible via getReserves
+    uint private current_block;
 
     uint public override price0CumulativeLast;
     uint public override price1CumulativeLast;
@@ -242,6 +245,11 @@ contract NimbusPair is INimbusPair, NimbusBEP20 {
         _reserve1 = reserve1;
         _blockTimestampLast = blockTimestampLast;
     }
+
+    function getCurrentReserve() public view  override returns (uint112[2] memory) {
+        return current_reserve;
+    }
+
 
     function _safeTransfer(address token, address to, uint value) private {
         (bool success, bytes memory data) = token.call(abi.encodeWithSelector(SELECTOR, to, value));
@@ -353,7 +361,13 @@ contract NimbusPair is INimbusPair, NimbusBEP20 {
     // this low-level function should be called from a contract which performs important safety checks
     function swap(uint amount0Out, uint amount1Out, address to, bytes calldata data) external override lock {
         require(amount0Out > 0 || amount1Out > 0, 'Nimbus: INSUFFICIENT_OUTPUT_AMOUNT');
-        (uint112 _reserve0, uint112 _reserve1,) = getReserves(); // gas savings
+        if (current_block != block.number) {
+            current_reserve = getReserves(); // gas savings
+            current_block = block.number;
+        } 
+        current_reserve = getCurrentReserve();
+        uint112 _reserve0 = current_reserve[0];
+        uint112 _reserve1 = current_reserve[1];
         require(amount0Out < _reserve0 && amount1Out < _reserve1, 'Nimbus: INSUFFICIENT_LIQUIDITY');
 
         uint balance0;
@@ -376,13 +390,13 @@ contract NimbusPair is INimbusPair, NimbusBEP20 {
         address referralProgram = INimbusFactory(factory).nimbusReferralProgram();
         if (amount0In > 0) {
             address _token0 = token0;
-            uint refFee = amount0In * 3/ 2000;
+            uint refFee = (amount0In * 3/ 2000) + 1;
             _safeTransfer(_token0, referralProgram, refFee);
             INimbusReferralProgram(referralProgram).recordFee(_token0, to, refFee);
             balance0 -= refFee;
         } 
         if (amount1In > 0) {
-            uint refFee = amount1In * 3 / 2000;
+            uint refFee = (amount1In * 3 / 2000) + 1;
             address _token1 = token1;
             _safeTransfer(_token1, referralProgram, refFee);
             INimbusReferralProgram(referralProgram).recordFee(_token1, to, refFee);
