@@ -325,43 +325,6 @@ interface IRouter {
         address to,
         uint deadline
     ) external returns (uint amountToken, uint amountBNB);
-
-    function removeLiquidity(
-        address tokenA,
-        address tokenB,
-        uint liquidity,
-        uint amountAMin,
-        uint amountBMin,
-        address to,
-        uint deadline
-    ) external returns (uint amountA, uint amountB);
-
-    function swapExactTokensForTokens(
-        uint amountIn,
-        uint amountOutMin,
-        address[] calldata path,
-        address to,
-        uint deadline
-    ) external returns (uint[] memory amounts);
-
-    function swapExactTokensForBNB(uint amountIn, uint amountOutMin, address[] calldata path, address to, uint deadline)
-        external
-        returns (uint[] memory amounts);
-
-    function addLiquidity(
-        address tokenA,
-        address tokenB,
-        uint amountADesired,
-        uint amountBDesired,
-        uint amountAMin,
-        uint amountBMin,
-        address to,
-        uint deadline
-    ) external returns (uint amountA, uint amountB, uint liquidity);
-
-   function swapTokensForExactBNB(uint amountOut, uint amountInMax, address[] calldata path, address to, uint deadline)
-        external
-        returns (uint[] memory amounts);
 }
 
 interface ILpStaking {
@@ -372,12 +335,6 @@ interface ILpStaking {
     function getReward() external;
     function withdraw(uint256 nonce) external;
     function rewardDuration() external returns (uint256);
-}
-
-interface INimbusPair {
-    function getReserves() external returns (uint112 _reserve0, uint112 _reserve1, uint32 _blockTimestampLast);
-    function token0() external returns (address);
-    function token1() external returns (address);
 }
 
 interface IWBNB {
@@ -391,36 +348,31 @@ interface ILending {
     function mintWithBnb(address receiver) external payable returns (uint256 mintAmount);
     function tokenPrice() external view returns (uint256);
     function burnToBnb(address receiver, uint256 burnAmount) external returns (uint256 loanAmountPaid);
-    function mint( address receiver, uint256 depositAmount) external returns (uint256);
-    function burn( address receiver, uint256 burnAmount) external returns (uint256 loanAmountPaid);
 }
 
-contract SmartLenderStorage is Ownable, Context, ERC165, ReentrancyGuard {    
+contract SmartLPStorage is Ownable, Context, ERC165, ReentrancyGuard {    
     IWBNB public WBNB;
     IRouter public swapRouter;
     ILpStaking public lpStakingBnbNbu;
-    ILpStaking public lpStakingNbuBusd;
+    ILpStaking public lpStakingBnbGnbu;
     ILending public lendingContract;
     IBEP20 public nbuToken;
-    IBEP20 public busdToken;
-    address internal nbuBusdPair;
-    address internal bnbNbuPair;
-    
+    IBEP20 public gnbuToken;
+
     uint public tokenCount;
     uint public minPurchaseAmount;
     uint256 public rewardDuration;
     
     struct UserSupply { 
-      uint ProvidedBusd;
+      uint ProvidedBnb;
       uint NbuBnbLpAmount;
-      uint NbuBusdLpAmount;
-      uint LendedBusdAmount;
+      uint GnbuBnbLpAmount;
+      uint LendedBNBAmount;
       uint PoolNbuAmount;
-      uint PoolBnbAmount;
-      uint PoolBusdAmount;
+      uint PoolGnbuAmount;
       uint LendedITokenAmount;
       uint NbuBnbStakeNonce;
-      uint NbuBusdStakeNonce;
+      uint GnbuBnbStakeNonce;
       uint SupplyTime;
       uint TokenId;
       bool IsActive;
@@ -428,23 +380,22 @@ contract SmartLenderStorage is Ownable, Context, ERC165, ReentrancyGuard {
     
     mapping(uint => uint[]) internal _userRewards;
     mapping(uint => uint256) internal _balancesRewardEquivalentBnbNbu;
-    mapping(uint => uint256) internal _balancesRewardEquivalentNbuBusd;
+    mapping(uint => uint256) internal _balancesRewardEquivalentBnbGnbu;
     mapping(uint => UserSupply) public tikSupplies;
     mapping(uint => uint256) public weightedStakeDate;
 
     string internal _name;
     string internal _symbol;
-
     mapping(uint256 => address) internal _owners;
     mapping(address => uint256) internal _balances;
     mapping(uint256 => address) internal _tokenApprovals;
     mapping(address => mapping(address => bool)) internal _operatorApprovals;
     mapping(address => uint[]) internal _userTokens;
      
-    event BuySmartLender(address indexed user, uint indexed tokenId, uint providedBnb, uint supplyTime);
+    event BuySmartLP(address indexed user, uint indexed tokenId, uint providedBnb, uint supplyTime);
     event WithdrawRewards(address indexed user, uint indexed tokenId, uint totalNbuReward);
     event BalanceRewardsNotEnough(address indexed user, uint indexed tokenId, uint totalNbuReward);
-    event BurnSmartLender(uint indexed tokenId);
+    event BurnSmartLP(uint indexed tokenId);
     event UpdateSwapRouter(address indexed newSwapRouterContract);
     event UpdateLpStakingBnbNbu(address indexed newLpStakingAContract);
     event UpdateLpStakingBnbGnbu(address indexed newLpStakingBContract);
@@ -456,12 +407,12 @@ contract SmartLenderStorage is Ownable, Context, ERC165, ReentrancyGuard {
     event RescueToken(address indexed to, address indexed token, uint amount);
 }
 
-contract SmartLenderProxy is SmartLenderStorage {
+contract SmartLPProxy is SmartLPStorage {
     address public target;
     
     event SetTarget(address indexed newTarget);
 
-    constructor(address _newTarget) SmartLenderStorage() {
+    constructor(address _newTarget) SmartLPStorage() {
         _setTarget(_newTarget);
     }
 
@@ -494,7 +445,7 @@ contract SmartLenderProxy is SmartLenderStorage {
     }
 }
 
-contract SmartLender is SmartLenderStorage, IBEP721, IBEP721Metadata {
+contract SmartLP is SmartLPStorage, IBEP721, IBEP721Metadata {
     using Address for address;
     using Strings for uint256;
     
@@ -504,22 +455,22 @@ contract SmartLender is SmartLenderStorage, IBEP721, IBEP721Metadata {
         address _swapRouter, 
         address _wbnb, 
         address _nbuToken, 
-        address _busdToken, 
+        address _gnbuToken, 
         address _bnbNbuPair, 
-        address _nbuBusdPair,
+        address _gnbuBnbPair, 
         address _lpStakingBnbNbu, 
-        address _lpStakingNbuBusd, 
+        address _lpStakingBnbGnbu, 
         address _lendingContract
     ) external onlyOwner {
-        require(Address.isContract(_swapRouter), "NimbusSmartLender_V1: Not contract");
-        require(Address.isContract(_wbnb), "NimbusSmartLender_V1: Not contract");
-        require(Address.isContract(_nbuToken), "NimbusSmartLender_V1: Not contract");
-        require(Address.isContract(_busdToken), "NimbusSmartLender_V1: Not contract");
-        require(Address.isContract(_bnbNbuPair), "NimbusSmartLender_V1: Not contract");
-        require(Address.isContract(_nbuBusdPair), "NimbusSmartLender_V1: Not contract");
-        require(Address.isContract(_lpStakingBnbNbu), "NimbusSmartLender_V1: Not contract");
-        require(Address.isContract(_lpStakingNbuBusd), "NimbusSmartLender_V1: Not contract");
-        require(Address.isContract(_lendingContract), "NimbusSmartLender_V1: Not contract");
+        require(Address.isContract(_swapRouter), "NimbusSmartLP_V1: Not contract");
+        require(Address.isContract(_wbnb), "NimbusSmartLP_V1: Not contract");
+        require(Address.isContract(_nbuToken), "NimbusSmartLP_V1: Not contract");
+        require(Address.isContract(_gnbuToken), "NimbusSmartLP_V1: Not contract");
+        require(Address.isContract(_bnbNbuPair), "NimbusSmartLP_V1: Not contract");
+        require(Address.isContract(_gnbuBnbPair), "NimbusSmartLP_V1: Not contract");
+        require(Address.isContract(_lpStakingBnbNbu), "NimbusSmartLP_V1: Not contract");
+        require(Address.isContract(_lpStakingBnbGnbu), "NimbusSmartLP_V1: Not contract");
+        require(Address.isContract(_lendingContract), "NimbusSmartLP_V1: Not contract");
 
         _name = "Smart LP";
         _symbol = "SL";
@@ -527,84 +478,75 @@ contract SmartLender is SmartLenderStorage, IBEP721, IBEP721Metadata {
         swapRouter = IRouter(_swapRouter);
         WBNB = IWBNB(_wbnb);
         nbuToken = IBEP20(_nbuToken);
-        busdToken = IBEP20(_busdToken);
+        gnbuToken = IBEP20(_gnbuToken);
         lpStakingBnbNbu = ILpStaking(_lpStakingBnbNbu);
-        lpStakingNbuBusd = ILpStaking(_lpStakingNbuBusd);
+        lpStakingBnbGnbu = ILpStaking(_lpStakingBnbGnbu);
         lendingContract = ILending(_lendingContract);
-        nbuBusdPair = _nbuBusdPair;
-        bnbNbuPair = _bnbNbuPair;
-       
-      
+
         rewardDuration = ILpStaking(_lpStakingBnbNbu).rewardDuration();
-        minPurchaseAmount = 500000000000000000000;
+        minPurchaseAmount = 1 ether;
 
         IBEP20(_nbuToken).approve(_swapRouter, type(uint256).max);
-        IBEP20(_busdToken).approve(_swapRouter, type(uint256).max);
+        IBEP20(_gnbuToken).approve(_swapRouter, type(uint256).max);
         IBEP20(_bnbNbuPair).approve(address(_swapRouter), type(uint256).max);
         IBEP20(_bnbNbuPair).approve(address(_lpStakingBnbNbu), type(uint256).max);
-        IBEP20(_nbuBusdPair).approve(address(_lpStakingNbuBusd), type(uint256).max);  
-        IBEP20(_nbuBusdPair).approve(address(_swapRouter), type(uint256).max);
-        IBEP20(_busdToken).approve(address(_lendingContract), type(uint256).max); 
-
+        IBEP20(_gnbuBnbPair).approve(address(_lpStakingBnbGnbu), type(uint256).max);  
+        IBEP20(_gnbuBnbPair).approve(address(_swapRouter), type(uint256).max);  
     }
 
     receive() external payable {
         assert(msg.sender == address(WBNB) || msg.sender == address(swapRouter));
     }
+    
 
 
+    // ========================== SmartLP functions ==========================
 
-
-    // ========================== SmartLender functions ==========================
-
-    function buySmartLender(uint amount) external {
-      require(amount >= minPurchaseAmount, 'SmartLender: Token price is more than sent');
-      TransferHelper.safeTransferFrom(address(busdToken), msg.sender, address(this), amount); 
-      uint amountBusd = amount;
+    function buySmartLP() payable external {
+      require(msg.value >= minPurchaseAmount, 'SmartLP: Token price is more than sent');
+      uint amountBNB = msg.value;
+      uint swapAmount = amountBNB/6;
       tokenCount = ++tokenCount;
       
       address[] memory path = new address[](2);
-      path[0] = address(busdToken);
+      path[0] = address(WBNB);
       path[1] = address(nbuToken);
+      (uint[] memory amountsBnbNbuSwap) = swapRouter.swapExactBNBForTokens{value: swapAmount}(0, path, address(this), block.timestamp);
 
-      (uint[] memory amountsBusdNbuSwap) = swapRouter.swapExactTokensForTokens((amount/6), 0, path, address(this), block.timestamp);    
-      (uint[] memory amountsBusdNbuForBnbNbuPair) = swapRouter.swapExactTokensForTokens((amount/6) * 2,0, path, address(this), block.timestamp);
-
-      amountBusd -= (amount/6) * 3;
-      uint amountNbu = amountsBusdNbuSwap[1] + amountsBusdNbuForBnbNbuPair[1];
-      path[0] = address(nbuToken);
-      path[1] = address(WBNB);      
-      (uint[] memory amountsNbuBnbForBnbNbuPair) = swapRouter.swapExactTokensForBNB(amountsBusdNbuForBnbNbuPair[1]/2,0, path, address(this), block.timestamp);
-    
-      amountNbu -= amountsNbuBnbForBnbNbuPair[0];
-
-      (uint amountNbuBnb, , uint liquidityBnbNbu) = swapRouter.addLiquidityBNB{value: amountsNbuBnbForBnbNbuPair[1]}(address(nbuToken), amountsNbuBnbForBnbNbuPair[0], 0, 0, address(this), block.timestamp);
-      amountNbu -= amountNbuBnb;
+      path[1] = address(gnbuToken);      
+      (uint[] memory amountsBnbGnbuSwap) = swapRouter.swapExactBNBForTokens{value: swapAmount}(0, path, address(this), block.timestamp);
       
-      ( uint amountNbuBusd, uint amountBusdNbu, uint liquidityBusdNbu) = swapRouter.addLiquidity(address(nbuToken), address(busdToken), amountNbu, amountBusd, 0, 0, address(this), block.timestamp);
-      amountBusd -= amountBusdNbu;
-      amountNbu -= amountNbuBusd;
-      UserSupply storage userSupply = tikSupplies[tokenCount];
-      userSupply.NbuBnbStakeNonce = lpStakingBnbNbu.stakeNonces(address(this));
+      amountBNB -= swapAmount * 2;
+      
+      (, uint amountBnbNbu, uint liquidityBnbNbu) = swapRouter.addLiquidityBNB{value: amountBNB}(address(nbuToken), amountsBnbNbuSwap[1], 0, 0, address(this), block.timestamp);
+      amountBNB -= amountBnbNbu;
+      
+      (, uint amountBnbGnbu, uint liquidityBnbGnbu) = swapRouter.addLiquidityBNB{value: amountBNB}(address(gnbuToken), amountsBnbGnbuSwap[1], 0, 0, address(this), block.timestamp);
+      amountBNB -= amountBnbGnbu;
+      
+      uint256 noncesBnbNbu = lpStakingBnbNbu.stakeNonces(address(this));
       lpStakingBnbNbu.stake(liquidityBnbNbu);
+      uint amountRewardEquivalentBnbNbu = lpStakingBnbNbu.getCurrentLPPrice() * liquidityBnbNbu / 1e18;
+      _balancesRewardEquivalentBnbNbu[tokenCount] += amountRewardEquivalentBnbNbu;
 
-      _balancesRewardEquivalentBnbNbu[tokenCount] += lpStakingBnbNbu.getCurrentLPPrice() * liquidityBnbNbu / 1e18;
-
-      userSupply.NbuBusdStakeNonce = lpStakingNbuBusd.stakeNonces(address(this));
-      lpStakingNbuBusd.stake(liquidityBusdNbu);
-
-      _balancesRewardEquivalentNbuBusd[tokenCount] += lpStakingNbuBusd.getCurrentLPPrice() * liquidityBusdNbu / 1e18;
+      uint256 noncesBnbGnbu = lpStakingBnbGnbu.stakeNonces(address(this));
+      lpStakingBnbGnbu.stake(liquidityBnbGnbu);
+      uint amountRewardEquivalentBnbGnbu = lpStakingBnbGnbu.getCurrentLPPrice() * liquidityBnbGnbu / 1e18;
+      _balancesRewardEquivalentBnbGnbu[tokenCount] += amountRewardEquivalentBnbGnbu;
       
-      userSupply.LendedITokenAmount = lendingContract.mint(address(this), amountBusd);
+      uint mintAmount = lendingContract.mintWithBnb{value: amountBNB}(address(this));
 
-      userSupply.ProvidedBusd = amount;
+      UserSupply storage userSupply = tikSupplies[tokenCount];
+      userSupply.ProvidedBnb = msg.value;
       userSupply.IsActive = true;
-      userSupply.PoolNbuAmount = amountsBusdNbuSwap[1] + amountsBusdNbuForBnbNbuPair[1];
-      userSupply.PoolBnbAmount = amountsNbuBnbForBnbNbuPair[1];
-      userSupply.PoolBusdAmount = amountBusdNbu;
-      userSupply.NbuBusdLpAmount = liquidityBusdNbu;
+      userSupply.PoolNbuAmount = amountsBnbNbuSwap[1];
+      userSupply.PoolGnbuAmount = amountsBnbGnbuSwap[1];
+      userSupply.GnbuBnbLpAmount = liquidityBnbGnbu;
       userSupply.NbuBnbLpAmount = liquidityBnbNbu;
-      userSupply.LendedBusdAmount = amountBusd;
+      userSupply.LendedITokenAmount = mintAmount;
+      userSupply.LendedBNBAmount = amountBNB;
+      userSupply.NbuBnbStakeNonce = noncesBnbNbu;
+      userSupply.GnbuBnbStakeNonce = noncesBnbGnbu;
       userSupply.SupplyTime = block.timestamp;
       userSupply.TokenId = tokenCount;
 
@@ -612,21 +554,21 @@ contract SmartLender is SmartLenderStorage, IBEP721, IBEP721Metadata {
       _userTokens[msg.sender].push(tokenCount); 
       _mint(msg.sender, tokenCount);
       
-      emit BuySmartLender(msg.sender, tokenCount, amount, block.timestamp);
+      emit BuySmartLP(msg.sender, tokenCount, msg.value, block.timestamp);
     }
     
     function withdrawUserRewards(uint tokenId) external nonReentrant {
-        require(_owners[tokenId] == msg.sender, "SmartLender: Not token owner");
+        require(_owners[tokenId] == msg.sender, "SmartLP: Not token owner");
         UserSupply memory userSupply = tikSupplies[tokenId];
-        require(userSupply.IsActive, "SmartLender: Not active");
+        require(userSupply.IsActive, "SmartLP: Not active");
         (uint nbuReward, ) = getTotalAmountsOfRewards(tokenId);
         _withdrawUserRewards(tokenId, nbuReward);
     }
     
-    function burnSmartLender(uint tokenId) external nonReentrant {
-        require(_owners[tokenId] == msg.sender, "SmartLender: Not token owner");
+    function burnSmartLP(uint tokenId) external nonReentrant {
+        require(_owners[tokenId] == msg.sender, "SmartLP: Not token owner");
         UserSupply storage userSupply = tikSupplies[tokenId];
-        require(userSupply.IsActive, "SmartLender: Token not active");
+        require(userSupply.IsActive, "SmartLP: Token not active");
         (uint nbuReward, ) = getTotalAmountsOfRewards(tokenId);
         
         if(nbuReward > 0) {
@@ -635,59 +577,48 @@ contract SmartLender is SmartLenderStorage, IBEP721, IBEP721Metadata {
 
         lpStakingBnbNbu.withdraw(userSupply.NbuBnbStakeNonce);
         swapRouter.removeLiquidityBNB(address(nbuToken), userSupply.NbuBnbLpAmount, 0, 0,  msg.sender, block.timestamp);
-        
-        lpStakingNbuBusd.withdraw(userSupply.NbuBusdStakeNonce);
-        swapRouter.removeLiquidity(address(busdToken), address(nbuToken), userSupply.NbuBusdLpAmount, 0, 0, msg.sender, block.timestamp);
-        
-        lendingContract.burn(msg.sender, userSupply.LendedITokenAmount);
+
+        lpStakingBnbGnbu.withdraw(userSupply.GnbuBnbStakeNonce);
+        swapRouter.removeLiquidityBNB(address(gnbuToken), userSupply.GnbuBnbLpAmount, 0, 0, msg.sender, block.timestamp);
+
+        lendingContract.burnToBnb(msg.sender, userSupply.LendedITokenAmount);
         
         transferFrom(msg.sender, address(0x1), tokenId);
         userSupply.IsActive = false;
         
-        emit BurnSmartLender(tokenId);      
+        emit BurnSmartLP(tokenId);      
     }
 
 
 
-    function getTokenRewardsAmounts(uint tokenId) public view returns (uint lpBnbNbuUserRewards, uint lpNbuBusdUserRewards, uint lendedUserRewards) {
+    function getTokenRewardsAmounts(uint tokenId) public view returns (uint lpBnbNbuUserRewards, uint lpBnbGnbuUserRewards, uint lendedUserRewards) {
         UserSupply memory userSupply = tikSupplies[tokenId];
-        require(userSupply.IsActive, "SmartLender: Not active");
-        uint convertITokenToBusd = (userSupply.LendedITokenAmount * lendingContract.tokenPrice()) / 1e18;
-
+        require(userSupply.IsActive, "SmartLP: Not active");
+        uint convertITokenToBNB = (userSupply.LendedITokenAmount * lendingContract.tokenPrice()) / 1e18;
+        
         lpBnbNbuUserRewards = (_balancesRewardEquivalentBnbNbu[tokenId] * ((block.timestamp - weightedStakeDate[tokenId]) * 100)) / (100 * rewardDuration);
-        lpNbuBusdUserRewards =(_balancesRewardEquivalentNbuBusd[tokenId] * ((block.timestamp - weightedStakeDate[tokenId]) * 100)) / (100 * rewardDuration);
-        lendedUserRewards = (convertITokenToBusd > userSupply.LendedBusdAmount) ? (convertITokenToBusd - userSupply.LendedBusdAmount) : 0;
+        lpBnbGnbuUserRewards = (_balancesRewardEquivalentBnbGnbu[tokenId] * ((block.timestamp - weightedStakeDate[tokenId]) * 100)) / (100 * rewardDuration);
+        lendedUserRewards = (convertITokenToBNB > userSupply.LendedBNBAmount) ? (convertITokenToBNB - userSupply.LendedBNBAmount) : 0;
     }
     
-    function getTotalAmountsOfRewards(uint tokenId) public view returns (uint nbuReward, uint busdReward) {
-        (uint lpBnbNbuUserRewards, uint lpNbuBusdUserRewards, uint rewardsBusd) = getTokenRewardsAmounts(tokenId);
-        nbuReward = lpBnbNbuUserRewards + lpNbuBusdUserRewards;
-        busdReward = rewardsBusd;
+    function getTotalAmountsOfRewards(uint tokenId) public view returns (uint nbuReward, uint bnbReward) {
+        (uint lpBnbNbuUserRewards, uint lpBnbGnbuUserRewards, uint rewardsBnb) = getTokenRewardsAmounts(tokenId);
+        nbuReward = lpBnbNbuUserRewards + lpBnbGnbuUserRewards;
+        bnbReward = rewardsBnb;
     }
     
     function getUserTokens(address user) public view returns (uint[] memory) {
         return _userTokens[user];
     }
 
-    function _getRequiredTokenValue (uint tokenAmount, address token, address pair) internal returns (uint requiredTokenAmount) {
-        (uint112 _reserve0, uint112 _reserve1,) = INimbusPair(address(pair)).getReserves();
-
-        if(address(INimbusPair(address(pair)).token0()) == address(token)) {
-            requiredTokenAmount = tokenAmount * (_reserve0/_reserve1);
-        } else {
-            requiredTokenAmount = tokenAmount * (_reserve1/_reserve0);
-        }
-      }
-
 
     function _withdrawUserRewards(uint tokenId, uint totalNbuReward) private {
-        require(totalNbuReward > 0, "SmartLender: Claim not enough");
+        require(totalNbuReward > 0, "SmartLP: Claim not enough");
         if (nbuToken.balanceOf(address(this)) < totalNbuReward) {
             lpStakingBnbNbu.getReward();
             if (nbuToken.balanceOf(address(this)) < totalNbuReward) {
-                lpStakingNbuBusd.getReward();
+                lpStakingBnbGnbu.getReward();
             }
-
             emit BalanceRewardsNotEnough(msg.sender, tokenId, totalNbuReward);
         }
 
@@ -734,7 +665,7 @@ contract SmartLender is SmartLenderStorage, IBEP721, IBEP721Metadata {
     }
 
     function approve(address to, uint256 tokenId) public virtual override {
-        address owner = SmartLender.ownerOf(tokenId);
+        address owner = SmartLP.ownerOf(tokenId);
         require(to != owner, "ERC721: approval to current owner");
 
         require(
@@ -790,7 +721,7 @@ contract SmartLender is SmartLenderStorage, IBEP721, IBEP721Metadata {
 
     function _isApprovedOrOwner(address spender, uint256 tokenId) internal view virtual returns (bool) {
         require(_exists(tokenId), "ERC721: operator query for nonexistent token");
-        address owner = SmartLender.ownerOf(tokenId);
+        address owner = SmartLP.ownerOf(tokenId);
         return (spender == owner || getApproved(tokenId) == spender || isApprovedForAll(owner, spender));
     }
 
@@ -817,7 +748,7 @@ contract SmartLender is SmartLenderStorage, IBEP721, IBEP721Metadata {
     }
 
     function _burn(uint256 tokenId) internal virtual {
-        address owner = SmartLender.ownerOf(tokenId);
+        address owner = SmartLP.ownerOf(tokenId);
 
         // Clear approvals
         _approve(address(0), tokenId);
@@ -830,7 +761,7 @@ contract SmartLender is SmartLenderStorage, IBEP721, IBEP721Metadata {
 
     function _transfer(address from, address to, uint256 tokenId) internal virtual {
         require(to != address(0), "ERC721: transfer to the zero address");
-        require(SmartLender.ownerOf(tokenId) == from, "ERC721: transfer of token that is not owner");
+        require(SmartLP.ownerOf(tokenId) == from, "ERC721: transfer of token that is not owner");
 
         for (uint256 i; i < _userTokens[from].length; i++) {
             if(_userTokens[from][i] == tokenId) {
@@ -855,7 +786,7 @@ contract SmartLender is SmartLenderStorage, IBEP721, IBEP721Metadata {
 
     function _approve(address to, uint256 tokenId) internal virtual {
         _tokenApprovals[tokenId] = to;
-        emit Approval(SmartLender.ownerOf(tokenId), to, tokenId);
+        emit Approval(SmartLP.ownerOf(tokenId), to, tokenId);
     }
 
     function _setApprovalForAll( address owner, address operator, bool approved) internal virtual {
@@ -903,31 +834,31 @@ contract SmartLender is SmartLenderStorage, IBEP721, IBEP721Metadata {
     }
 
     function updateSwapRouter(address newSwapRouter) external onlyOwner {
-        require(Address.isContract(newSwapRouter), "SmartLender: Not a contract");
+        require(Address.isContract(newSwapRouter), "SmartLP: Not a contract");
         swapRouter = IRouter(newSwapRouter);
         emit UpdateSwapRouter(newSwapRouter);
     }
     
     function updateLpStakingBnbNbu(address newLpStaking) external onlyOwner {
-        require(Address.isContract(newLpStaking), "SmartLender: Not a contract");
+        require(Address.isContract(newLpStaking), "SmartLP: Not a contract");
         lpStakingBnbNbu = ILpStaking(newLpStaking);
         emit UpdateLpStakingBnbNbu(newLpStaking);
     }
     
     function updateLpStakingBnbGnbu(address newLpStaking) external onlyOwner {
-        require(Address.isContract(newLpStaking), "SmartLender: Not a contract");
-        lpStakingNbuBusd = ILpStaking(newLpStaking);
+        require(Address.isContract(newLpStaking), "SmartLP: Not a contract");
+        lpStakingBnbGnbu = ILpStaking(newLpStaking);
         emit UpdateLpStakingBnbGnbu(newLpStaking);
     }
     
     function updateLendingContract(address newLendingContract) external onlyOwner {
-        require(Address.isContract(newLendingContract), "SmartLender: Not a contract");
+        require(Address.isContract(newLendingContract), "SmartLP: Not a contract");
         lendingContract = ILending(newLendingContract);
         emit UpdateLendingContract(newLendingContract);
     }
     
     function updateTokenAllowance(address token, address spender, int amount) external onlyOwner {
-        require(Address.isContract(token), "SmartLender: Not a contract");
+        require(Address.isContract(token), "SmartLP: Not a contract");
         uint allowance;
         if (amount < 0) {
             allowance = type(uint256).max;
@@ -938,7 +869,7 @@ contract SmartLender is SmartLenderStorage, IBEP721, IBEP721Metadata {
     }
     
     function updateMinPurchaseAmount (uint newAmount) external onlyOwner {
-        require(newAmount > 0, "SmartLender: Amount must be greater than zero");
+        require(newAmount > 0, "SmartLP: Amount must be greater than zero");
         minPurchaseAmount = newAmount;
         emit UpdateMinPurchaseAmount(newAmount);
     }
