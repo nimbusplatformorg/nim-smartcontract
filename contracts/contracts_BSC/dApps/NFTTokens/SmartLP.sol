@@ -821,7 +821,8 @@ contract SmartLP is SmartLPStorage, IBEP721, IBEP721Metadata {
         require(to != address(0), "SmartLP: Cannot rescue to the zero address");
         require(amount > 0, "SmartLP: Cannot rescue 0");
 
-        IBEP20(tokenAddress).transfer(to, amount);
+        bool sent = IBEP20(tokenAddress).transfer(to, amount);
+        require(sent, "SmartLP: Failed to rescue token");
         emit RescueToken(to, address(tokenAddress), amount);
     }
 
