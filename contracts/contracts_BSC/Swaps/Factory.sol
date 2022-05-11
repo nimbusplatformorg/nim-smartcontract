@@ -57,6 +57,7 @@ interface INimbusPair is INimbusBEP20 {
     function token0() external view returns (address);
     function token1() external view returns (address);
     function getReserves() external view returns (uint112 reserve0, uint112 reserve1, uint32 blockTimestampLast);
+    function getCurrentReserve() external view returns (uint112[2] memory);
     function price0CumulativeLast() external view returns (uint);
     function price1CumulativeLast() external view returns (uint);
     function kLast() external view returns (uint);
@@ -221,6 +222,7 @@ contract NimbusPair is INimbusPair, NimbusBEP20 {
     address public override token0;
     address public override token1;
 
+    uint112[2] private current_reserve; // uses single storage slot, accessible via getReserves
     uint112 private reserve0;           // uses single storage slot, accessible via getReserves
     uint112 private reserve1;           // uses single storage slot, accessible via getReserves
     uint32  private blockTimestampLast; // uses single storage slot, accessible via getReserves
@@ -242,6 +244,11 @@ contract NimbusPair is INimbusPair, NimbusBEP20 {
         _reserve1 = reserve1;
         _blockTimestampLast = blockTimestampLast;
     }
+
+    function getCurrentReserve() public view  override returns (uint112[2] memory) {
+        return current_reserve;
+    }
+
 
     function _safeTransfer(address token, address to, uint value) private {
         (bool success, bytes memory data) = token.call(abi.encodeWithSelector(SELECTOR, to, value));
@@ -356,6 +363,9 @@ contract NimbusPair is INimbusPair, NimbusBEP20 {
         (uint112 _reserve0, uint112 _reserve1,) = getReserves(); // gas savings
         require(amount0Out < _reserve0 && amount1Out < _reserve1, 'Nimbus: INSUFFICIENT_LIQUIDITY');
 
+        current_reserve[0] = _reserve0;
+        current_reserve[1] = _reserve1;
+
         uint balance0;
         uint balance1;
         { // scope for _token{0,1}, avoids stack too deep errors
@@ -376,13 +386,13 @@ contract NimbusPair is INimbusPair, NimbusBEP20 {
         address referralProgram = INimbusFactory(factory).nimbusReferralProgram();
         if (amount0In > 0) {
             address _token0 = token0;
-            uint refFee = amount0In * 3/ 2000;
+            uint refFee = (amount0In * 3/ 2000) + 1;
             _safeTransfer(_token0, referralProgram, refFee);
             INimbusReferralProgram(referralProgram).recordFee(_token0, to, refFee);
             balance0 -= refFee;
         } 
         if (amount1In > 0) {
-            uint refFee = amount1In * 3 / 2000;
+            uint refFee = (amount1In * 3 / 2000) + 1;
             address _token1 = token1;
             _safeTransfer(_token1, referralProgram, refFee);
             INimbusReferralProgram(referralProgram).recordFee(_token1, to, refFee);
