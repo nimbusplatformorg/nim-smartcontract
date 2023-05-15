@@ -118,7 +118,42 @@ contract LPReward is Ownable {
         require(msg.sender == swapRouter, "LPReward: Caller is not the allowed router");
         _;
     }
-    
+
+    function getUserLiquidityRewards(address recipient, address tokenA, address tokenB, uint amountA, uint amountB, uint liquidity) public view returns (uint amountNbu) {
+                address pair = swapFactory.getPair(tokenA, tokenB);
+                uint amount0;
+                uint amount1;
+                {
+                uint ratio = Math.sqrt(amountA * amountB) * 1e18 / liquidity;
+                uint previousRatio = weightedRatio[recipient][pair];
+                uint difference = ratio - previousRatio;
+                amount0 = amountA * difference / 1e18;
+                amount1 = amountB * difference / 1e18;
+                }
+
+            if(tokenA == NBU) {
+              return amount0 * 2;
+            }
+
+            if(tokenB == NBU) {
+                return amount1 * 2;
+            }
+
+            if(swapFactory.getPair(tokenB, NBU)==address(0)){
+                return amountNbu * 2;
+            }
+
+            if (swapFactory.getPair(tokenA, NBU) != address(0)) {
+              return amountNbu = INimbusRouter(swapRouter).getAmountsOut(amount0, getPathForToken(tokenA))[1];
+            }
+
+            if (amountNbu != 0) {
+                return amountNbu + INimbusRouter(swapRouter).getAmountsOut(amount1, getPathForToken(tokenB))[1];
+            }
+
+             return INimbusRouter(swapRouter).getAmountsOut(amount1, getPathForToken(tokenB))[1] * 2;
+        }
+
     function recordAddLiquidity(address recipient, address pair, uint amountA, uint amountB, uint liquidity) external onlyRouter {
         if (!allowedPairs[pair]) return;
         uint ratio = Math.sqrt(amountA * amountB) * 1e18 / liquidity;   
